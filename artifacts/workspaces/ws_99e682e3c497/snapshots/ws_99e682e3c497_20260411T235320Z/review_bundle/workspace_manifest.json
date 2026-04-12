@@ -1,0 +1,15 @@
+{
+  "id": "ws_99e682e3c497",
+  "root_path": "/mnt/d/Workspace/MasterAI/Thesis/UFCE_Agent",
+  "repository_ids": [
+    "repo_1e69d9a742e9",
+    "repo_71145e2e95d3",
+    "repo_f01b01df06e8"
+  ],
+  "languages": [
+    "javascript",
+    "json"
+  ],
+  "warnings": [],
+  "scanned_at": "2026-04-11T23:53:20.250390574Z"
+}

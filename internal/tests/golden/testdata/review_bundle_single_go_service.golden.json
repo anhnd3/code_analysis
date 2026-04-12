@@ -1,0 +1,63 @@
+{
+  "bundle_version": "v1",
+  "edge_kind_counts": {
+    "BELONGS_TO_SERVICE": 5,
+    "CALLS": 4,
+    "CONTAINS": 13,
+    "DEFINES": 5,
+    "IMPORTS": 3,
+    "TESTED_BY": 1
+  },
+  "node_kind_counts": {
+    "FILE": 4,
+    "PACKAGE": 6,
+    "REPOSITORY": 1,
+    "SERVICE": 1,
+    "SYMBOL": 4,
+    "TEST": 1,
+    "WORKSPACE": 1
+  },
+  "quality_gap_categories": [
+    "call_resolution"
+  ],
+  "repository_summaries": [
+    {
+      "name": "single_go_service",
+      "role": "service",
+      "languages": [
+        "go"
+      ],
+      "go_files": 4,
+      "config_files": 0,
+      "service_names": [
+        "single_go_service"
+      ]
+    }
+  ],
+  "searchable_symbols": [
+    "helper.Transform",
+    "main.main",
+    "service.Handle",
+    "service.TestHandle",
+    "service.stepOne"
+  ],
+  "service_summaries": [
+    {
+      "name": "single_go_service",
+      "repository_id": "repo_a4f035c85e70",
+      "entrypoints": [
+        "cmd/app/main.go"
+      ],
+      "boundaries": []
+    }
+  ],
+  "snapshot_metadata": {
+    "repository_count": 1,
+    "file_count": 4,
+    "symbol_count": 5,
+    "edge_count": 31
+  },
+  "workspace_languages": [
+    "go"
+  ]
+}

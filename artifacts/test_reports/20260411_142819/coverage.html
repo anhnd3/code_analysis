@@ -1,0 +1,2619 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>analysis-cli: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">analysis-module/cmd/analysis-cli/main.go (0.0%)</option>
+				
+				<option value="file1">analysis-module/cmd/analysisd/main.go (0.0%)</option>
+				
+				<option value="file2">analysis-module/internal/adapters/api/http/handler.go (31.5%)</option>
+				
+				<option value="file3">analysis-module/internal/adapters/artifactstore/filesystem/store.go (76.5%)</option>
+				
+				<option value="file4">analysis-module/internal/adapters/extractor/go/extractor.go (68.0%)</option>
+				
+				<option value="file5">analysis-module/internal/adapters/extractor/treesitter/parser.go (83.3%)</option>
+				
+				<option value="file6">analysis-module/internal/adapters/graphstore/memory/cache.go (50.0%)</option>
+				
+				<option value="file7">analysis-module/internal/adapters/graphstore/sqlite/store.go (79.1%)</option>
+				
+				<option value="file8">analysis-module/internal/adapters/scanner/detectors/repo_root.go (85.7%)</option>
+				
+				<option value="file9">analysis-module/internal/adapters/scanner/detectors/service.go (75.0%)</option>
+				
+				<option value="file10">analysis-module/internal/adapters/scanner/detectors/techstack.go (76.5%)</option>
+				
+				<option value="file11">analysis-module/internal/adapters/scanner/filesystem/walker.go (34.6%)</option>
+				
+				<option value="file12">analysis-module/internal/app/bootstrap/app.go (94.1%)</option>
+				
+				<option value="file13">analysis-module/internal/app/config/config.go (63.6%)</option>
+				
+				<option value="file14">analysis-module/internal/app/errors/errors.go (0.0%)</option>
+				
+				<option value="file15">analysis-module/internal/app/logging/logging.go (100.0%)</option>
+				
+				<option value="file16">analysis-module/internal/services/graph_build/service.go (97.1%)</option>
+				
+				<option value="file17">analysis-module/internal/services/graph_query/service.go (83.0%)</option>
+				
+				<option value="file18">analysis-module/internal/services/packet_build/service.go (0.0%)</option>
+				
+				<option value="file19">analysis-module/internal/services/quality_report/service.go (82.6%)</option>
+				
+				<option value="file20">analysis-module/internal/services/repo_inventory/service.go (81.0%)</option>
+				
+				<option value="file21">analysis-module/internal/services/repomap_build/service.go (0.0%)</option>
+				
+				<option value="file22">analysis-module/internal/services/snapshot_manage/service.go (100.0%)</option>
+				
+				<option value="file23">analysis-module/internal/services/symbol_index/service.go (87.0%)</option>
+				
+				<option value="file24">analysis-module/internal/services/workspace_scan/service.go (78.1%)</option>
+				
+				<option value="file25">analysis-module/internal/tests/fixtures/path.go (84.6%)</option>
+				
+				<option value="file26">analysis-module/internal/workflows/analyze_workspace/workflow.go (96.3%)</option>
+				
+				<option value="file27">analysis-module/internal/workflows/blast_radius/workflow.go (87.5%)</option>
+				
+				<option value="file28">analysis-module/internal/workflows/build_packet/workflow.go (0.0%)</option>
+				
+				<option value="file29">analysis-module/internal/workflows/build_repomap/workflow.go (0.0%)</option>
+				
+				<option value="file30">analysis-module/internal/workflows/build_snapshot/workflow.go (85.0%)</option>
+				
+				<option value="file31">analysis-module/internal/workflows/impacted_tests/workflow.go (87.5%)</option>
+				
+				<option value="file32">analysis-module/pkg/ids/ids.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "encoding/json"
+        "flag"
+        "fmt"
+        "os"
+        "strings"
+
+        "analysis-module/internal/app/bootstrap"
+        "analysis-module/internal/app/config"
+        "analysis-module/internal/app/logging"
+        "analysis-module/internal/workflows/analyze_workspace"
+        "analysis-module/internal/workflows/blast_radius"
+        "analysis-module/internal/workflows/build_snapshot"
+        "analysis-module/internal/workflows/impacted_tests"
+)
+
+func main() <span class="cov0" title="0">{
+        logger := logging.New()
+        app, err := bootstrap.New(config.Default(), logger)
+        if err != nil </span><span class="cov0" title="0">{
+                fatal(err)
+        }</span>
+        <span class="cov0" title="0">if len(os.Args) &lt; 2 </span><span class="cov0" title="0">{
+                fatal(fmt.Errorf("expected subcommand: analyze-workspace | build-snapshot | blast-radius | impacted-tests"))
+        }</span>
+        <span class="cov0" title="0">switch os.Args[1] </span>{
+        case "analyze-workspace":<span class="cov0" title="0">
+                runAnalyzeWorkspace(app, os.Args[2:])</span>
+        case "build-snapshot":<span class="cov0" title="0">
+                runBuildSnapshot(app, os.Args[2:])</span>
+        case "blast-radius":<span class="cov0" title="0">
+                runBlastRadius(app, os.Args[2:])</span>
+        case "impacted-tests":<span class="cov0" title="0">
+                runImpactedTests(app, os.Args[2:])</span>
+        default:<span class="cov0" title="0">
+                fatal(fmt.Errorf("unknown subcommand: %s", os.Args[1]))</span>
+        }
+}
+
+func runAnalyzeWorkspace(app *bootstrap.Application, args []string) <span class="cov0" title="0">{
+        fs := flag.NewFlagSet("analyze-workspace", flag.ExitOnError)
+        workspacePath := fs.String("workspace", ".", "workspace path")
+        ignore := fs.String("ignore", "", "comma separated ignore patterns")
+        _ = fs.Parse(args)
+        result, err := app.AnalyzeWorkspace.Run(analyze_workspace.Request{
+                WorkspacePath:  *workspacePath,
+                IgnorePatterns: splitCSV(*ignore),
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                fatal(err)
+        }</span>
+        <span class="cov0" title="0">write(result)</span>
+}
+
+func runBuildSnapshot(app *bootstrap.Application, args []string) <span class="cov0" title="0">{
+        fs := flag.NewFlagSet("build-snapshot", flag.ExitOnError)
+        workspacePath := fs.String("workspace", ".", "workspace path")
+        ignore := fs.String("ignore", "", "comma separated ignore patterns")
+        _ = fs.Parse(args)
+        result, err := app.BuildSnapshot.Run(build_snapshot.Request{
+                WorkspacePath:  *workspacePath,
+                IgnorePatterns: splitCSV(*ignore),
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                fatal(err)
+        }</span>
+        <span class="cov0" title="0">write(result)</span>
+}
+
+func runBlastRadius(app *bootstrap.Application, args []string) <span class="cov0" title="0">{
+        fs := flag.NewFlagSet("blast-radius", flag.ExitOnError)
+        workspaceID := fs.String("workspace-id", "", "workspace id")
+        snapshotID := fs.String("snapshot-id", "", "snapshot id")
+        target := fs.String("target", "", "target canonical name or node id")
+        maxDepth := fs.Int("max-depth", 3, "max traversal depth")
+        _ = fs.Parse(args)
+        result, err := app.BlastRadius.Run(blast_radius.Request{
+                WorkspaceID: *workspaceID,
+                SnapshotID:  *snapshotID,
+                Target:      *target,
+                MaxDepth:    *maxDepth,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                fatal(err)
+        }</span>
+        <span class="cov0" title="0">write(result)</span>
+}
+
+func runImpactedTests(app *bootstrap.Application, args []string) <span class="cov0" title="0">{
+        fs := flag.NewFlagSet("impacted-tests", flag.ExitOnError)
+        workspaceID := fs.String("workspace-id", "", "workspace id")
+        snapshotID := fs.String("snapshot-id", "", "snapshot id")
+        target := fs.String("target", "", "target canonical name or node id")
+        maxDepth := fs.Int("max-depth", 3, "max traversal depth")
+        _ = fs.Parse(args)
+        result, err := app.ImpactedTests.Run(impacted_tests.Request{
+                WorkspaceID: *workspaceID,
+                SnapshotID:  *snapshotID,
+                Target:      *target,
+                MaxDepth:    *maxDepth,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                fatal(err)
+        }</span>
+        <span class="cov0" title="0">write(result)</span>
+}
+
+func splitCSV(raw string) []string <span class="cov0" title="0">{
+        if raw == "" </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov0" title="0">parts := strings.Split(raw, ",")
+        result := make([]string, 0, len(parts))
+        for _, part := range parts </span><span class="cov0" title="0">{
+                part = strings.TrimSpace(part)
+                if part != "" </span><span class="cov0" title="0">{
+                        result = append(result, part)
+                }</span>
+        }
+        <span class="cov0" title="0">return result</span>
+}
+
+func write(payload any) <span class="cov0" title="0">{
+        encoder := json.NewEncoder(os.Stdout)
+        encoder.SetIndent("", "  ")
+        _ = encoder.Encode(payload)
+}</span>
+
+func fatal(err error) <span class="cov0" title="0">{
+        fmt.Fprintln(os.Stderr, err.Error())
+        os.Exit(1)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package main
+
+import (
+        "net/http"
+
+        "analysis-module/internal/app/bootstrap"
+        "analysis-module/internal/app/config"
+        "analysis-module/internal/app/logging"
+)
+
+func main() <span class="cov0" title="0">{
+        logger := logging.New()
+        cfg := config.Default()
+        app, err := bootstrap.New(cfg, logger)
+        if err != nil </span><span class="cov0" title="0">{
+                logger.Error("bootstrap failed", "error", err)
+                panic(err)</span>
+        }
+        <span class="cov0" title="0">logger.Info("analysisd listening", "addr", cfg.HTTPAddr)
+        if err := http.ListenAndServe(cfg.HTTPAddr, app.HTTPHandler); err != nil </span><span class="cov0" title="0">{
+                logger.Error("server failed", "error", err)
+                panic(err)</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package httpapi
+
+import (
+        "encoding/json"
+        "net/http"
+
+        apperrors "analysis-module/internal/app/errors"
+        "analysis-module/internal/adapters/api/dto"
+        "analysis-module/internal/workflows/analyze_workspace"
+        "analysis-module/internal/workflows/blast_radius"
+        "analysis-module/internal/workflows/build_snapshot"
+        "analysis-module/internal/workflows/impacted_tests"
+)
+
+type Handler struct {
+        analyzeWorkflow      analyze_workspace.Workflow
+        buildSnapshotWorkflow build_snapshot.Workflow
+        blastRadiusWorkflow  blast_radius.Workflow
+        impactedTestsWorkflow impacted_tests.Workflow
+}
+
+func New(analyzeWorkflow analyze_workspace.Workflow, buildSnapshotWorkflow build_snapshot.Workflow, blastRadiusWorkflow blast_radius.Workflow, impactedTestsWorkflow impacted_tests.Workflow) http.Handler <span class="cov10" title="2">{
+        h := Handler{
+                analyzeWorkflow:       analyzeWorkflow,
+                buildSnapshotWorkflow: buildSnapshotWorkflow,
+                blastRadiusWorkflow:   blastRadiusWorkflow,
+                impactedTestsWorkflow: impactedTestsWorkflow,
+        }
+        mux := http.NewServeMux()
+        mux.HandleFunc("/healthz", h.healthz)
+        mux.HandleFunc("/v1/workspaces/analyze", h.analyzeWorkspace)
+        mux.HandleFunc("/v1/snapshots/build", h.buildSnapshot)
+        mux.HandleFunc("/v1/queries/blast-radius", h.blastRadius)
+        mux.HandleFunc("/v1/queries/impacted-tests", h.impactedTests)
+        return mux
+}</span>
+
+func (h Handler) healthz(w http.ResponseWriter, _ *http.Request) <span class="cov1" title="1">{
+        writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}</span>
+
+func (h Handler) analyzeWorkspace(w http.ResponseWriter, r *http.Request) <span class="cov1" title="1">{
+        var req dto.AnalyzeWorkspaceRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                writeError(w, apperrors.InvalidArgument("invalid analyze-workspace request"))
+                return
+        }</span>
+        <span class="cov1" title="1">result, err := h.analyzeWorkflow.Run(req)
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, err)
+                return
+        }</span>
+        <span class="cov1" title="1">writeJSON(w, http.StatusOK, dto.AnalyzeWorkspaceResponse(result))</span>
+}
+
+func (h Handler) buildSnapshot(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        var req dto.BuildSnapshotRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                writeError(w, apperrors.InvalidArgument("invalid build-snapshot request"))
+                return
+        }</span>
+        <span class="cov0" title="0">result, err := h.buildSnapshotWorkflow.Run(req)
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, err)
+                return
+        }</span>
+        <span class="cov0" title="0">writeJSON(w, http.StatusOK, dto.BuildSnapshotResponse(result))</span>
+}
+
+func (h Handler) blastRadius(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        var req dto.BlastRadiusRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                writeError(w, apperrors.InvalidArgument("invalid blast-radius request"))
+                return
+        }</span>
+        <span class="cov0" title="0">result, err := h.blastRadiusWorkflow.Run(req)
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, err)
+                return
+        }</span>
+        <span class="cov0" title="0">writeJSON(w, http.StatusOK, dto.BlastRadiusResponse(result))</span>
+}
+
+func (h Handler) impactedTests(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        var req dto.ImpactedTestsRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                writeError(w, apperrors.InvalidArgument("invalid impacted-tests request"))
+                return
+        }</span>
+        <span class="cov0" title="0">result, err := h.impactedTestsWorkflow.Run(req)
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, err)
+                return
+        }</span>
+        <span class="cov0" title="0">writeJSON(w, http.StatusOK, dto.ImpactedTestsResponse(result))</span>
+}
+
+func writeError(w http.ResponseWriter, err error) <span class="cov0" title="0">{
+        status := apperrors.StatusOf(err)
+        payload := dto.ErrorResponse{Code: "internal", Message: err.Error()}
+        if typed, ok := err.(*apperrors.Error); ok </span><span class="cov0" title="0">{
+                payload.Code = string(typed.Code)
+                payload.Message = typed.Message
+        }</span>
+        <span class="cov0" title="0">writeJSON(w, status, payload)</span>
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) <span class="cov10" title="2">{
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(status)
+        _ = json.NewEncoder(w).Encode(payload)
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package filesystem
+
+import (
+        "bufio"
+        "encoding/json"
+        "os"
+        "path/filepath"
+
+        "analysis-module/internal/domain/artifact"
+        "analysis-module/internal/domain/graph"
+        "analysis-module/internal/domain/quality"
+        artifactport "analysis-module/internal/ports/artifactstore"
+)
+
+type Store struct {
+        root string
+}
+
+func New(root string) artifactport.Store <span class="cov3" title="3">{
+        return Store{root: root}
+}</span>
+
+func (s Store) SaveJSON(workspaceID, snapshotID, fileName string, artifactType artifact.Type, payload any) (artifact.Ref, error) <span class="cov6" title="9">{
+        path := s.pathFor(workspaceID, snapshotID, fileName)
+        if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil </span><span class="cov0" title="0">{
+                return artifact.Ref{}, err
+        }</span>
+        <span class="cov6" title="9">data, err := json.MarshalIndent(payload, "", "  ")
+        if err != nil </span><span class="cov0" title="0">{
+                return artifact.Ref{}, err
+        }</span>
+        <span class="cov6" title="9">if err := os.WriteFile(path, data, 0o644); err != nil </span><span class="cov0" title="0">{
+                return artifact.Ref{}, err
+        }</span>
+        <span class="cov6" title="9">return artifact.Ref{Type: artifactType, WorkspaceID: workspaceID, SnapshotID: snapshotID, Path: path}, nil</span>
+}
+
+func (s Store) SaveGraph(workspaceID, snapshotID string, nodes []graph.Node, edges []graph.Edge) ([]artifact.Ref, error) <span class="cov2" title="2">{
+        nodePath := s.pathFor(workspaceID, snapshotID, "graph_nodes.jsonl")
+        edgePath := s.pathFor(workspaceID, snapshotID, "graph_edges.jsonl")
+        if err := os.MkdirAll(filepath.Dir(nodePath), 0o755); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov2" title="2">if err := writeJSONL(nodePath, nodes); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov2" title="2">if err := writeJSONL(edgePath, edges); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov2" title="2">return []artifact.Ref{
+                {Type: artifact.TypeGraphNodes, WorkspaceID: workspaceID, SnapshotID: snapshotID, Path: nodePath},
+                {Type: artifact.TypeGraphEdges, WorkspaceID: workspaceID, SnapshotID: snapshotID, Path: edgePath},
+        }, nil</span>
+}
+
+func (s Store) SaveQualityReport(workspaceID, snapshotID string, report quality.AnalysisQualityReport) (artifact.Ref, error) <span class="cov1" title="1">{
+        return s.SaveJSON(workspaceID, snapshotID, "quality_report.json", artifact.TypeQualityReport, report)
+}</span>
+
+func (s Store) pathFor(workspaceID, snapshotID, fileName string) string <span class="cov6" title="13">{
+        if snapshotID == "" </span><span class="cov5" title="6">{
+                return filepath.Join(s.root, "workspaces", workspaceID, fileName)
+        }</span>
+        <span class="cov5" title="7">return filepath.Join(s.root, "workspaces", workspaceID, "snapshots", snapshotID, fileName)</span>
+}
+
+func writeJSONL[T any](path string, items []T) error <span class="cov4" title="4">{
+        file, err := os.Create(path)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov4" title="4">defer file.Close()
+        writer := bufio.NewWriter(file)
+        defer writer.Flush()
+        encoder := json.NewEncoder(writer)
+        for _, item := range items </span><span class="cov10" title="51">{
+                if err := encoder.Encode(item); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov4" title="4">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package goextractor
+
+import (
+        "fmt"
+        "os"
+        "path/filepath"
+        "strings"
+
+        "analysis-module/internal/adapters/extractor/treesitter"
+        "analysis-module/internal/domain/symbol"
+        extractorport "analysis-module/internal/ports/extractor"
+        "analysis-module/pkg/ids"
+
+        tree_sitter "github.com/tree-sitter/go-tree-sitter"
+)
+
+type Extractor struct {
+        parser *treesitter.GoParser
+}
+
+func New() extractorport.SymbolExtractor <span class="cov3" title="4">{
+        return &amp;Extractor{parser: treesitter.NewGoParser()}
+}</span>
+
+func (e *Extractor) Supports(lang string) bool <span class="cov1" title="1">{
+        return strings.EqualFold(lang, "go")
+}</span>
+
+func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResult, error) <span class="cov3" title="6">{
+        content, err := os.ReadFile(file.AbsolutePath)
+        if err != nil </span><span class="cov0" title="0">{
+                return symbol.FileExtractionResult{}, err
+        }</span>
+        <span class="cov3" title="6">tree, err := e.parser.Parse(content)
+        if err != nil </span><span class="cov0" title="0">{
+                return symbol.FileExtractionResult{}, err
+        }</span>
+        // The official bindings keep parse trees backed by C memory until Close.
+        <span class="cov3" title="6">defer tree.Close()
+        root := tree.RootNode()
+        result := symbol.FileExtractionResult{
+                FilePath: file.RelativePath,
+        }
+        importAliases := map[string]string{}
+        walk(root, func(node *tree_sitter.Node) </span><span class="cov9" title="201">{
+                switch node.Kind() </span>{
+                case "package_clause":<span class="cov3" title="6">
+                        if name := packageClauseName(node); name != nil </span><span class="cov3" title="6">{
+                                result.PackageName = name.Utf8Text(content)
+                        }</span>
+                case "import_spec":<span class="cov3" title="5">
+                        pathNode := node.ChildByFieldName("path")
+                        if pathNode != nil </span><span class="cov3" title="5">{
+                                importPath := strings.Trim(pathNode.Utf8Text(content), "\"")
+                                result.Imports = append(result.Imports, importPath)
+                                alias := filepath.Base(importPath)
+                                if aliasNode := node.ChildByFieldName("name"); aliasNode != nil </span><span class="cov0" title="0">{
+                                        alias = aliasNode.Utf8Text(content)
+                                }</span>
+                                <span class="cov3" title="5">importAliases[alias] = importPath</span>
+                        }
+                case "function_declaration", "method_declaration":<span class="cov4" title="8">
+                        sym := buildSymbol(file, result.PackageName, node, content)
+                        result.Symbols = append(result.Symbols, sym)
+                        body := node.ChildByFieldName("body")
+                        walk(body, func(inner *tree_sitter.Node) </span><span class="cov8" title="107">{
+                                if inner == nil || inner.Kind() != "call_expression" </span><span class="cov8" title="98">{
+                                        return
+                                }</span>
+                                <span class="cov4" title="9">candidate := buildCallCandidate(sym.ID, inner, content, result.PackageName, importAliases)
+                                if candidate.TargetCanonicalName != "" </span><span class="cov4" title="9">{
+                                        result.Relations = append(result.Relations, candidate)
+                                }</span>
+                        })
+                case "type_spec":<span class="cov0" title="0">
+                        if typeNode := node.ChildByFieldName("type"); typeNode != nil </span><span class="cov0" title="0">{
+                                kind := symbol.KindStruct
+                                if typeNode.Kind() == "interface_type" </span><span class="cov0" title="0">{
+                                        kind = symbol.KindInterface
+                                }</span>
+                                <span class="cov0" title="0">if nameNode := node.ChildByFieldName("name"); nameNode != nil </span><span class="cov0" title="0">{
+                                        name := nameNode.Utf8Text(content)
+                                        result.Symbols = append(result.Symbols, symbol.Symbol{
+                                                ID:            symbol.ID(ids.Stable("sym", file.RepositoryID, file.RelativePath, name, string(kind))),
+                                                RepositoryID:  file.RepositoryID,
+                                                FilePath:      file.RelativePath,
+                                                PackageName:   result.PackageName,
+                                                Name:          name,
+                                                CanonicalName: canonicalName(result.PackageName, "", name),
+                                                Kind:          kind,
+                                                Signature:     strings.TrimSpace(node.Utf8Text(content)),
+                                                Location:      locationFromNode(file.RelativePath, node),
+                                        })
+                                }</span>
+                        }
+                }
+        })
+        <span class="cov3" title="6">return result, nil</span>
+}
+
+func packageClauseName(node *tree_sitter.Node) *tree_sitter.Node <span class="cov3" title="6">{
+        if node == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov3" title="6">if name := node.ChildByFieldName("name"); name != nil </span><span class="cov0" title="0">{
+                return name
+        }</span>
+        <span class="cov3" title="6">if node.NamedChildCount() &gt; 0 </span><span class="cov3" title="6">{
+                return node.NamedChild(0)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func buildSymbol(file symbol.FileRef, pkg string, node *tree_sitter.Node, content []byte) symbol.Symbol <span class="cov4" title="8">{
+        nameNode := node.ChildByFieldName("name")
+        name := ""
+        if nameNode != nil </span><span class="cov4" title="8">{
+                name = nameNode.Utf8Text(content)
+        }</span>
+        <span class="cov4" title="8">receiver := ""
+        kind := symbol.KindFunction
+        if node.Kind() == "method_declaration" </span><span class="cov0" title="0">{
+                kind = symbol.KindMethod
+                if receiverNode := node.ChildByFieldName("receiver"); receiverNode != nil </span><span class="cov0" title="0">{
+                        receiver = normalizeReceiver(receiverNode.Utf8Text(content))
+                }</span>
+        }
+        <span class="cov4" title="8">if strings.HasPrefix(name, "Test") </span><span class="cov2" title="2">{
+                kind = symbol.KindTestFunction
+        }</span>
+        <span class="cov4" title="8">return symbol.Symbol{
+                ID:            symbol.ID(ids.Stable("sym", file.RepositoryID, file.RelativePath, receiver, name)),
+                RepositoryID:  file.RepositoryID,
+                FilePath:      file.RelativePath,
+                PackageName:   pkg,
+                Name:          name,
+                Receiver:      receiver,
+                CanonicalName: canonicalName(pkg, receiver, name),
+                Kind:          kind,
+                Signature:     strings.TrimSpace(node.Utf8Text(content)),
+                Location:      locationFromNode(file.RelativePath, node),
+        }</span>
+}
+
+func buildCallCandidate(source symbol.ID, node *tree_sitter.Node, content []byte, pkg string, importAliases map[string]string) symbol.RelationCandidate <span class="cov4" title="9">{
+        fnNode := node.ChildByFieldName("function")
+        if fnNode == nil </span><span class="cov0" title="0">{
+                return symbol.RelationCandidate{}
+        }</span>
+        <span class="cov4" title="9">target, confidence, evidence := resolveCallTarget(fnNode, content, pkg, importAliases)
+        return symbol.RelationCandidate{
+                SourceSymbolID:      source,
+                TargetCanonicalName: target,
+                Relationship:        "calls",
+                EvidenceType:        evidence,
+                EvidenceSource:      strings.TrimSpace(fnNode.Utf8Text(content)),
+                ExtractionMethod:    "tree-sitter-go",
+                ConfidenceScore:     confidence,
+        }</span>
+}
+
+func resolveCallTarget(node *tree_sitter.Node, content []byte, pkg string, importAliases map[string]string) (string, float64, string) <span class="cov4" title="9">{
+        switch node.Kind() </span>{
+        case "identifier":<span class="cov3" title="4">
+                return canonicalName(pkg, "", node.Utf8Text(content)), 0.95, "identifier"</span>
+        case "selector_expression":<span class="cov3" title="5">
+                operand := node.ChildByFieldName("operand")
+                field := node.ChildByFieldName("field")
+                if operand == nil || field == nil </span><span class="cov0" title="0">{
+                        return "", 0, ""
+                }</span>
+                <span class="cov3" title="5">left := operand.Utf8Text(content)
+                right := field.Utf8Text(content)
+                if importPath, ok := importAliases[left]; ok </span><span class="cov2" title="3">{
+                        return importPath + "." + right, 0.75, "import_selector"
+                }</span>
+                <span class="cov2" title="2">return pkg + "." + right, 0.55, "selector"</span>
+        default:<span class="cov0" title="0">
+                raw := strings.TrimSpace(node.Utf8Text(content))
+                if raw == "" </span><span class="cov0" title="0">{
+                        return "", 0, ""
+                }</span>
+                <span class="cov0" title="0">return pkg + "." + raw, 0.3, "expression"</span>
+        }
+}
+
+func canonicalName(pkg, receiver, name string) string <span class="cov4" title="12">{
+        if receiver != "" </span><span class="cov0" title="0">{
+                return fmt.Sprintf("%s.%s.%s", pkg, receiver, name)
+        }</span>
+        <span class="cov4" title="12">return fmt.Sprintf("%s.%s", pkg, name)</span>
+}
+
+func normalizeReceiver(raw string) string <span class="cov0" title="0">{
+        raw = strings.TrimSpace(raw)
+        raw = strings.TrimPrefix(raw, "(")
+        raw = strings.TrimSuffix(raw, ")")
+        raw = strings.ReplaceAll(raw, "*", "")
+        parts := strings.Fields(raw)
+        if len(parts) == 0 </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+        <span class="cov0" title="0">return parts[len(parts)-1]</span>
+}
+
+func locationFromNode(path string, node *tree_sitter.Node) symbol.CodeLocation <span class="cov4" title="8">{
+        start := node.StartPosition()
+        end := node.EndPosition()
+        return symbol.CodeLocation{
+                FilePath:  path,
+                StartLine: uint32(start.Row) + 1,
+                StartCol:  uint32(start.Column) + 1,
+                EndLine:   uint32(end.Row) + 1,
+                EndCol:    uint32(end.Column) + 1,
+                StartByte: uint32(node.StartByte()),
+                EndByte:   uint32(node.EndByte()),
+        }
+}</span>
+
+func walk(node *tree_sitter.Node, visit func(*tree_sitter.Node)) <span class="cov10" title="308">{
+        if node == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov10" title="308">visit(node)
+        for i := uint(0); i &lt; node.NamedChildCount(); i++ </span><span class="cov9" title="294">{
+                walk(node.NamedChild(i), visit)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package treesitter
+
+import (
+        tree_sitter "github.com/tree-sitter/go-tree-sitter"
+        tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
+)
+
+type GoParser struct {
+        language *tree_sitter.Language
+}
+
+func NewGoParser() *GoParser <span class="cov8" title="5">{
+        return &amp;GoParser{
+                language: tree_sitter.NewLanguage(tree_sitter_go.Language()),
+        }
+}</span>
+
+func (p *GoParser) Parse(content []byte) (*tree_sitter.Tree, error) <span class="cov10" title="7">{
+        parser := tree_sitter.NewParser()
+        defer parser.Close()
+
+        if err := parser.SetLanguage(p.language); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov10" title="7">return parser.Parse(content, nil), nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package memory
+
+import (
+        "sync"
+
+        "analysis-module/internal/domain/graph"
+        cacheport "analysis-module/internal/ports/cache"
+)
+
+type SnapshotCache struct {
+        mu        sync.RWMutex
+        snapshots map[string]graph.GraphSnapshot
+}
+
+func NewSnapshotCache() cacheport.SnapshotCache <span class="cov10" title="2">{
+        return &amp;SnapshotCache{snapshots: map[string]graph.GraphSnapshot{}}
+}</span>
+
+func (c *SnapshotCache) Put(snapshot graph.GraphSnapshot) <span class="cov1" title="1">{
+        c.mu.Lock()
+        defer c.mu.Unlock()
+        c.snapshots[snapshot.ID] = snapshot
+}</span>
+
+func (c *SnapshotCache) Get(snapshotID string) (graph.GraphSnapshot, bool) <span class="cov0" title="0">{
+        c.mu.RLock()
+        defer c.mu.RUnlock()
+        snapshot, ok := c.snapshots[snapshotID]
+        return snapshot, ok
+}</span>
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package sqlite
+
+import (
+        "database/sql"
+        "encoding/json"
+        "errors"
+        "os"
+        "path/filepath"
+        "time"
+
+        "analysis-module/internal/domain/graph"
+        "analysis-module/internal/domain/symbol"
+        graphstoreport "analysis-module/internal/ports/graphstore"
+
+        _ "modernc.org/sqlite"
+)
+
+type Store struct {
+        db *sql.DB
+}
+
+func New(path string) (graphstoreport.Store, error) <span class="cov3" title="3">{
+        if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">db, err := sql.Open("sqlite", path)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">store := &amp;Store{db: db}
+        if err := store.migrate(); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">return store, nil</span>
+}
+
+func (s *Store) SaveSnapshot(snapshot graph.GraphSnapshot) error <span class="cov2" title="2">{
+        tx, err := s.db.Begin()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov2" title="2">defer tx.Rollback()
+        metadata, err := json.Marshal(snapshot.Metadata)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov2" title="2">if _, err := tx.Exec(`insert or replace into snapshots(id, workspace_id, created_at, metadata_json) values(?, ?, ?, ?)`, snapshot.ID, snapshot.WorkspaceID, snapshot.CreatedAt.UTC().Format(timeFormat), string(metadata)); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov2" title="2">if _, err := tx.Exec(`delete from nodes where snapshot_id = ?`, snapshot.ID); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov2" title="2">if _, err := tx.Exec(`delete from edges where snapshot_id = ?`, snapshot.ID); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov2" title="2">for _, node := range snapshot.Nodes </span><span class="cov7" title="19">{
+                locationJSON, _ := json.Marshal(node.Location)
+                propertiesJSON, _ := json.Marshal(node.Properties)
+                if _, err := tx.Exec(`insert into nodes(id, snapshot_id, kind, canonical_name, language, repository_id, file_path, location_json, properties_json) values(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        node.ID, node.SnapshotID, string(node.Kind), node.CanonicalName, node.Language, node.RepositoryID, node.FilePath, string(locationJSON), string(propertiesJSON)); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov2" title="2">for _, edge := range snapshot.Edges </span><span class="cov8" title="32">{
+                evidenceJSON, _ := json.Marshal(edge.Evidence)
+                confidenceJSON, _ := json.Marshal(edge.Confidence)
+                propertiesJSON, _ := json.Marshal(edge.Properties)
+                if _, err := tx.Exec(`insert into edges(id, snapshot_id, kind, from_node, to_node, evidence_json, confidence_json, properties_json) values(?, ?, ?, ?, ?, ?, ?, ?)`,
+                        edge.ID, edge.SnapshotID, string(edge.Kind), edge.From, edge.To, string(evidenceJSON), string(confidenceJSON), string(propertiesJSON)); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov2" title="2">return tx.Commit()</span>
+}
+
+func (s *Store) GetSnapshot(snapshotID string) (graph.GraphSnapshot, error) <span class="cov1" title="1">{
+        row := s.db.QueryRow(`select workspace_id, created_at, metadata_json from snapshots where id = ?`, snapshotID)
+        var workspaceID, createdAt, metadataJSON string
+        if err := row.Scan(&amp;workspaceID, &amp;createdAt, &amp;metadataJSON); err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, sql.ErrNoRows) </span><span class="cov0" title="0">{
+                        return graph.GraphSnapshot{}, err
+                }</span>
+                <span class="cov0" title="0">return graph.GraphSnapshot{}, err</span>
+        }
+        <span class="cov1" title="1">nodes, err := s.GetNodes(snapshotID)
+        if err != nil </span><span class="cov0" title="0">{
+                return graph.GraphSnapshot{}, err
+        }</span>
+        <span class="cov1" title="1">edges, err := s.GetEdges(snapshotID)
+        if err != nil </span><span class="cov0" title="0">{
+                return graph.GraphSnapshot{}, err
+        }</span>
+        <span class="cov1" title="1">metadata := graph.SnapshotMetadata{}
+        _ = json.Unmarshal([]byte(metadataJSON), &amp;metadata)
+        return graph.GraphSnapshot{
+                ID:          snapshotID,
+                WorkspaceID: workspaceID,
+                CreatedAt:   parseTime(createdAt),
+                Nodes:       nodes,
+                Edges:       edges,
+                Metadata:    metadata,
+        }, nil</span>
+}
+
+func (s *Store) GetNodes(snapshotID string) ([]graph.Node, error) <span class="cov3" title="3">{
+        rows, err := s.db.Query(`select id, kind, canonical_name, language, repository_id, file_path, location_json, properties_json from nodes where snapshot_id = ?`, snapshotID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">defer rows.Close()
+        nodes := []graph.Node{}
+        for rows.Next() </span><span class="cov8" title="37">{
+                var node graph.Node
+                var kind, locationJSON, propertiesJSON string
+                if err := rows.Scan(&amp;node.ID, &amp;kind, &amp;node.CanonicalName, &amp;node.Language, &amp;node.RepositoryID, &amp;node.FilePath, &amp;locationJSON, &amp;propertiesJSON); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="37">node.Kind = graph.NodeKind(kind)
+                node.SnapshotID = snapshotID
+                if locationJSON != "" &amp;&amp; locationJSON != "null" </span><span class="cov6" title="10">{
+                        location := &amp;symbol.CodeLocation{}
+                        if err := json.Unmarshal([]byte(locationJSON), location); err == nil </span><span class="cov6" title="10">{
+                                node.Location = location
+                        }</span>
+                }
+                <span class="cov8" title="37">if propertiesJSON != "" &amp;&amp; propertiesJSON != "null" </span><span class="cov6" title="12">{
+                        _ = json.Unmarshal([]byte(propertiesJSON), &amp;node.Properties)
+                }</span>
+                <span class="cov8" title="37">nodes = append(nodes, node)</span>
+        }
+        <span class="cov3" title="3">return nodes, rows.Err()</span>
+}
+
+func (s *Store) GetEdges(snapshotID string) ([]graph.Edge, error) <span class="cov3" title="3">{
+        rows, err := s.db.Query(`select id, kind, from_node, to_node, evidence_json, confidence_json, properties_json from edges where snapshot_id = ?`, snapshotID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">defer rows.Close()
+        edges := []graph.Edge{}
+        for rows.Next() </span><span class="cov10" title="63">{
+                var edge graph.Edge
+                var kind, evidenceJSON, confidenceJSON, propertiesJSON string
+                if err := rows.Scan(&amp;edge.ID, &amp;kind, &amp;edge.From, &amp;edge.To, &amp;evidenceJSON, &amp;confidenceJSON, &amp;propertiesJSON); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov10" title="63">edge.Kind = graph.EdgeKind(kind)
+                edge.SnapshotID = snapshotID
+                _ = json.Unmarshal([]byte(evidenceJSON), &amp;edge.Evidence)
+                _ = json.Unmarshal([]byte(confidenceJSON), &amp;edge.Confidence)
+                if propertiesJSON != "" &amp;&amp; propertiesJSON != "null" </span><span class="cov0" title="0">{
+                        _ = json.Unmarshal([]byte(propertiesJSON), &amp;edge.Properties)
+                }</span>
+                <span class="cov10" title="63">edges = append(edges, edge)</span>
+        }
+        <span class="cov3" title="3">return edges, rows.Err()</span>
+}
+
+func (s *Store) FindNode(snapshotID, canonicalName string) (graph.Node, error) <span class="cov2" title="2">{
+        row := s.db.QueryRow(`select id, kind, canonical_name, language, repository_id, file_path, location_json, properties_json from nodes where snapshot_id = ? and (canonical_name = ? or id = ?) limit 1`, snapshotID, canonicalName, canonicalName)
+        var node graph.Node
+        var kind, locationJSON, propertiesJSON string
+        if err := row.Scan(&amp;node.ID, &amp;kind, &amp;node.CanonicalName, &amp;node.Language, &amp;node.RepositoryID, &amp;node.FilePath, &amp;locationJSON, &amp;propertiesJSON); err != nil </span><span class="cov0" title="0">{
+                return graph.Node{}, err
+        }</span>
+        <span class="cov2" title="2">node.Kind = graph.NodeKind(kind)
+        node.SnapshotID = snapshotID
+        if locationJSON != "" &amp;&amp; locationJSON != "null" </span><span class="cov2" title="2">{
+                location := &amp;symbol.CodeLocation{}
+                if err := json.Unmarshal([]byte(locationJSON), location); err == nil </span><span class="cov2" title="2">{
+                        node.Location = location
+                }</span>
+        }
+        <span class="cov2" title="2">if propertiesJSON != "" &amp;&amp; propertiesJSON != "null" </span><span class="cov2" title="2">{
+                _ = json.Unmarshal([]byte(propertiesJSON), &amp;node.Properties)
+        }</span>
+        <span class="cov2" title="2">return node, nil</span>
+}
+
+func (s *Store) migrate() error <span class="cov3" title="3">{
+        statements := []string{
+                `create table if not exists snapshots(id text primary key, workspace_id text not null, created_at text not null, metadata_json text not null)`,
+                `create table if not exists nodes(id text not null, snapshot_id text not null, kind text not null, canonical_name text not null, language text, repository_id text, file_path text, location_json text, properties_json text, primary key(id, snapshot_id))`,
+                `create table if not exists edges(id text not null, snapshot_id text not null, kind text not null, from_node text not null, to_node text not null, evidence_json text not null, confidence_json text not null, properties_json text, primary key(id, snapshot_id))`,
+                `create index if not exists idx_nodes_snapshot_name on nodes(snapshot_id, canonical_name)`,
+                `create index if not exists idx_edges_snapshot_from on edges(snapshot_id, from_node)`,
+                `create index if not exists idx_edges_snapshot_to on edges(snapshot_id, to_node)`,
+        }
+        for _, statement := range statements </span><span class="cov7" title="18">{
+                if _, err := s.db.Exec(statement); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov3" title="3">return nil</span>
+}
+
+const timeFormat = "2006-01-02T15:04:05.999999999Z07:00"
+
+func parseTime(raw string) time.Time <span class="cov1" title="1">{
+        parsed, err := time.Parse(timeFormat, raw)
+        if err != nil </span><span class="cov0" title="0">{
+                return time.Time{}
+        }</span>
+        <span class="cov1" title="1">return parsed</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package detectors
+
+import (
+        "path/filepath"
+        "sort"
+
+        scannerport "analysis-module/internal/ports/scanner"
+
+        adapterfs "analysis-module/internal/adapters/scanner/filesystem"
+)
+
+type RepoRootDetector struct{}
+
+var repoSignals = []string{
+        "go.mod",
+        "package.json",
+        "pyproject.toml",
+        "Cargo.toml",
+        "pom.xml",
+        "build.gradle",
+        "settings.gradle",
+}
+
+func NewRepoRootDetector() scannerport.RepoRootDetector <span class="cov3" title="3">{
+        return RepoRootDetector{}
+}</span>
+
+func (RepoRootDetector) Detect(root string, ignorePatterns []string) ([]string, error) <span class="cov3" title="3">{
+        entries, err := adapterfs.Walk(root, ignorePatterns)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">roots := map[string]struct{}{}
+        for _, entry := range entries </span><span class="cov7" title="31">{
+                if !entry.IsDir </span><span class="cov6" title="15">{
+                        base := filepath.Base(entry.Path)
+                        for _, signal := range repoSignals </span><span class="cov10" title="105">{
+                                if base == signal </span><span class="cov4" title="5">{
+                                        roots[filepath.Dir(entry.Path)] = struct{}{}
+                                }</span>
+                        }
+                        <span class="cov6" title="15">continue</span>
+                }
+                <span class="cov6" title="16">if filepath.Base(entry.Path) == ".git" </span><span class="cov0" title="0">{
+                        roots[filepath.Dir(entry.Path)] = struct{}{}
+                }</span>
+        }
+        <span class="cov3" title="3">if len(roots) == 0 </span><span class="cov0" title="0">{
+                roots[root] = struct{}{}
+        }</span>
+        <span class="cov3" title="3">result := make([]string, 0, len(roots))
+        for path := range roots </span><span class="cov4" title="5">{
+                result = append(result, filepath.Clean(path))
+        }</span>
+        <span class="cov3" title="3">sort.Strings(result)
+        return result, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package detectors
+
+import (
+        "io/fs"
+        "path/filepath"
+        "strings"
+
+        "analysis-module/internal/domain/repository"
+        scannerport "analysis-module/internal/ports/scanner"
+)
+
+type ServiceDetector struct{}
+
+func NewServiceDetector() scannerport.ServiceDetector <span class="cov3" title="3">{
+        return ServiceDetector{}
+}</span>
+
+func (ServiceDetector) Detect(repo repository.Manifest) ([]string, []repository.BoundaryHint, error) <span class="cov5" title="5">{
+        entrypoints := []string{}
+        hints := []repository.BoundaryHint{}
+        err := filepath.WalkDir(repo.RootPath, func(path string, d fs.DirEntry, err error) error </span><span class="cov10" title="30">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov10" title="30">if d.IsDir() </span><span class="cov8" title="15">{
+                        if d.Name() == ".git" || d.Name() == "vendor" || d.Name() == "node_modules" || d.Name() == "artifacts" </span><span class="cov0" title="0">{
+                                return filepath.SkipDir
+                        }</span>
+                        <span class="cov8" title="15">return nil</span>
+                }
+                <span class="cov8" title="15">rel, _ := filepath.Rel(repo.RootPath, path)
+                lower := strings.ToLower(rel)
+                if strings.HasSuffix(rel, "main.go") </span><span class="cov3" title="3">{
+                        entrypoints = append(entrypoints, rel)
+                }</span>
+                <span class="cov8" title="15">switch </span>{
+                case strings.HasSuffix(lower, ".proto"):<span class="cov0" title="0">
+                        hints = append(hints, repository.BoundaryHint{Type: "grpc", Path: rel, Details: "proto definition"})</span>
+                case strings.Contains(lower, "openapi") || strings.Contains(lower, "swagger"):<span class="cov0" title="0">
+                        hints = append(hints, repository.BoundaryHint{Type: "http", Path: rel, Details: "API description"})</span>
+                case strings.Contains(lower, "kafka"):<span class="cov0" title="0">
+                        hints = append(hints, repository.BoundaryHint{Type: "kafka", Path: rel, Details: "Kafka-related configuration or code"})</span>
+                }
+                <span class="cov8" title="15">return nil</span>
+        })
+        <span class="cov5" title="5">return entrypoints, hints, err</span>
+}
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package detectors
+
+import (
+        "io/fs"
+        "path/filepath"
+        "sort"
+        "strings"
+
+        "analysis-module/internal/domain/repository"
+        scannerport "analysis-module/internal/ports/scanner"
+)
+
+type TechStackDetector struct{}
+
+func NewTechStackDetector() scannerport.TechStackDetector <span class="cov4" title="4">{
+        return TechStackDetector{}
+}</span>
+
+func (TechStackDetector) Detect(repoPath string) (repository.TechStackProfile, error) <span class="cov5" title="6">{
+        langs := map[repository.Language]struct{}{}
+        buildFiles := []string{}
+        testFrameworks := map[string]struct{}{}
+        frameworkHints := map[string]struct{}{}
+        err := filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error </span><span class="cov10" title="41">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov10" title="41">if d.IsDir() </span><span class="cov8" title="21">{
+                        name := d.Name()
+                        if name == ".git" || name == "node_modules" || name == "vendor" || name == "artifacts" </span><span class="cov0" title="0">{
+                                return filepath.SkipDir
+                        }</span>
+                        <span class="cov8" title="21">return nil</span>
+                }
+                <span class="cov8" title="20">rel, _ := filepath.Rel(repoPath, path)
+                base := filepath.Base(path)
+                switch filepath.Ext(path) </span>{
+                case ".go":<span class="cov7" title="14">
+                        langs[repository.LanguageGo] = struct{}{}
+                        if strings.HasSuffix(path, "_test.go") </span><span class="cov3" title="3">{
+                                testFrameworks["go_test"] = struct{}{}
+                        }</span>
+                case ".js":<span class="cov0" title="0">
+                        langs[repository.LanguageJS] = struct{}{}</span>
+                case ".ts":<span class="cov0" title="0">
+                        langs[repository.LanguageTS] = struct{}{}</span>
+                case ".java":<span class="cov0" title="0">
+                        langs[repository.LanguageJava] = struct{}{}</span>
+                case ".yaml", ".yml":<span class="cov0" title="0">
+                        langs[repository.LanguageYAML] = struct{}{}</span>
+                case ".json":<span class="cov1" title="1">
+                        langs[repository.LanguageJSON] = struct{}{}</span>
+                }
+                <span class="cov8" title="20">switch base </span>{
+                case "go.mod", "package.json", "pyproject.toml", "Cargo.toml", "pom.xml", "build.gradle", "settings.gradle":<span class="cov5" title="6">
+                        buildFiles = append(buildFiles, rel)</span>
+                }
+                <span class="cov8" title="20">contentHintPath := strings.ToLower(rel)
+                if strings.Contains(contentHintPath, "openapi") || strings.Contains(contentHintPath, "swagger") </span><span class="cov0" title="0">{
+                        frameworkHints["openapi"] = struct{}{}
+                }</span>
+                <span class="cov8" title="20">if strings.HasSuffix(base, ".proto") </span><span class="cov0" title="0">{
+                        frameworkHints["grpc"] = struct{}{}
+                }</span>
+                <span class="cov8" title="20">if strings.Contains(contentHintPath, "kafka") </span><span class="cov0" title="0">{
+                        frameworkHints["kafka"] = struct{}{}
+                }</span>
+                <span class="cov8" title="20">return nil</span>
+        })
+        <span class="cov5" title="6">if err != nil </span><span class="cov0" title="0">{
+                return repository.TechStackProfile{}, err
+        }</span>
+        <span class="cov5" title="6">languages := make([]repository.Language, 0, len(langs))
+        for lang := range langs </span><span class="cov5" title="6">{
+                languages = append(languages, lang)
+        }</span>
+        <span class="cov5" title="6">sort.Slice(languages, func(i, j int) bool </span><span class="cov0" title="0">{ return languages[i] &lt; languages[j] }</span>)
+        <span class="cov5" title="6">frameworks := make([]string, 0, len(frameworkHints))
+        for hint := range frameworkHints </span><span class="cov0" title="0">{
+                frameworks = append(frameworks, hint)
+        }</span>
+        <span class="cov5" title="6">sort.Strings(buildFiles)
+        sort.Strings(frameworks)
+        tests := make([]string, 0, len(testFrameworks))
+        for framework := range testFrameworks </span><span class="cov3" title="3">{
+                tests = append(tests, framework)
+        }</span>
+        <span class="cov5" title="6">sort.Strings(tests)
+        return repository.TechStackProfile{
+                Languages:      languages,
+                BuildFiles:     buildFiles,
+                TestFrameworks: tests,
+                FrameworkHints: frameworks,
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">package filesystem
+
+import (
+        "io/fs"
+        "os"
+        "path/filepath"
+        "strings"
+)
+
+type Entry struct {
+        Path  string
+        IsDir bool
+}
+
+func Walk(root string, ignorePatterns []string) ([]Entry, error) <span class="cov3" title="3">{
+        entries := make([]Entry, 0, 128)
+        err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error </span><span class="cov10" title="31">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov10" title="31">if path != root &amp;&amp; shouldIgnore(path, ignorePatterns) </span><span class="cov0" title="0">{
+                        if d.IsDir() </span><span class="cov0" title="0">{
+                                return filepath.SkipDir
+                        }</span>
+                        <span class="cov0" title="0">return nil</span>
+                }
+                <span class="cov10" title="31">entries = append(entries, Entry{Path: path, IsDir: d.IsDir()})
+                return nil</span>
+        })
+        <span class="cov3" title="3">return entries, err</span>
+}
+
+func FileExists(path string) bool <span class="cov0" title="0">{
+        info, err := os.Stat(path)
+        return err == nil &amp;&amp; !info.IsDir()
+}</span>
+
+func DirExists(path string) bool <span class="cov0" title="0">{
+        info, err := os.Stat(path)
+        return err == nil &amp;&amp; info.IsDir()
+}</span>
+
+func ReadText(path string) string <span class="cov0" title="0">{
+        data, err := os.ReadFile(path)
+        if err != nil </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+        <span class="cov0" title="0">return string(data)</span>
+}
+
+func shouldIgnore(path string, patterns []string) bool <span class="cov9" title="28">{
+        for _, pattern := range patterns </span><span class="cov0" title="0">{
+                pattern = strings.TrimSpace(pattern)
+                if pattern == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov0" title="0">if strings.Contains(path, pattern) </span><span class="cov0" title="0">{
+                        return true
+                }</span>
+        }
+        <span class="cov9" title="28">return false</span>
+}
+</pre>
+		
+		<pre class="file" id="file12" style="display: none">package bootstrap
+
+import (
+        "log/slog"
+        "net/http"
+
+        httpapi "analysis-module/internal/adapters/api/http"
+        artifactfs "analysis-module/internal/adapters/artifactstore/filesystem"
+        goextractor "analysis-module/internal/adapters/extractor/go"
+        cachememory "analysis-module/internal/adapters/graphstore/memory"
+        sqlitestore "analysis-module/internal/adapters/graphstore/sqlite"
+        scannerdetectors "analysis-module/internal/adapters/scanner/detectors"
+        "analysis-module/internal/app/config"
+        "analysis-module/internal/services/graph_build"
+        "analysis-module/internal/services/graph_query"
+        "analysis-module/internal/services/quality_report"
+        "analysis-module/internal/services/repo_inventory"
+        "analysis-module/internal/services/snapshot_manage"
+        "analysis-module/internal/services/symbol_index"
+        "analysis-module/internal/services/workspace_scan"
+        "analysis-module/internal/workflows/analyze_workspace"
+        "analysis-module/internal/workflows/blast_radius"
+        "analysis-module/internal/workflows/build_snapshot"
+        "analysis-module/internal/workflows/impacted_tests"
+)
+
+type Application struct {
+        Config               config.Config
+        Logger               *slog.Logger
+        AnalyzeWorkspace     analyze_workspace.Workflow
+        BuildSnapshot        build_snapshot.Workflow
+        BlastRadius          blast_radius.Workflow
+        ImpactedTests        impacted_tests.Workflow
+        HTTPHandler          http.Handler
+}
+
+func New(cfg config.Config, logger *slog.Logger) (*Application, error) <span class="cov10" title="2">{
+        artifactStore := artifactfs.New(cfg.ArtifactRoot)
+        graphStore, err := sqlitestore.New(cfg.SQLitePath)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov10" title="2">cache := cachememory.NewSnapshotCache()
+        snapshotManageSvc := snapshot_manage.New()
+        workspaceScanSvc := workspace_scan.New(
+                scannerdetectors.NewRepoRootDetector(),
+                scannerdetectors.NewTechStackDetector(),
+                scannerdetectors.NewServiceDetector(),
+        )
+        inventorySvc := repo_inventory.New()
+        analyzeWorkflow := analyze_workspace.New(workspaceScanSvc, inventorySvc, artifactStore, snapshotManageSvc)
+        symbolIndexSvc := symbol_index.New(goextractor.New())
+        graphBuildSvc := graph_build.New()
+        qualityReportSvc := quality_report.New()
+        buildSnapshotWorkflow := build_snapshot.New(analyzeWorkflow, symbolIndexSvc, graphBuildSvc, graphStore, cache, artifactStore, qualityReportSvc, snapshotManageSvc)
+        querySvc := graph_query.New(graphStore)
+        blastRadiusWorkflow := blast_radius.New(querySvc, artifactStore)
+        impactedTestsWorkflow := impacted_tests.New(querySvc, artifactStore)
+        return &amp;Application{
+                Config:           cfg,
+                Logger:           logger,
+                AnalyzeWorkspace: analyzeWorkflow,
+                BuildSnapshot:    buildSnapshotWorkflow,
+                BlastRadius:      blastRadiusWorkflow,
+                ImpactedTests:    impactedTestsWorkflow,
+                HTTPHandler:      httpapi.New(analyzeWorkflow, buildSnapshotWorkflow, blastRadiusWorkflow, impactedTestsWorkflow),
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file13" style="display: none">package config
+
+import (
+        "os"
+        "path/filepath"
+)
+
+type Config struct {
+        ArtifactRoot string
+        SQLitePath   string
+        HTTPAddr     string
+}
+
+func Default() Config <span class="cov10" title="2">{
+        artifactRoot := filepath.Clean("artifacts")
+        sqlitePath := filepath.Join(artifactRoot, "analysis.sqlite")
+        if value := os.Getenv("ANALYSIS_ARTIFACT_ROOT"); value != "" </span><span class="cov0" title="0">{
+                artifactRoot = filepath.Clean(value)
+                sqlitePath = filepath.Join(artifactRoot, "analysis.sqlite")
+        }</span>
+        <span class="cov10" title="2">if value := os.Getenv("ANALYSIS_SQLITE_PATH"); value != "" </span><span class="cov0" title="0">{
+                sqlitePath = filepath.Clean(value)
+        }</span>
+        <span class="cov10" title="2">addr := ":8080"
+        if value := os.Getenv("ANALYSIS_HTTP_ADDR"); value != "" </span><span class="cov0" title="0">{
+                addr = value
+        }</span>
+        <span class="cov10" title="2">return Config{
+                ArtifactRoot: artifactRoot,
+                SQLitePath:   sqlitePath,
+                HTTPAddr:     addr,
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file14" style="display: none">package errors
+
+import "net/http"
+
+type Code string
+
+const (
+        CodeInvalidArgument Code = "invalid_argument"
+        CodeNotFound        Code = "not_found"
+        CodeInternal        Code = "internal"
+        CodeNotImplemented  Code = "not_implemented"
+)
+
+type Error struct {
+        Code    Code   `json:"code"`
+        Message string `json:"message"`
+        Status  int    `json:"-"`
+}
+
+func (e *Error) Error() string <span class="cov0" title="0">{
+        return e.Message
+}</span>
+
+func New(code Code, message string, status int) *Error <span class="cov0" title="0">{
+        return &amp;Error{Code: code, Message: message, Status: status}
+}</span>
+
+func InvalidArgument(message string) *Error <span class="cov0" title="0">{
+        return New(CodeInvalidArgument, message, http.StatusBadRequest)
+}</span>
+
+func NotFound(message string) *Error <span class="cov0" title="0">{
+        return New(CodeNotFound, message, http.StatusNotFound)
+}</span>
+
+func Internal(message string) *Error <span class="cov0" title="0">{
+        return New(CodeInternal, message, http.StatusInternalServerError)
+}</span>
+
+func NotImplemented(message string) *Error <span class="cov0" title="0">{
+        return New(CodeNotImplemented, message, http.StatusNotImplemented)
+}</span>
+
+func StatusOf(err error) int <span class="cov0" title="0">{
+        if err == nil </span><span class="cov0" title="0">{
+                return http.StatusOK
+        }</span>
+        <span class="cov0" title="0">if typed, ok := err.(*Error); ok &amp;&amp; typed.Status != 0 </span><span class="cov0" title="0">{
+                return typed.Status
+        }</span>
+        <span class="cov0" title="0">return http.StatusInternalServerError</span>
+}
+</pre>
+		
+		<pre class="file" id="file15" style="display: none">package logging
+
+import (
+        "log/slog"
+        "os"
+)
+
+func New() *slog.Logger <span class="cov10" title="2">{
+        return slog.New(slog.NewTextHandler(os.Stderr, &amp;slog.HandlerOptions{Level: slog.LevelInfo}))
+}</span>
+</pre>
+		
+		<pre class="file" id="file16" style="display: none">package graph_build
+
+import (
+        "strings"
+        "time"
+
+        "analysis-module/internal/domain/graph"
+        "analysis-module/internal/domain/repository"
+        "analysis-module/internal/domain/symbol"
+        "analysis-module/internal/services/symbol_index"
+        "analysis-module/pkg/ids"
+)
+
+type BuildResult struct {
+        Snapshot        graph.GraphSnapshot `json:"snapshot"`
+        UnresolvedCalls int                 `json:"unresolved_calls"`
+}
+
+type Service struct{}
+
+func New() Service <span class="cov3" title="3">{
+        return Service{}
+}</span>
+
+func (Service) Build(workspaceID, snapshotID string, inventory repository.Inventory, extraction symbol_index.Result) BuildResult <span class="cov2" title="2">{
+        nodes := []graph.Node{}
+        edges := []graph.Edge{}
+        symbolByCanonical := map[string]symbol.Symbol{}
+        symbolNodeByID := map[symbol.ID]graph.Node{}
+        methodsBySuffix := map[string][]symbol.Symbol{}
+        workspaceNode := graph.Node{
+                ID:            ids.Stable("node", snapshotID, "workspace", workspaceID),
+                Kind:          graph.NodeWorkspace,
+                CanonicalName: workspaceID,
+                SnapshotID:    snapshotID,
+        }
+        nodes = append(nodes, workspaceNode)
+        for _, repo := range inventory.Repositories </span><span class="cov2" title="2">{
+                repoNode := graph.Node{
+                        ID:            ids.Stable("node", snapshotID, "repo", string(repo.ID)),
+                        Kind:          graph.NodeRepository,
+                        CanonicalName: repo.Name,
+                        RepositoryID:  string(repo.ID),
+                        FilePath:      repo.RootPath,
+                        Properties:    map[string]string{"role": string(repo.Role)},
+                        SnapshotID:    snapshotID,
+                }
+                nodes = append(nodes, repoNode)
+                edges = append(edges, newEdge(snapshotID, graph.EdgeContains, workspaceNode.ID, repoNode.ID, "scanner", graph.ConfidenceConfirmed, 1.0))
+                for _, svc := range repo.CandidateServices </span><span class="cov2" title="2">{
+                        serviceNode := graph.Node{
+                                ID:            ids.Stable("node", snapshotID, "service", string(svc.ID)),
+                                Kind:          graph.NodeService,
+                                CanonicalName: svc.Name,
+                                RepositoryID:  string(repo.ID),
+                                FilePath:      svc.RootPath,
+                                SnapshotID:    snapshotID,
+                        }
+                        nodes = append(nodes, serviceNode)
+                        edges = append(edges, newEdge(snapshotID, graph.EdgeContains, repoNode.ID, serviceNode.ID, "scanner", graph.ConfidenceConfirmed, 1.0))
+                }</span>
+        }
+
+        <span class="cov2" title="2">fileCount := 0
+        for _, repoExtraction := range extraction.Repositories </span><span class="cov2" title="2">{
+                repo := repoExtraction.Repository
+                repoNodeID := ids.Stable("node", snapshotID, "repo", string(repo.ID))
+                packageNodes := map[string]string{}
+                serviceNodeID := ""
+                if len(repo.CandidateServices) &gt; 0 </span><span class="cov2" title="2">{
+                        serviceNodeID = ids.Stable("node", snapshotID, "service", string(repo.CandidateServices[0].ID))
+                }</span>
+                <span class="cov2" title="2">for _, fileResult := range repoExtraction.Files </span><span class="cov4" title="5">{
+                        fileCount++
+                        fileNode := graph.Node{
+                                ID:            ids.Stable("node", snapshotID, "file", string(repo.ID), fileResult.FilePath),
+                                Kind:          graph.NodeFile,
+                                CanonicalName: fileResult.FilePath,
+                                RepositoryID:  string(repo.ID),
+                                FilePath:      fileResult.FilePath,
+                                Language:      "go",
+                                SnapshotID:    snapshotID,
+                        }
+                        nodes = append(nodes, fileNode)
+                        edges = append(edges, newEdge(snapshotID, graph.EdgeContains, repoNodeID, fileNode.ID, "inventory", graph.ConfidenceConfirmed, 1.0))
+
+                        if fileResult.PackageName != "" </span><span class="cov4" title="5">{
+                                if _, ok := packageNodes[fileResult.PackageName]; !ok </span><span class="cov4" title="4">{
+                                        packageNode := graph.Node{
+                                                ID:            ids.Stable("node", snapshotID, "package", string(repo.ID), fileResult.PackageName),
+                                                Kind:          graph.NodePackage,
+                                                CanonicalName: fileResult.PackageName,
+                                                RepositoryID:  string(repo.ID),
+                                                Language:      "go",
+                                                SnapshotID:    snapshotID,
+                                        }
+                                        nodes = append(nodes, packageNode)
+                                        packageNodes[fileResult.PackageName] = packageNode.ID
+                                        edges = append(edges, newEdge(snapshotID, graph.EdgeContains, repoNodeID, packageNode.ID, "tree-sitter-go", graph.ConfidenceConfirmed, 1.0))
+                                }</span>
+                                <span class="cov4" title="5">edges = append(edges, newEdge(snapshotID, graph.EdgeContains, packageNodes[fileResult.PackageName], fileNode.ID, "tree-sitter-go", graph.ConfidenceConfirmed, 1.0))</span>
+                        }
+
+                        <span class="cov4" title="5">for _, imported := range fileResult.Imports </span><span class="cov3" title="3">{
+                                importNode := graph.Node{
+                                        ID:            ids.Stable("node", snapshotID, "import", imported),
+                                        Kind:          graph.NodePackage,
+                                        CanonicalName: imported,
+                                        SnapshotID:    snapshotID,
+                                }
+                                nodes = append(nodes, importNode)
+                                edges = append(edges, newEdge(snapshotID, graph.EdgeImports, fileNode.ID, importNode.ID, "tree-sitter-go", graph.ConfidenceConfirmed, 0.9))
+                        }</span>
+
+                        <span class="cov4" title="5">for _, sym := range fileResult.Symbols </span><span class="cov5" title="8">{
+                                symbolByCanonical[sym.CanonicalName] = sym
+                                suffix := "." + sym.Name
+                                methodsBySuffix[suffix] = append(methodsBySuffix[suffix], sym)
+                                nodeKind := graph.NodeSymbol
+                                if sym.Kind == symbol.KindTestFunction </span><span class="cov2" title="2">{
+                                        nodeKind = graph.NodeTest
+                                }</span>
+                                <span class="cov5" title="8">symbolNode := graph.Node{
+                                        ID:            ids.Stable("node", snapshotID, "symbol", string(sym.ID)),
+                                        Kind:          nodeKind,
+                                        CanonicalName: sym.CanonicalName,
+                                        RepositoryID:  sym.RepositoryID,
+                                        FilePath:      sym.FilePath,
+                                        Language:      "go",
+                                        Location:      &amp;sym.Location,
+                                        Properties: map[string]string{
+                                                "name": sym.Name,
+                                                "kind": string(sym.Kind),
+                                        },
+                                        SnapshotID: snapshotID,
+                                }
+                                symbolNodeByID[sym.ID] = symbolNode
+                                nodes = append(nodes, symbolNode)
+                                edges = append(edges, newEdge(snapshotID, graph.EdgeDefines, fileNode.ID, symbolNode.ID, "tree-sitter-go", graph.ConfidenceConfirmed, 1.0))
+                                if serviceNodeID != "" </span><span class="cov5" title="8">{
+                                        edges = append(edges, newEdge(snapshotID, graph.EdgeBelongsToService, symbolNode.ID, serviceNodeID, "inventory", graph.ConfidenceInferred, 0.7))
+                                }</span>
+                        }
+                }
+        }
+
+        <span class="cov2" title="2">unresolved := 0
+        for _, repoExtraction := range extraction.Repositories </span><span class="cov2" title="2">{
+                for _, fileResult := range repoExtraction.Files </span><span class="cov4" title="5">{
+                        sourceByID := map[symbol.ID]symbol.Symbol{}
+                        for _, sym := range fileResult.Symbols </span><span class="cov5" title="8">{
+                                sourceByID[sym.ID] = sym
+                        }</span>
+                        <span class="cov4" title="5">for _, relation := range fileResult.Relations </span><span class="cov5" title="7">{
+                                source, ok := sourceByID[relation.SourceSymbolID]
+                                if !ok </span><span class="cov0" title="0">{
+                                        unresolved++
+                                        continue</span>
+                                }
+                                <span class="cov5" title="7">resolved, confidence, ok := resolveTarget(relation.TargetCanonicalName, symbolByCanonical, methodsBySuffix)
+                                if !ok </span><span class="cov1" title="1">{
+                                        unresolved++
+                                        continue</span>
+                                }
+                                <span class="cov5" title="6">fromNode := symbolNodeByID[source.ID]
+                                toNode := symbolNodeByID[resolved.ID]
+                                edges = append(edges, graph.Edge{
+                                        ID:   ids.Stable("edge", snapshotID, fromNode.ID, toNode.ID, string(graph.EdgeCalls), relation.EvidenceSource),
+                                        Kind: graph.EdgeCalls,
+                                        From: fromNode.ID,
+                                        To:   toNode.ID,
+                                        Evidence: graph.Evidence{
+                                                Type:             relation.EvidenceType,
+                                                Source:           relation.EvidenceSource,
+                                                ExtractionMethod: relation.ExtractionMethod,
+                                                Details:          relation.TargetCanonicalName,
+                                        },
+                                        Confidence: confidence,
+                                        SnapshotID: snapshotID,
+                                })
+                                if source.Kind == symbol.KindTestFunction </span><span class="cov2" title="2">{
+                                        edges = append(edges, newEdge(snapshotID, graph.EdgeTestedBy, toNode.ID, fromNode.ID, "tree-sitter-go", graph.ConfidenceInferred, 0.8))
+                                }</span>
+                        }
+                }
+        }
+
+        <span class="cov2" title="2">dedupedNodes := dedupeNodes(nodes)
+        dedupedEdges := dedupeEdges(edges)
+        return BuildResult{
+                Snapshot: graph.GraphSnapshot{
+                        ID:          snapshotID,
+                        WorkspaceID: workspaceID,
+                        CreatedAt:   time.Now().UTC(),
+                        Nodes:       dedupedNodes,
+                        Edges:       dedupedEdges,
+                        Metadata: graph.SnapshotMetadata{
+                                RepositoryCount: len(inventory.Repositories),
+                                FileCount:       fileCount,
+                                SymbolCount:     len(symbolByCanonical),
+                                EdgeCount:       len(dedupedEdges),
+                        },
+                },
+                UnresolvedCalls: unresolved,
+        }</span>
+}
+
+func resolveTarget(target string, symbolByCanonical map[string]symbol.Symbol, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) <span class="cov5" title="7">{
+        if resolved, ok := symbolByCanonical[target]; ok </span><span class="cov4" title="4">{
+                return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.95}, true
+        }</span>
+        <span class="cov3" title="3">idx := strings.LastIndex(target, ".")
+        if idx &lt; 0 </span><span class="cov0" title="0">{
+                return symbol.Symbol{}, graph.Confidence{}, false
+        }</span>
+        <span class="cov3" title="3">suffix := target[idx:]
+        if suffix != "" </span><span class="cov3" title="3">{
+                candidates := methodsBySuffix[suffix]
+                if len(candidates) == 1 </span><span class="cov2" title="2">{
+                        return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.6}, true
+                }</span>
+        }
+        <span class="cov1" title="1">return symbol.Symbol{}, graph.Confidence{}, false</span>
+}
+
+func newEdge(snapshotID string, kind graph.EdgeKind, from, to, method string, tier graph.ConfidenceTier, score float64) graph.Edge <span class="cov9" title="39">{
+        return graph.Edge{
+                ID:   ids.Stable("edge", snapshotID, from, to, string(kind)),
+                Kind: kind,
+                From: from,
+                To:   to,
+                Evidence: graph.Evidence{
+                        Type:             "static",
+                        Source:           method,
+                        ExtractionMethod: method,
+                        Details:          string(kind),
+                },
+                Confidence: graph.Confidence{Tier: tier, Score: score},
+                SnapshotID: snapshotID,
+        }
+}</span>
+
+func dedupeNodes(nodes []graph.Node) []graph.Node <span class="cov2" title="2">{
+        seen := map[string]graph.Node{}
+        for _, node := range nodes </span><span class="cov8" title="26">{
+                seen[node.ID] = node
+        }</span>
+        <span class="cov2" title="2">result := make([]graph.Node, 0, len(seen))
+        for _, node := range seen </span><span class="cov8" title="26">{
+                result = append(result, node)
+        }</span>
+        <span class="cov2" title="2">return result</span>
+}
+
+func dedupeEdges(edges []graph.Edge) []graph.Edge <span class="cov2" title="2">{
+        seen := map[string]graph.Edge{}
+        for _, edge := range edges </span><span class="cov10" title="45">{
+                seen[edge.ID] = edge
+        }</span>
+        <span class="cov2" title="2">result := make([]graph.Edge, 0, len(seen))
+        for _, edge := range seen </span><span class="cov10" title="45">{
+                result = append(result, edge)
+        }</span>
+        <span class="cov2" title="2">return result</span>
+}
+</pre>
+		
+		<pre class="file" id="file17" style="display: none">package graph_query
+
+import (
+        "container/list"
+        "database/sql"
+
+        "analysis-module/internal/domain/graph"
+        graphstoreport "analysis-module/internal/ports/graphstore"
+        queryport "analysis-module/internal/ports/query"
+)
+
+type Service struct {
+        store graphstoreport.Store
+}
+
+func New(store graphstoreport.Store) Service <span class="cov2" title="2">{
+        return Service{store: store}
+}</span>
+
+func (s Service) BlastRadius(req queryport.BlastRadiusRequest) (queryport.BlastRadiusResult, error) <span class="cov1" title="1">{
+        nodes, edges, target, err := s.load(req.SnapshotID, req.Target)
+        if err != nil </span><span class="cov0" title="0">{
+                return queryport.BlastRadiusResult{}, err
+        }</span>
+        <span class="cov1" title="1">impacted := bfs(nodes, edges, target.ID, req.MaxDepth, func(node graph.Node) bool </span><span class="cov6" title="17">{ return true }</span>)
+        <span class="cov1" title="1">return queryport.BlastRadiusResult{SnapshotID: req.SnapshotID, Target: req.Target, Impacted: impacted}, nil</span>
+}
+
+func (s Service) ImpactedTests(req queryport.ImpactedTestsRequest) (queryport.ImpactedTestsResult, error) <span class="cov1" title="1">{
+        nodes, edges, target, err := s.load(req.SnapshotID, req.Target)
+        if err != nil </span><span class="cov0" title="0">{
+                return queryport.ImpactedTestsResult{}, err
+        }</span>
+        <span class="cov1" title="1">tests := bfs(nodes, edges, target.ID, req.MaxDepth, func(node graph.Node) bool </span><span class="cov6" title="17">{
+                return node.Kind == graph.NodeTest
+        }</span>)
+        <span class="cov1" title="1">return queryport.ImpactedTestsResult{SnapshotID: req.SnapshotID, Target: req.Target, Tests: tests}, nil</span>
+}
+
+func (s Service) load(snapshotID, target string) (map[string]graph.Node, []graph.Edge, graph.Node, error) <span class="cov2" title="2">{
+        nodes, err := s.store.GetNodes(snapshotID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, graph.Node{}, err
+        }</span>
+        <span class="cov2" title="2">edges, err := s.store.GetEdges(snapshotID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, graph.Node{}, err
+        }</span>
+        <span class="cov2" title="2">targetNode, err := s.store.FindNode(snapshotID, target)
+        if err != nil </span><span class="cov0" title="0">{
+                if err == sql.ErrNoRows </span><span class="cov0" title="0">{
+                        return nil, nil, graph.Node{}, err
+                }</span>
+                <span class="cov0" title="0">return nil, nil, graph.Node{}, err</span>
+        }
+        <span class="cov2" title="2">nodeMap := map[string]graph.Node{}
+        for _, node := range nodes </span><span class="cov7" title="36">{
+                nodeMap[node.ID] = node
+        }</span>
+        <span class="cov2" title="2">return nodeMap, edges, targetNode, nil</span>
+}
+
+func bfs(nodes map[string]graph.Node, edges []graph.Edge, start string, maxDepth int, include func(graph.Node) bool) []queryport.ImpactedEntity <span class="cov2" title="2">{
+        if maxDepth &lt;= 0 </span><span class="cov0" title="0">{
+                maxDepth = 3
+        }</span>
+        <span class="cov2" title="2">adj := map[string][]string{}
+        for _, edge := range edges </span><span class="cov8" title="62">{
+                adj[edge.From] = append(adj[edge.From], edge.To)
+                adj[edge.To] = append(adj[edge.To], edge.From)
+        }</span>
+        <span class="cov2" title="2">type step struct {
+                NodeID string
+                Depth  int
+                Path   []string
+        }
+        seen := map[string]bool{start: true}
+        queue := list.New()
+        queue.PushBack(step{NodeID: start, Depth: 0, Path: []string{start}})
+        result := []queryport.ImpactedEntity{}
+        for queue.Len() &gt; 0 </span><span class="cov7" title="36">{
+                raw := queue.Remove(queue.Front()).(step)
+                if raw.Depth &gt; maxDepth </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov7" title="36">node := nodes[raw.NodeID]
+                if raw.NodeID != start &amp;&amp; include(node) </span><span class="cov6" title="18">{
+                        result = append(result, queryport.ImpactedEntity{
+                                Node:     node,
+                                Distance: raw.Depth,
+                                Path:     graph.Path{NodeIDs: append([]string(nil), raw.Path...)},
+                                Confidence: graph.Confidence{
+                                        Tier:  graph.ConfidenceInferred,
+                                        Score: 1.0 / float64(raw.Depth+1),
+                                },
+                        })
+                }</span>
+                <span class="cov7" title="36">for _, next := range adj[raw.NodeID] </span><span class="cov10" title="124">{
+                        if seen[next] </span><span class="cov9" title="90">{
+                                continue</span>
+                        }
+                        <span class="cov7" title="34">seen[next] = true
+                        nextPath := append(append([]string(nil), raw.Path...), next)
+                        queue.PushBack(step{NodeID: next, Depth: raw.Depth + 1, Path: nextPath})</span>
+                }
+        }
+        <span class="cov2" title="2">return result</span>
+}
+</pre>
+		
+		<pre class="file" id="file18" style="display: none">package packet_build
+
+import (
+        apperrors "analysis-module/internal/app/errors"
+        "analysis-module/internal/domain/packet"
+)
+
+type Service struct{}
+
+func New() Service <span class="cov0" title="0">{
+        return Service{}
+}</span>
+
+func (Service) Build(target, snapshotID string) (packet.Packet, error) <span class="cov0" title="0">{
+        return packet.Packet{}, apperrors.NotImplemented("packet building is deferred in this pass")
+}</span>
+</pre>
+		
+		<pre class="file" id="file19" style="display: none">package quality_report
+
+import (
+        "analysis-module/internal/domain/quality"
+        "analysis-module/internal/domain/repository"
+        "analysis-module/internal/services/graph_build"
+        "analysis-module/internal/services/symbol_index"
+)
+
+type Service struct{}
+
+func New() Service <span class="cov10" title="2">{
+        return Service{}
+}</span>
+
+func (Service) Build(snapshotID string, inventory repository.Inventory, extraction symbol_index.Result, graphResult graph_build.BuildResult) quality.AnalysisQualityReport <span class="cov1" title="1">{
+        goFiles := 0
+        for _, repo := range inventory.Repositories </span><span class="cov1" title="1">{
+                goFiles += len(repo.GoFiles)
+        }</span>
+        <span class="cov1" title="1">parsedFiles := 0
+        for _, repo := range extraction.Repositories </span><span class="cov1" title="1">{
+                parsedFiles += len(repo.Files)
+        }</span>
+        <span class="cov1" title="1">gaps := []quality.GapReport{}
+        deferredBoundaryCount := 0
+        unsupportedLangs := 0
+        for _, repo := range inventory.Repositories </span><span class="cov1" title="1">{
+                if len(repo.BoundaryHints) &gt; 0 </span><span class="cov0" title="0">{
+                        deferredBoundaryCount += len(repo.BoundaryHints)
+                }</span>
+                <span class="cov1" title="1">for _, lang := range repo.TechStack.Languages </span><span class="cov1" title="1">{
+                        if lang != repository.LanguageGo </span><span class="cov0" title="0">{
+                                unsupportedLangs++
+                        }</span>
+                }
+        }
+        <span class="cov1" title="1">if deferredBoundaryCount &gt; 0 </span><span class="cov0" title="0">{
+                gaps = append(gaps, quality.GapReport{
+                        Category: "boundary_stitching",
+                        Message:  "boundary hints detected but cross-service stitching is deferred in this pass",
+                        Count:    deferredBoundaryCount,
+                })
+        }</span>
+        <span class="cov1" title="1">if unsupportedLangs &gt; 0 </span><span class="cov0" title="0">{
+                gaps = append(gaps, quality.GapReport{
+                        Category: "language_support",
+                        Message:  "non-Go repositories were discovered but only Go extraction is implemented",
+                        Count:    unsupportedLangs,
+                })
+        }</span>
+        <span class="cov1" title="1">if graphResult.UnresolvedCalls &gt; 0 </span><span class="cov1" title="1">{
+                gaps = append(gaps, quality.GapReport{
+                        Category: "call_resolution",
+                        Message:  "some call sites were not resolved into local graph edges",
+                        Count:    graphResult.UnresolvedCalls,
+                })
+        }</span>
+        <span class="cov1" title="1">return quality.AnalysisQualityReport{
+                SnapshotID: snapshotID,
+                Metrics: []quality.CoverageMetric{
+                        {Name: "repositories", Value: len(inventory.Repositories), Total: len(inventory.Repositories)},
+                        {Name: "go_files_parsed", Value: parsedFiles, Total: goFiles},
+                        {Name: "symbols_indexed", Value: graphResult.Snapshot.Metadata.SymbolCount, Total: graphResult.Snapshot.Metadata.SymbolCount},
+                },
+                Gaps: gaps,
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file20" style="display: none">package repo_inventory
+
+import (
+        "sort"
+        "strings"
+
+        "analysis-module/internal/domain/repository"
+        scannerport "analysis-module/internal/ports/scanner"
+)
+
+type Service struct{}
+
+func New() Service <span class="cov8" title="3">{
+        return Service{}
+}</span>
+
+func (Service) Build(workspaceID string, scan scannerport.ScanWorkspaceResult) repository.Inventory <span class="cov8" title="3">{
+        repos := make([]repository.Manifest, 0, len(scan.Repositories))
+        plans := []repository.ExtractionPlan{}
+        for _, repo := range scan.Repositories </span><span class="cov10" title="4">{
+                repo.Role = classifyRole(repo)
+                repos = append(repos, repo)
+                for _, lang := range repo.TechStack.Languages </span><span class="cov8" title="3">{
+                        if lang == repository.LanguageGo &amp;&amp; len(repo.GoFiles) &gt; 0 </span><span class="cov8" title="3">{
+                                plans = append(plans, repository.ExtractionPlan{
+                                        RepositoryID: repo.ID,
+                                        Language:     lang,
+                                        Files:        append([]string(nil), repo.GoFiles...),
+                                })
+                        }</span>
+                }
+        }
+        <span class="cov8" title="3">sort.Slice(repos, func(i, j int) bool </span><span class="cov1" title="1">{ return repos[i].RootPath &lt; repos[j].RootPath }</span>)
+        <span class="cov8" title="3">return repository.Inventory{
+                WorkspaceID:  workspaceID,
+                Repositories: repos,
+                Plans:        plans,
+        }</span>
+}
+
+func classifyRole(repo repository.Manifest) repository.Role <span class="cov10" title="4">{
+        if len(repo.CandidateServices) &gt; 0 </span><span class="cov8" title="3">{
+                return repository.RoleService
+        }</span>
+        <span class="cov1" title="1">for _, buildFile := range repo.TechStack.BuildFiles </span><span class="cov0" title="0">{
+                lower := strings.ToLower(buildFile)
+                if strings.Contains(lower, "terraform") || strings.Contains(lower, "docker") </span><span class="cov0" title="0">{
+                        return repository.RoleInfra
+                }</span>
+        }
+        <span class="cov1" title="1">if len(repo.GoFiles) &gt; 0 </span><span class="cov0" title="0">{
+                return repository.RoleSharedLib
+        }</span>
+        <span class="cov1" title="1">return repository.RoleUnknown</span>
+}
+</pre>
+		
+		<pre class="file" id="file21" style="display: none">package repomap_build
+
+import (
+        apperrors "analysis-module/internal/app/errors"
+        "analysis-module/internal/domain/repomap"
+)
+
+type Service struct{}
+
+func New() Service <span class="cov0" title="0">{
+        return Service{}
+}</span>
+
+func (Service) Build(target, snapshotID string) (repomap.RepoMap, error) <span class="cov0" title="0">{
+        return repomap.RepoMap{}, apperrors.NotImplemented("repo-map generation is deferred in this pass")
+}</span>
+</pre>
+		
+		<pre class="file" id="file22" style="display: none">package snapshot_manage
+
+import (
+        "fmt"
+        "time"
+
+        "analysis-module/pkg/ids"
+)
+
+type Service struct{}
+
+func New() Service <span class="cov10" title="2">{
+        return Service{}
+}</span>
+
+func (Service) NewWorkspaceID(root string) string <span class="cov10" title="2">{
+        return ids.Stable("ws", root)
+}</span>
+
+func (Service) NewSnapshotID(workspaceID string) string <span class="cov1" title="1">{
+        return fmt.Sprintf("%s_%s", workspaceID, time.Now().UTC().Format("20060102T150405Z"))
+}</span>
+</pre>
+		
+		<pre class="file" id="file23" style="display: none">package symbol_index
+
+import (
+        "path/filepath"
+
+        "analysis-module/internal/domain/repository"
+        "analysis-module/internal/domain/symbol"
+        extractorport "analysis-module/internal/ports/extractor"
+)
+
+type RepositoryExtraction struct {
+        Repository repository.Manifest       `json:"repository"`
+        Files      []symbol.FileExtractionResult `json:"files"`
+}
+
+type Result struct {
+        Repositories []RepositoryExtraction `json:"repositories"`
+}
+
+type Service struct {
+        extractors []extractorport.SymbolExtractor
+}
+
+func New(extractors ...extractorport.SymbolExtractor) Service <span class="cov5" title="2">{
+        return Service{extractors: extractors}
+}</span>
+
+func (s Service) Build(inventory repository.Inventory) (Result, error) <span class="cov1" title="1">{
+        repoByID := map[repository.ID]repository.Manifest{}
+        for _, repo := range inventory.Repositories </span><span class="cov1" title="1">{
+                repoByID[repo.ID] = repo
+        }</span>
+        <span class="cov1" title="1">result := Result{}
+        for _, plan := range inventory.Plans </span><span class="cov1" title="1">{
+                repo := repoByID[plan.RepositoryID]
+                extractor := s.findExtractor(string(plan.Language))
+                if extractor == nil </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov1" title="1">repoResult := RepositoryExtraction{Repository: repo}
+                for _, relPath := range plan.Files </span><span class="cov10" title="4">{
+                        fileRef := symbol.FileRef{
+                                RepositoryID: string(repo.ID),
+                                AbsolutePath: filepath.Join(repo.RootPath, relPath),
+                                RelativePath: relPath,
+                                Language:     string(plan.Language),
+                        }
+                        extraction, err := extractor.ExtractFile(fileRef)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return Result{}, err
+                        }</span>
+                        <span class="cov10" title="4">repoResult.Files = append(repoResult.Files, extraction)</span>
+                }
+                <span class="cov1" title="1">result.Repositories = append(result.Repositories, repoResult)</span>
+        }
+        <span class="cov1" title="1">return result, nil</span>
+}
+
+func (s Service) findExtractor(lang string) extractorport.SymbolExtractor <span class="cov1" title="1">{
+        for _, extractor := range s.extractors </span><span class="cov1" title="1">{
+                if extractor.Supports(lang) </span><span class="cov1" title="1">{
+                        return extractor
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file24" style="display: none">package workspace_scan
+
+import (
+        "io/fs"
+        "path/filepath"
+        "sort"
+        "strings"
+
+        "analysis-module/internal/domain/repository"
+        "analysis-module/internal/domain/service"
+        scannerport "analysis-module/internal/ports/scanner"
+        "analysis-module/pkg/ids"
+)
+
+type Service struct {
+        repoRootDetector scannerport.RepoRootDetector
+        techStackDetector scannerport.TechStackDetector
+        serviceDetector scannerport.ServiceDetector
+}
+
+func New(repoRootDetector scannerport.RepoRootDetector, techStackDetector scannerport.TechStackDetector, serviceDetector scannerport.ServiceDetector) Service <span class="cov3" title="3">{
+        return Service{
+                repoRootDetector: repoRootDetector,
+                techStackDetector: techStackDetector,
+                serviceDetector: serviceDetector,
+        }
+}</span>
+
+func (s Service) Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWorkspaceResult, error) <span class="cov3" title="3">{
+        repoRoots, err := s.repoRootDetector.Detect(req.WorkspacePath, req.IgnorePatterns)
+        if err != nil </span><span class="cov0" title="0">{
+                return scannerport.ScanWorkspaceResult{}, err
+        }</span>
+        <span class="cov3" title="3">repos := make([]repository.Manifest, 0, len(repoRoots))
+        warnings := []string{}
+        for _, root := range repoRoots </span><span class="cov5" title="5">{
+                techStack, err := s.techStackDetector.Detect(root)
+                if err != nil </span><span class="cov0" title="0">{
+                        warnings = append(warnings, "tech stack detection failed for "+root+": "+err.Error())
+                        continue</span>
+                }
+                <span class="cov5" title="5">repoManifest := repository.Manifest{
+                        ID:       repository.ID(ids.Stable("repo", root)),
+                        Name:     filepath.Base(root),
+                        RootPath: root,
+                        Role:     repository.RoleUnknown,
+                        TechStack: techStack,
+                        GoFiles:  collectGoFiles(root),
+                        ConfigFiles: collectConfigFiles(root),
+                }
+                entrypoints, hints, err := s.serviceDetector.Detect(repoManifest)
+                if err != nil </span><span class="cov0" title="0">{
+                        warnings = append(warnings, "service detection failed for "+root+": "+err.Error())
+                }</span>
+                <span class="cov5" title="5">repoManifest.BoundaryHints = hints
+                if len(entrypoints) &gt; 0 </span><span class="cov3" title="3">{
+                        serviceName := repoManifest.Name
+                        repoManifest.CandidateServices = []service.Manifest{{
+                                ID:           service.ID(ids.Stable("svc", repoManifest.RootPath, serviceName)),
+                                Name:         serviceName,
+                                RepositoryID: string(repoManifest.ID),
+                                RootPath:     repoManifest.RootPath,
+                                Entrypoints:  entrypoints,
+                                Boundaries:   inferBoundaries(hints),
+                        }}
+                }</span>
+                <span class="cov5" title="5">repos = append(repos, repoManifest)</span>
+        }
+        <span class="cov3" title="3">sort.Slice(repos, func(i, j int) bool </span><span class="cov2" title="2">{
+                return repos[i].RootPath &lt; repos[j].RootPath
+        }</span>)
+        <span class="cov3" title="3">return scannerport.ScanWorkspaceResult{
+                WorkspacePath: filepath.Clean(req.WorkspacePath),
+                Repositories:  repos,
+                Warnings:      warnings,
+        }, nil</span>
+}
+
+func collectGoFiles(root string) []string <span class="cov5" title="5">{
+        files := []string{}
+        _ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error </span><span class="cov10" title="30">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov10" title="30">if d.IsDir() </span><span class="cov8" title="15">{
+                        if d.Name() == ".git" || d.Name() == "vendor" || d.Name() == "node_modules" || d.Name() == "artifacts" </span><span class="cov0" title="0">{
+                                return filepath.SkipDir
+                        }</span>
+                        <span class="cov8" title="15">return nil</span>
+                }
+                <span class="cov8" title="15">if strings.HasSuffix(path, ".go") </span><span class="cov7" title="10">{
+                        rel, _ := filepath.Rel(root, path)
+                        files = append(files, rel)
+                }</span>
+                <span class="cov8" title="15">return nil</span>
+        })
+        <span class="cov5" title="5">sort.Strings(files)
+        return files</span>
+}
+
+func collectConfigFiles(root string) []string <span class="cov5" title="5">{
+        files := []string{}
+        _ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error </span><span class="cov10" title="30">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov10" title="30">if d.IsDir() </span><span class="cov8" title="15">{
+                        if d.Name() == ".git" || d.Name() == "vendor" || d.Name() == "node_modules" || d.Name() == "artifacts" </span><span class="cov0" title="0">{
+                                return filepath.SkipDir
+                        }</span>
+                        <span class="cov8" title="15">return nil</span>
+                }
+                <span class="cov8" title="15">lower := strings.ToLower(path)
+                if strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".json") || strings.HasSuffix(lower, ".toml") || strings.HasSuffix(lower, ".proto") </span><span class="cov1" title="1">{
+                        rel, _ := filepath.Rel(root, path)
+                        files = append(files, rel)
+                }</span>
+                <span class="cov8" title="15">return nil</span>
+        })
+        <span class="cov5" title="5">sort.Strings(files)
+        return files</span>
+}
+
+func inferBoundaries(hints []repository.BoundaryHint) []service.BoundaryType <span class="cov3" title="3">{
+        seen := map[service.BoundaryType]struct{}{}
+        for _, hint := range hints </span><span class="cov0" title="0">{
+                switch hint.Type </span>{
+                case "grpc":<span class="cov0" title="0">
+                        seen[service.BoundaryGRPC] = struct{}{}</span>
+                case "http":<span class="cov0" title="0">
+                        seen[service.BoundaryHTTP] = struct{}{}</span>
+                case "kafka":<span class="cov0" title="0">
+                        seen[service.BoundaryKafka] = struct{}{}</span>
+                }
+        }
+        <span class="cov3" title="3">result := make([]service.BoundaryType, 0, len(seen))
+        for boundary := range seen </span><span class="cov0" title="0">{
+                result = append(result, boundary)
+        }</span>
+        <span class="cov3" title="3">sort.Slice(result, func(i, j int) bool </span><span class="cov0" title="0">{ return result[i] &lt; result[j] }</span>)
+        <span class="cov3" title="3">return result</span>
+}
+</pre>
+		
+		<pre class="file" id="file25" style="display: none">package fixtures
+
+import (
+        "os"
+        "path/filepath"
+        "testing"
+)
+
+func WorkspacePath(t *testing.T, name string) string <span class="cov5" title="6">{
+        t.Helper()
+        wd, err := os.Getwd()
+        if err != nil </span><span class="cov0" title="0">{
+                t.Fatalf("getwd: %v", err)
+        }</span>
+        <span class="cov5" title="6">current := wd
+        for </span><span class="cov10" title="27">{
+                candidate := filepath.Join(current, "testdata", "workspaces", name)
+                if _, err := os.Stat(candidate); err == nil </span><span class="cov5" title="6">{
+                        return candidate
+                }</span>
+                <span class="cov9" title="21">parent := filepath.Dir(current)
+                if parent == current </span><span class="cov0" title="0">{
+                        t.Fatalf("fixture workspace %q not found from %s", name, wd)
+                }</span>
+                <span class="cov9" title="21">current = parent</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file26" style="display: none">package analyze_workspace
+
+import (
+        "path/filepath"
+        "sort"
+        "time"
+
+        "analysis-module/internal/domain/artifact"
+        "analysis-module/internal/domain/repository"
+        "analysis-module/internal/domain/workspace"
+        artifactstoreport "analysis-module/internal/ports/artifactstore"
+        scannerport "analysis-module/internal/ports/scanner"
+        "analysis-module/internal/services/repo_inventory"
+        "analysis-module/internal/services/snapshot_manage"
+        "analysis-module/internal/services/workspace_scan"
+)
+
+type Request struct {
+        WorkspacePath  string   `json:"workspace_path"`
+        IgnorePatterns []string `json:"ignore_patterns"`
+        TargetHints    []string `json:"target_hints"`
+}
+
+type Result struct {
+        WorkspaceManifest workspace.Manifest  `json:"workspace_manifest"`
+        Inventory         repository.Inventory `json:"inventory"`
+        ArtifactRefs      []artifact.Ref      `json:"artifact_refs"`
+        Warnings          []string            `json:"warnings"`
+}
+
+type Workflow struct {
+        scanner        workspace_scan.Service
+        inventory      repo_inventory.Service
+        artifactStore  artifactstoreport.Store
+        snapshotManage snapshot_manage.Service
+}
+
+func New(scanner workspace_scan.Service, inventory repo_inventory.Service, artifactStore artifactstoreport.Store, snapshotManage snapshot_manage.Service) Workflow <span class="cov10" title="2">{
+        return Workflow{
+                scanner:        scanner,
+                inventory:      inventory,
+                artifactStore:  artifactStore,
+                snapshotManage: snapshotManage,
+        }
+}</span>
+
+func (w Workflow) Run(req Request) (Result, error) <span class="cov10" title="2">{
+        workspacePath := filepath.Clean(req.WorkspacePath)
+        workspaceID := w.snapshotManage.NewWorkspaceID(workspacePath)
+        scanResult, err := w.scanner.Scan(scannerport.ScanWorkspaceRequest{
+                WorkspacePath:  workspacePath,
+                IgnorePatterns: req.IgnorePatterns,
+                TargetHints:    req.TargetHints,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return Result{}, err
+        }</span>
+        <span class="cov10" title="2">inventory := w.inventory.Build(workspaceID, scanResult)
+        repoIDs := make([]string, 0, len(inventory.Repositories))
+        languageSet := map[string]struct{}{}
+        for _, repo := range inventory.Repositories </span><span class="cov10" title="2">{
+                repoIDs = append(repoIDs, string(repo.ID))
+                for _, lang := range repo.TechStack.Languages </span><span class="cov10" title="2">{
+                        languageSet[string(lang)] = struct{}{}
+                }</span>
+        }
+        <span class="cov10" title="2">languages := make([]string, 0, len(languageSet))
+        for lang := range languageSet </span><span class="cov10" title="2">{
+                languages = append(languages, lang)
+        }</span>
+        <span class="cov10" title="2">sort.Strings(repoIDs)
+        sort.Strings(languages)
+        manifest := workspace.Manifest{
+                ID:            workspace.ID(workspaceID),
+                RootPath:      workspace.Path(workspacePath),
+                RepositoryIDs: repoIDs,
+                Languages:     languages,
+                Warnings:      append([]string(nil), scanResult.Warnings...),
+                ScannedAt:     time.Now().UTC(),
+        }
+        artifactRefs := []artifact.Ref{}
+        if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "workspace_manifest.json", artifact.TypeWorkspaceManifest, manifest); err == nil </span><span class="cov10" title="2">{
+                artifactRefs = append(artifactRefs, ref)
+        }</span>
+        <span class="cov10" title="2">if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "repository_manifests.json", artifact.TypeRepositoryManifests, inventory.Repositories); err == nil </span><span class="cov10" title="2">{
+                artifactRefs = append(artifactRefs, ref)
+        }</span>
+        <span class="cov10" title="2">if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "scan_warnings.json", artifact.TypeScanWarnings, scanResult.Warnings); err == nil </span><span class="cov10" title="2">{
+                artifactRefs = append(artifactRefs, ref)
+        }</span>
+        <span class="cov10" title="2">return Result{
+                WorkspaceManifest: manifest,
+                Inventory:         inventory,
+                ArtifactRefs:      artifactRefs,
+                Warnings:          scanResult.Warnings,
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file27" style="display: none">package blast_radius
+
+import (
+        "analysis-module/internal/domain/artifact"
+        artifactstoreport "analysis-module/internal/ports/artifactstore"
+        queryport "analysis-module/internal/ports/query"
+)
+
+type Request struct {
+        WorkspaceID string `json:"workspace_id"`
+        SnapshotID  string `json:"snapshot_id"`
+        Target      string `json:"target"`
+        MaxDepth    int    `json:"max_depth"`
+}
+
+type Result struct {
+        QueryResult  queryport.BlastRadiusResult `json:"query_result"`
+        ArtifactRefs []artifact.Ref              `json:"artifact_refs"`
+}
+
+type Workflow struct {
+        queryService queryport.Service
+        artifactStore artifactstoreport.Store
+}
+
+func New(queryService queryport.Service, artifactStore artifactstoreport.Store) Workflow <span class="cov10" title="2">{
+        return Workflow{queryService: queryService, artifactStore: artifactStore}
+}</span>
+
+func (w Workflow) Run(req Request) (Result, error) <span class="cov1" title="1">{
+        result, err := w.queryService.BlastRadius(queryport.BlastRadiusRequest{
+                SnapshotID: req.SnapshotID,
+                Target:     req.Target,
+                MaxDepth:   req.MaxDepth,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return Result{}, err
+        }</span>
+        <span class="cov1" title="1">refs := []artifact.Ref{}
+        if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "blast_radius.json", artifact.TypeBlastRadius, result); err == nil </span><span class="cov1" title="1">{
+                refs = append(refs, ref)
+        }</span>
+        <span class="cov1" title="1">return Result{QueryResult: result, ArtifactRefs: refs}, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file28" style="display: none">package build_packet
+
+import (
+        apperrors "analysis-module/internal/app/errors"
+        "analysis-module/internal/domain/packet"
+)
+
+type Request struct {
+        SnapshotID string `json:"snapshot_id"`
+        Target     string `json:"target"`
+}
+
+type Result struct {
+        Packet packet.Packet `json:"packet"`
+}
+
+func Run(Request) (Result, error) <span class="cov0" title="0">{
+        return Result{}, apperrors.NotImplemented("build-packet workflow is deferred in this pass")
+}</span>
+</pre>
+		
+		<pre class="file" id="file29" style="display: none">package build_repomap
+
+import (
+        apperrors "analysis-module/internal/app/errors"
+        "analysis-module/internal/domain/repomap"
+)
+
+type Request struct {
+        SnapshotID string `json:"snapshot_id"`
+        Target     string `json:"target"`
+}
+
+type Result struct {
+        RepoMap repomap.RepoMap `json:"repo_map"`
+}
+
+func Run(Request) (Result, error) <span class="cov0" title="0">{
+        return Result{}, apperrors.NotImplemented("build-repomap workflow is deferred in this pass")
+}</span>
+</pre>
+		
+		<pre class="file" id="file30" style="display: none">package build_snapshot
+
+import (
+        "analysis-module/internal/domain/artifact"
+        "analysis-module/internal/domain/graph"
+        "analysis-module/internal/domain/quality"
+        artifactstoreport "analysis-module/internal/ports/artifactstore"
+        cacheport "analysis-module/internal/ports/cache"
+        graphstoreport "analysis-module/internal/ports/graphstore"
+        "analysis-module/internal/services/graph_build"
+        "analysis-module/internal/services/quality_report"
+        "analysis-module/internal/services/snapshot_manage"
+        "analysis-module/internal/services/symbol_index"
+        "analysis-module/internal/workflows/analyze_workspace"
+)
+
+type Request struct {
+        WorkspacePath  string   `json:"workspace_path"`
+        IgnorePatterns []string `json:"ignore_patterns"`
+        TargetHints    []string `json:"target_hints"`
+}
+
+type Result struct {
+        WorkspaceID   string                      `json:"workspace_id"`
+        Snapshot      graph.GraphSnapshot         `json:"snapshot"`
+        QualityReport quality.AnalysisQualityReport `json:"quality_report"`
+        ArtifactRefs  []artifact.Ref              `json:"artifact_refs"`
+}
+
+type Workflow struct {
+        analyze        analyze_workspace.Workflow
+        symbolIndex    symbol_index.Service
+        graphBuild     graph_build.Service
+        graphStore     graphstoreport.Store
+        cache          cacheport.SnapshotCache
+        artifactStore  artifactstoreport.Store
+        qualityReport  quality_report.Service
+        snapshotManage snapshot_manage.Service
+}
+
+func New(analyze analyze_workspace.Workflow, symbolIndex symbol_index.Service, graphBuild graph_build.Service, graphStore graphstoreport.Store, cache cacheport.SnapshotCache, artifactStore artifactstoreport.Store, qualityReport quality_report.Service, snapshotManage snapshot_manage.Service) Workflow <span class="cov10" title="2">{
+        return Workflow{
+                analyze:        analyze,
+                symbolIndex:    symbolIndex,
+                graphBuild:     graphBuild,
+                graphStore:     graphStore,
+                cache:          cache,
+                artifactStore:  artifactStore,
+                qualityReport:  qualityReport,
+                snapshotManage: snapshotManage,
+        }
+}</span>
+
+func (w Workflow) Run(req Request) (Result, error) <span class="cov1" title="1">{
+        analyzeResult, err := w.analyze.Run(analyze_workspace.Request{
+                WorkspacePath:  req.WorkspacePath,
+                IgnorePatterns: req.IgnorePatterns,
+                TargetHints:    req.TargetHints,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return Result{}, err
+        }</span>
+        <span class="cov1" title="1">snapshotID := w.snapshotManage.NewSnapshotID(string(analyzeResult.WorkspaceManifest.ID))
+        extraction, err := w.symbolIndex.Build(analyzeResult.Inventory)
+        if err != nil </span><span class="cov0" title="0">{
+                return Result{}, err
+        }</span>
+        <span class="cov1" title="1">graphResult := w.graphBuild.Build(string(analyzeResult.WorkspaceManifest.ID), snapshotID, analyzeResult.Inventory, extraction)
+        if err := w.graphStore.SaveSnapshot(graphResult.Snapshot); err != nil </span><span class="cov0" title="0">{
+                return Result{}, err
+        }</span>
+        <span class="cov1" title="1">w.cache.Put(graphResult.Snapshot)
+        artifactRefs := append([]artifact.Ref{}, analyzeResult.ArtifactRefs...)
+        graphRefs, err := w.artifactStore.SaveGraph(string(analyzeResult.WorkspaceManifest.ID), snapshotID, graphResult.Snapshot.Nodes, graphResult.Snapshot.Edges)
+        if err == nil </span><span class="cov1" title="1">{
+                artifactRefs = append(artifactRefs, graphRefs...)
+        }</span>
+        <span class="cov1" title="1">report := w.qualityReport.Build(snapshotID, analyzeResult.Inventory, extraction, graphResult)
+        if ref, err := w.artifactStore.SaveQualityReport(string(analyzeResult.WorkspaceManifest.ID), snapshotID, report); err == nil </span><span class="cov1" title="1">{
+                artifactRefs = append(artifactRefs, ref)
+        }</span>
+        <span class="cov1" title="1">return Result{
+                WorkspaceID:   string(analyzeResult.WorkspaceManifest.ID),
+                Snapshot:      graphResult.Snapshot,
+                QualityReport: report,
+                ArtifactRefs:  artifactRefs,
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file31" style="display: none">package impacted_tests
+
+import (
+        "analysis-module/internal/domain/artifact"
+        artifactstoreport "analysis-module/internal/ports/artifactstore"
+        queryport "analysis-module/internal/ports/query"
+)
+
+type Request struct {
+        WorkspaceID string `json:"workspace_id"`
+        SnapshotID  string `json:"snapshot_id"`
+        Target      string `json:"target"`
+        MaxDepth    int    `json:"max_depth"`
+}
+
+type Result struct {
+        QueryResult  queryport.ImpactedTestsResult `json:"query_result"`
+        ArtifactRefs []artifact.Ref                `json:"artifact_refs"`
+}
+
+type Workflow struct {
+        queryService queryport.Service
+        artifactStore artifactstoreport.Store
+}
+
+func New(queryService queryport.Service, artifactStore artifactstoreport.Store) Workflow <span class="cov10" title="2">{
+        return Workflow{queryService: queryService, artifactStore: artifactStore}
+}</span>
+
+func (w Workflow) Run(req Request) (Result, error) <span class="cov1" title="1">{
+        result, err := w.queryService.ImpactedTests(queryport.ImpactedTestsRequest{
+                SnapshotID: req.SnapshotID,
+                Target:     req.Target,
+                MaxDepth:   req.MaxDepth,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return Result{}, err
+        }</span>
+        <span class="cov1" title="1">refs := []artifact.Ref{}
+        if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "impacted_tests.json", artifact.TypeImpactedTests, result); err == nil </span><span class="cov1" title="1">{
+                refs = append(refs, ref)
+        }</span>
+        <span class="cov1" title="1">return Result{QueryResult: result, ArtifactRefs: refs}, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file32" style="display: none">package ids
+
+import (
+        "crypto/sha1"
+        "encoding/hex"
+        "strings"
+)
+
+// Stable returns a short deterministic identifier derived from the provided parts.
+func Stable(prefix string, parts ...string) string <span class="cov8" title="93">{
+        h := sha1.New()
+        for _, part := range parts </span><span class="cov10" title="330">{
+                _, _ = h.Write([]byte(strings.TrimSpace(part)))
+                _, _ = h.Write([]byte{0})
+        }</span>
+        <span class="cov8" title="93">return prefix + "_" + hex.EncodeToString(h.Sum(nil))[:12]</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

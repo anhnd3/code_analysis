@@ -1,0 +1,242 @@
+{"Time":"2026-04-11T21:28:22.953009612+07:00","Action":"start","Package":"analysis-module/cmd/analysis-cli"}
+{"Time":"2026-04-11T21:28:22.953339135+07:00","Action":"start","Package":"analysis-module/cmd/analysisd"}
+{"Time":"2026-04-11T21:28:22.953624313+07:00","Action":"start","Package":"analysis-module/internal/adapters/api/dto"}
+{"Time":"2026-04-11T21:28:22.954276183+07:00","Action":"start","Package":"analysis-module/internal/adapters/api/http"}
+{"Time":"2026-04-11T21:28:22.954361889+07:00","Action":"output","Package":"analysis-module/internal/adapters/api/dto","Output":"?   \tanalysis-module/internal/adapters/api/dto\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.954826617+07:00","Action":"skip","Package":"analysis-module/internal/adapters/api/dto","Elapsed":0.001}
+{"Time":"2026-04-11T21:28:22.954579015+07:00","Action":"start","Package":"analysis-module/internal/adapters/artifactstore/filesystem"}
+{"Time":"2026-04-11T21:28:22.955295881+07:00","Action":"run","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Test":"TestSaveGraphWritesJSONLFiles"}
+{"Time":"2026-04-11T21:28:22.955462858+07:00","Action":"output","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Test":"TestSaveGraphWritesJSONLFiles","Output":"=== RUN   TestSaveGraphWritesJSONLFiles\n"}
+{"Time":"2026-04-11T21:28:22.955694545+07:00","Action":"output","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Test":"TestSaveGraphWritesJSONLFiles","Output":"--- PASS: TestSaveGraphWritesJSONLFiles (0.00s)\n"}
+{"Time":"2026-04-11T21:28:22.955830745+07:00","Action":"pass","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Test":"TestSaveGraphWritesJSONLFiles","Elapsed":0}
+{"Time":"2026-04-11T21:28:22.956039485+07:00","Action":"output","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.956181515+07:00","Action":"output","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Output":"coverage: 2.0% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.95636783+07:00","Action":"output","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Output":"ok  \tanalysis-module/internal/adapters/artifactstore/filesystem\t(cached)\tcoverage: 2.0% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.956619901+07:00","Action":"pass","Package":"analysis-module/internal/adapters/artifactstore/filesystem","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.955378591+07:00","Action":"start","Package":"analysis-module/internal/adapters/cache/filesystem"}
+{"Time":"2026-04-11T21:28:22.957101489+07:00","Action":"start","Package":"analysis-module/internal/adapters/extractor/go"}
+{"Time":"2026-04-11T21:28:22.957360441+07:00","Action":"run","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorParsesGoFixture"}
+{"Time":"2026-04-11T21:28:22.957634716+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorParsesGoFixture","Output":"=== RUN   TestExtractorParsesGoFixture\n"}
+{"Time":"2026-04-11T21:28:22.957845438+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorParsesGoFixture","Output":"--- PASS: TestExtractorParsesGoFixture (0.01s)\n"}
+{"Time":"2026-04-11T21:28:22.958094307+07:00","Action":"pass","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorParsesGoFixture","Elapsed":0.01}
+{"Time":"2026-04-11T21:28:22.958269988+07:00","Action":"run","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorFindsTestFunctions"}
+{"Time":"2026-04-11T21:28:22.957167245+07:00","Action":"output","Package":"analysis-module/internal/adapters/cache/filesystem","Output":"?   \tanalysis-module/internal/adapters/cache/filesystem\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.957379089+07:00","Action":"start","Package":"analysis-module/internal/adapters/extractor/grpc"}
+{"Time":"2026-04-11T21:28:22.958561875+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorFindsTestFunctions","Output":"=== RUN   TestExtractorFindsTestFunctions\n"}
+{"Time":"2026-04-11T21:28:22.959167149+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorFindsTestFunctions","Output":"--- PASS: TestExtractorFindsTestFunctions (0.01s)\n"}
+{"Time":"2026-04-11T21:28:22.959392885+07:00","Action":"pass","Package":"analysis-module/internal/adapters/extractor/go","Test":"TestExtractorFindsTestFunctions","Elapsed":0.01}
+{"Time":"2026-04-11T21:28:22.959580242+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.959796984+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Output":"coverage: 9.6% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.959972073+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/go","Output":"ok  \tanalysis-module/internal/adapters/extractor/go\t(cached)\tcoverage: 9.6% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.958814234+07:00","Action":"skip","Package":"analysis-module/internal/adapters/cache/filesystem","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:22.959054481+07:00","Action":"start","Package":"analysis-module/internal/adapters/extractor/kafka"}
+{"Time":"2026-04-11T21:28:22.959070015+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/grpc","Output":"?   \tanalysis-module/internal/adapters/extractor/grpc\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.960213473+07:00","Action":"pass","Package":"analysis-module/internal/adapters/extractor/go","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:22.960591728+07:00","Action":"start","Package":"analysis-module/internal/adapters/extractor/openapi"}
+{"Time":"2026-04-11T21:28:22.960651294+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/kafka","Output":"?   \tanalysis-module/internal/adapters/extractor/kafka\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.961270692+07:00","Action":"skip","Package":"analysis-module/internal/adapters/extractor/kafka","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.960722165+07:00","Action":"skip","Package":"analysis-module/internal/adapters/extractor/grpc","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:22.96109931+07:00","Action":"start","Package":"analysis-module/internal/adapters/extractor/proto"}
+{"Time":"2026-04-11T21:28:22.961132429+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/openapi","Output":"?   \tanalysis-module/internal/adapters/extractor/openapi\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.96190794+07:00","Action":"skip","Package":"analysis-module/internal/adapters/extractor/openapi","Elapsed":0.001}
+{"Time":"2026-04-11T21:28:22.961744512+07:00","Action":"start","Package":"analysis-module/internal/adapters/extractor/treesitter"}
+{"Time":"2026-04-11T21:28:22.962214466+07:00","Action":"run","Package":"analysis-module/internal/adapters/extractor/treesitter","Test":"TestGoParserParsesSource"}
+{"Time":"2026-04-11T21:28:22.9623625+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/treesitter","Test":"TestGoParserParsesSource","Output":"=== RUN   TestGoParserParsesSource\n"}
+{"Time":"2026-04-11T21:28:22.962596175+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/treesitter","Test":"TestGoParserParsesSource","Output":"--- PASS: TestGoParserParsesSource (0.00s)\n"}
+{"Time":"2026-04-11T21:28:22.96278786+07:00","Action":"pass","Package":"analysis-module/internal/adapters/extractor/treesitter","Test":"TestGoParserParsesSource","Elapsed":0}
+{"Time":"2026-04-11T21:28:22.961782857+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/proto","Output":"?   \tanalysis-module/internal/adapters/extractor/proto\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.962233329+07:00","Action":"start","Package":"analysis-module/internal/adapters/graphstore/memory"}
+{"Time":"2026-04-11T21:28:22.963041957+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/treesitter","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.963612339+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/treesitter","Output":"coverage: 0.5% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.963807065+07:00","Action":"output","Package":"analysis-module/internal/adapters/extractor/treesitter","Output":"ok  \tanalysis-module/internal/adapters/extractor/treesitter\t(cached)\tcoverage: 0.5% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.963992792+07:00","Action":"pass","Package":"analysis-module/internal/adapters/extractor/treesitter","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.963224567+07:00","Action":"skip","Package":"analysis-module/internal/adapters/extractor/proto","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.963425813+07:00","Action":"start","Package":"analysis-module/internal/adapters/graphstore/sqlite"}
+{"Time":"2026-04-11T21:28:22.964682488+07:00","Action":"run","Package":"analysis-module/internal/adapters/graphstore/sqlite","Test":"TestSaveAndLoadSnapshot"}
+{"Time":"2026-04-11T21:28:22.964859836+07:00","Action":"output","Package":"analysis-module/internal/adapters/graphstore/sqlite","Test":"TestSaveAndLoadSnapshot","Output":"=== RUN   TestSaveAndLoadSnapshot\n"}
+{"Time":"2026-04-11T21:28:22.965072787+07:00","Action":"output","Package":"analysis-module/internal/adapters/graphstore/sqlite","Test":"TestSaveAndLoadSnapshot","Output":"--- PASS: TestSaveAndLoadSnapshot (0.07s)\n"}
+{"Time":"2026-04-11T21:28:22.965247951+07:00","Action":"pass","Package":"analysis-module/internal/adapters/graphstore/sqlite","Test":"TestSaveAndLoadSnapshot","Elapsed":0.07}
+{"Time":"2026-04-11T21:28:22.965469598+07:00","Action":"output","Package":"analysis-module/internal/adapters/graphstore/sqlite","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.965708682+07:00","Action":"output","Package":"analysis-module/internal/adapters/graphstore/sqlite","Output":"coverage: 7.6% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.965961428+07:00","Action":"output","Package":"analysis-module/internal/adapters/graphstore/sqlite","Output":"ok  \tanalysis-module/internal/adapters/graphstore/sqlite\t(cached)\tcoverage: 7.6% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.964761992+07:00","Action":"start","Package":"analysis-module/internal/adapters/query/graph"}
+{"Time":"2026-04-11T21:28:22.966320909+07:00","Action":"pass","Package":"analysis-module/internal/adapters/graphstore/sqlite","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:22.966650733+07:00","Action":"start","Package":"analysis-module/internal/adapters/repomap/native"}
+{"Time":"2026-04-11T21:28:22.966690864+07:00","Action":"output","Package":"analysis-module/internal/adapters/query/graph","Output":"?   \tanalysis-module/internal/adapters/query/graph\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.967247226+07:00","Action":"skip","Package":"analysis-module/internal/adapters/query/graph","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.967049948+07:00","Action":"start","Package":"analysis-module/internal/adapters/scanner/detectors"}
+{"Time":"2026-04-11T21:28:22.967662715+07:00","Action":"run","Package":"analysis-module/internal/adapters/scanner/detectors","Test":"TestTechStackDetectorDetectsGoAndTests"}
+{"Time":"2026-04-11T21:28:22.967894039+07:00","Action":"output","Package":"analysis-module/internal/adapters/scanner/detectors","Test":"TestTechStackDetectorDetectsGoAndTests","Output":"=== RUN   TestTechStackDetectorDetectsGoAndTests\n"}
+{"Time":"2026-04-11T21:28:22.968135763+07:00","Action":"output","Package":"analysis-module/internal/adapters/scanner/detectors","Test":"TestTechStackDetectorDetectsGoAndTests","Output":"--- PASS: TestTechStackDetectorDetectsGoAndTests (0.03s)\n"}
+{"Time":"2026-04-11T21:28:22.967078095+07:00","Action":"output","Package":"analysis-module/internal/adapters/repomap/native","Output":"?   \tanalysis-module/internal/adapters/repomap/native\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.967681173+07:00","Action":"start","Package":"analysis-module/internal/adapters/scanner/filesystem"}
+{"Time":"2026-04-11T21:28:22.968411502+07:00","Action":"pass","Package":"analysis-module/internal/adapters/scanner/detectors","Test":"TestTechStackDetectorDetectsGoAndTests","Elapsed":0.03}
+{"Time":"2026-04-11T21:28:22.969160083+07:00","Action":"output","Package":"analysis-module/internal/adapters/scanner/detectors","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.969480197+07:00","Action":"output","Package":"analysis-module/internal/adapters/scanner/detectors","Output":"coverage: 5.3% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.96976413+07:00","Action":"output","Package":"analysis-module/internal/adapters/scanner/detectors","Output":"ok  \tanalysis-module/internal/adapters/scanner/detectors\t(cached)\tcoverage: 5.3% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.968619081+07:00","Action":"skip","Package":"analysis-module/internal/adapters/repomap/native","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.968843927+07:00","Action":"start","Package":"analysis-module/internal/app/bootstrap"}
+{"Time":"2026-04-11T21:28:22.970016895+07:00","Action":"pass","Package":"analysis-module/internal/adapters/scanner/detectors","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:22.970596522+07:00","Action":"start","Package":"analysis-module/internal/app/config"}
+{"Time":"2026-04-11T21:28:22.971020075+07:00","Action":"start","Package":"analysis-module/internal/app/errors"}
+{"Time":"2026-04-11T21:28:22.971340268+07:00","Action":"start","Package":"analysis-module/internal/app/lifecycle"}
+{"Time":"2026-04-11T21:28:22.971701455+07:00","Action":"start","Package":"analysis-module/internal/app/logging"}
+{"Time":"2026-04-11T21:28:22.97172573+07:00","Action":"output","Package":"analysis-module/internal/app/lifecycle","Output":"?   \tanalysis-module/internal/app/lifecycle\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.972263746+07:00","Action":"skip","Package":"analysis-module/internal/app/lifecycle","Elapsed":0.001}
+{"Time":"2026-04-11T21:28:22.972094302+07:00","Action":"start","Package":"analysis-module/internal/domain/analysis"}
+{"Time":"2026-04-11T21:28:22.973004869+07:00","Action":"start","Package":"analysis-module/internal/domain/artifact"}
+{"Time":"2026-04-11T21:28:22.973080081+07:00","Action":"output","Package":"analysis-module/internal/domain/analysis","Output":"?   \tanalysis-module/internal/domain/analysis\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.97345034+07:00","Action":"skip","Package":"analysis-module/internal/domain/analysis","Elapsed":0.001}
+{"Time":"2026-04-11T21:28:22.973179964+07:00","Action":"start","Package":"analysis-module/internal/domain/graph"}
+{"Time":"2026-04-11T21:28:22.973235512+07:00","Action":"output","Package":"analysis-module/internal/domain/artifact","Output":"?   \tanalysis-module/internal/domain/artifact\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.974516219+07:00","Action":"skip","Package":"analysis-module/internal/domain/artifact","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.974166614+07:00","Action":"output","Package":"analysis-module/internal/domain/graph","Output":"?   \tanalysis-module/internal/domain/graph\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.975117151+07:00","Action":"skip","Package":"analysis-module/internal/domain/graph","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.974174072+07:00","Action":"start","Package":"analysis-module/internal/domain/packet"}
+{"Time":"2026-04-11T21:28:22.975909674+07:00","Action":"output","Package":"analysis-module/internal/domain/packet","Output":"?   \tanalysis-module/internal/domain/packet\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.976291164+07:00","Action":"skip","Package":"analysis-module/internal/domain/packet","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.9759341+07:00","Action":"start","Package":"analysis-module/internal/domain/quality"}
+{"Time":"2026-04-11T21:28:22.976987917+07:00","Action":"output","Package":"analysis-module/internal/domain/quality","Output":"?   \tanalysis-module/internal/domain/quality\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.977532466+07:00","Action":"skip","Package":"analysis-module/internal/domain/quality","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.977012614+07:00","Action":"start","Package":"analysis-module/internal/domain/repomap"}
+{"Time":"2026-04-11T21:28:22.978384019+07:00","Action":"output","Package":"analysis-module/internal/domain/repomap","Output":"?   \tanalysis-module/internal/domain/repomap\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.978720943+07:00","Action":"skip","Package":"analysis-module/internal/domain/repomap","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.978415718+07:00","Action":"start","Package":"analysis-module/internal/domain/repository"}
+{"Time":"2026-04-11T21:28:22.979334196+07:00","Action":"start","Package":"analysis-module/internal/domain/service"}
+{"Time":"2026-04-11T21:28:22.979384921+07:00","Action":"output","Package":"analysis-module/internal/domain/repository","Output":"?   \tanalysis-module/internal/domain/repository\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.979944723+07:00","Action":"skip","Package":"analysis-module/internal/domain/repository","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.979631051+07:00","Action":"start","Package":"analysis-module/internal/domain/symbol"}
+{"Time":"2026-04-11T21:28:22.979693312+07:00","Action":"output","Package":"analysis-module/internal/domain/service","Output":"?   \tanalysis-module/internal/domain/service\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.980859244+07:00","Action":"skip","Package":"analysis-module/internal/domain/service","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.980546708+07:00","Action":"start","Package":"analysis-module/internal/domain/workspace"}
+{"Time":"2026-04-11T21:28:22.980643381+07:00","Action":"output","Package":"analysis-module/internal/domain/symbol","Output":"?   \tanalysis-module/internal/domain/symbol\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.98197221+07:00","Action":"skip","Package":"analysis-module/internal/domain/symbol","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.981660753+07:00","Action":"output","Package":"analysis-module/internal/domain/workspace","Output":"?   \tanalysis-module/internal/domain/workspace\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.982689076+07:00","Action":"skip","Package":"analysis-module/internal/domain/workspace","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.981678141+07:00","Action":"start","Package":"analysis-module/internal/ports/api"}
+{"Time":"2026-04-11T21:28:22.983561519+07:00","Action":"start","Package":"analysis-module/internal/ports/artifactstore"}
+{"Time":"2026-04-11T21:28:22.983621493+07:00","Action":"output","Package":"analysis-module/internal/ports/api","Output":"?   \tanalysis-module/internal/ports/api\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.984125788+07:00","Action":"skip","Package":"analysis-module/internal/ports/api","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.983947614+07:00","Action":"start","Package":"analysis-module/internal/ports/cache"}
+{"Time":"2026-04-11T21:28:22.983968917+07:00","Action":"output","Package":"analysis-module/internal/ports/artifactstore","Output":"?   \tanalysis-module/internal/ports/artifactstore\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.985160522+07:00","Action":"skip","Package":"analysis-module/internal/ports/artifactstore","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.984966401+07:00","Action":"start","Package":"analysis-module/internal/ports/extractor"}
+{"Time":"2026-04-11T21:28:22.984976038+07:00","Action":"output","Package":"analysis-module/internal/ports/cache","Output":"?   \tanalysis-module/internal/ports/cache\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.986279121+07:00","Action":"skip","Package":"analysis-module/internal/ports/cache","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.985979761+07:00","Action":"start","Package":"analysis-module/internal/ports/graphstore"}
+{"Time":"2026-04-11T21:28:22.986146195+07:00","Action":"output","Package":"analysis-module/internal/ports/extractor","Output":"?   \tanalysis-module/internal/ports/extractor\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.987309134+07:00","Action":"skip","Package":"analysis-module/internal/ports/extractor","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.986941361+07:00","Action":"start","Package":"analysis-module/internal/ports/query"}
+{"Time":"2026-04-11T21:28:22.987046985+07:00","Action":"output","Package":"analysis-module/internal/ports/graphstore","Output":"?   \tanalysis-module/internal/ports/graphstore\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.988412732+07:00","Action":"skip","Package":"analysis-module/internal/ports/graphstore","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.988138093+07:00","Action":"start","Package":"analysis-module/internal/ports/repomap"}
+{"Time":"2026-04-11T21:28:22.988236625+07:00","Action":"output","Package":"analysis-module/internal/ports/query","Output":"?   \tanalysis-module/internal/ports/query\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.989217476+07:00","Action":"skip","Package":"analysis-module/internal/ports/query","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.988994232+07:00","Action":"start","Package":"analysis-module/internal/ports/scanner"}
+{"Time":"2026-04-11T21:28:22.989008627+07:00","Action":"output","Package":"analysis-module/internal/ports/repomap","Output":"?   \tanalysis-module/internal/ports/repomap\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.989920076+07:00","Action":"skip","Package":"analysis-module/internal/ports/repomap","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.989766252+07:00","Action":"start","Package":"analysis-module/internal/services/graph_build"}
+{"Time":"2026-04-11T21:28:22.990524674+07:00","Action":"run","Package":"analysis-module/internal/services/graph_build","Test":"TestBuildCreatesCallAndTestEdges"}
+{"Time":"2026-04-11T21:28:22.990839791+07:00","Action":"output","Package":"analysis-module/internal/services/graph_build","Test":"TestBuildCreatesCallAndTestEdges","Output":"=== RUN   TestBuildCreatesCallAndTestEdges\n"}
+{"Time":"2026-04-11T21:28:22.989826856+07:00","Action":"output","Package":"analysis-module/internal/ports/scanner","Output":"?   \tanalysis-module/internal/ports/scanner\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:22.99057356+07:00","Action":"start","Package":"analysis-module/internal/services/graph_query"}
+{"Time":"2026-04-11T21:28:22.991232767+07:00","Action":"output","Package":"analysis-module/internal/services/graph_build","Test":"TestBuildCreatesCallAndTestEdges","Output":"--- PASS: TestBuildCreatesCallAndTestEdges (0.00s)\n"}
+{"Time":"2026-04-11T21:28:22.991639282+07:00","Action":"pass","Package":"analysis-module/internal/services/graph_build","Test":"TestBuildCreatesCallAndTestEdges","Elapsed":0}
+{"Time":"2026-04-11T21:28:22.991801493+07:00","Action":"output","Package":"analysis-module/internal/services/graph_build","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.992014059+07:00","Action":"output","Package":"analysis-module/internal/services/graph_build","Output":"coverage: 9.9% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.992293592+07:00","Action":"output","Package":"analysis-module/internal/services/graph_build","Output":"ok  \tanalysis-module/internal/services/graph_build\t(cached)\tcoverage: 9.9% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.992590369+07:00","Action":"pass","Package":"analysis-module/internal/services/graph_build","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:22.991337026+07:00","Action":"skip","Package":"analysis-module/internal/ports/scanner","Elapsed":0.002}
+{"Time":"2026-04-11T21:28:22.9915623+07:00","Action":"start","Package":"analysis-module/internal/services/packet_build"}
+{"Time":"2026-04-11T21:28:22.993382798+07:00","Action":"start","Package":"analysis-module/internal/services/quality_report"}
+{"Time":"2026-04-11T21:28:22.993678516+07:00","Action":"start","Package":"analysis-module/internal/services/repo_inventory"}
+{"Time":"2026-04-11T21:28:22.993964201+07:00","Action":"run","Package":"analysis-module/internal/services/repo_inventory","Test":"TestBuildAssignsRolesAndPlans"}
+{"Time":"2026-04-11T21:28:22.994277011+07:00","Action":"output","Package":"analysis-module/internal/services/repo_inventory","Test":"TestBuildAssignsRolesAndPlans","Output":"=== RUN   TestBuildAssignsRolesAndPlans\n"}
+{"Time":"2026-04-11T21:28:22.994547268+07:00","Action":"output","Package":"analysis-module/internal/services/repo_inventory","Test":"TestBuildAssignsRolesAndPlans","Output":"--- PASS: TestBuildAssignsRolesAndPlans (0.00s)\n"}
+{"Time":"2026-04-11T21:28:22.994868766+07:00","Action":"pass","Package":"analysis-module/internal/services/repo_inventory","Test":"TestBuildAssignsRolesAndPlans","Elapsed":0}
+{"Time":"2026-04-11T21:28:22.995175359+07:00","Action":"output","Package":"analysis-module/internal/services/repo_inventory","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:22.993992038+07:00","Action":"start","Package":"analysis-module/internal/services/repomap_build"}
+{"Time":"2026-04-11T21:28:22.995690643+07:00","Action":"output","Package":"analysis-module/internal/services/repo_inventory","Output":"coverage: 1.9% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.996308508+07:00","Action":"output","Package":"analysis-module/internal/services/repo_inventory","Output":"ok  \tanalysis-module/internal/services/repo_inventory\t(cached)\tcoverage: 1.9% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:22.99718904+07:00","Action":"pass","Package":"analysis-module/internal/services/repo_inventory","Elapsed":0.004}
+{"Time":"2026-04-11T21:28:22.996089598+07:00","Action":"start","Package":"analysis-module/internal/services/snapshot_manage"}
+{"Time":"2026-04-11T21:28:22.998139645+07:00","Action":"start","Package":"analysis-module/internal/services/symbol_index"}
+{"Time":"2026-04-11T21:28:23.037866525+07:00","Action":"output","Package":"analysis-module/cmd/analysis-cli","Output":"\tanalysis-module/cmd/analysis-cli\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.038524381+07:00","Action":"output","Package":"analysis-module/internal/adapters/api/http","Output":"\tanalysis-module/internal/adapters/api/http\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.038609073+07:00","Action":"output","Package":"analysis-module/cmd/analysisd","Output":"\tanalysis-module/cmd/analysisd\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.054014085+07:00","Action":"output","Package":"analysis-module/internal/adapters/scanner/filesystem","Output":"\tanalysis-module/internal/adapters/scanner/filesystem\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.064224315+07:00","Action":"output","Package":"analysis-module/internal/app/bootstrap","Output":"\tanalysis-module/internal/app/bootstrap\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.074013265+07:00","Action":"output","Package":"analysis-module/internal/adapters/graphstore/memory","Output":"\tanalysis-module/internal/adapters/graphstore/memory\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.078652385+07:00","Action":"output","Package":"analysis-module/internal/services/symbol_index","Output":"\tanalysis-module/internal/services/symbol_index\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.078937075+07:00","Action":"output","Package":"analysis-module/internal/app/logging","Output":"\tanalysis-module/internal/app/logging\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.084712267+07:00","Action":"output","Package":"analysis-module/internal/services/packet_build","Output":"\tanalysis-module/internal/services/packet_build\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.085508071+07:00","Action":"output","Package":"analysis-module/internal/services/snapshot_manage","Output":"\tanalysis-module/internal/services/snapshot_manage\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.087392699+07:00","Action":"output","Package":"analysis-module/internal/app/errors","Output":"\tanalysis-module/internal/app/errors\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.091703521+07:00","Action":"output","Package":"analysis-module/internal/app/config","Output":"\tanalysis-module/internal/app/config\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.091717048+07:00","Action":"output","Package":"analysis-module/internal/services/graph_query","Output":"\tanalysis-module/internal/services/graph_query\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.099393067+07:00","Action":"output","Package":"analysis-module/internal/services/quality_report","Output":"\tanalysis-module/internal/services/quality_report\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.099532746+07:00","Action":"output","Package":"analysis-module/internal/services/repomap_build","Output":"\tanalysis-module/internal/services/repomap_build\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.12057721+07:00","Action":"start","Package":"analysis-module/internal/services/workspace_scan"}
+{"Time":"2026-04-11T21:28:23.12078815+07:00","Action":"run","Package":"analysis-module/internal/services/workspace_scan","Test":"TestScanFindsMultipleRepositories"}
+{"Time":"2026-04-11T21:28:23.121031102+07:00","Action":"output","Package":"analysis-module/internal/services/workspace_scan","Test":"TestScanFindsMultipleRepositories","Output":"=== RUN   TestScanFindsMultipleRepositories\n"}
+{"Time":"2026-04-11T21:28:23.121387121+07:00","Action":"output","Package":"analysis-module/internal/services/workspace_scan","Test":"TestScanFindsMultipleRepositories","Output":"--- PASS: TestScanFindsMultipleRepositories (0.12s)\n"}
+{"Time":"2026-04-11T21:28:23.121622557+07:00","Action":"pass","Package":"analysis-module/internal/services/workspace_scan","Test":"TestScanFindsMultipleRepositories","Elapsed":0.12}
+{"Time":"2026-04-11T21:28:23.121828429+07:00","Action":"output","Package":"analysis-module/internal/services/workspace_scan","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:23.120802577+07:00","Action":"start","Package":"analysis-module/internal/tests/fixtures"}
+{"Time":"2026-04-11T21:28:23.122045953+07:00","Action":"output","Package":"analysis-module/internal/services/workspace_scan","Output":"coverage: 15.8% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:23.122744004+07:00","Action":"output","Package":"analysis-module/internal/services/workspace_scan","Output":"ok  \tanalysis-module/internal/services/workspace_scan\t(cached)\tcoverage: 15.8% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:23.123089489+07:00","Action":"pass","Package":"analysis-module/internal/services/workspace_scan","Elapsed":0.003}
+{"Time":"2026-04-11T21:28:23.146088436+07:00","Action":"pass","Package":"analysis-module/internal/adapters/api/http","Elapsed":0.192}
+{"Time":"2026-04-11T21:28:23.146834275+07:00","Action":"pass","Package":"analysis-module/cmd/analysis-cli","Elapsed":0.194}
+{"Time":"2026-04-11T21:28:23.147153495+07:00","Action":"pass","Package":"analysis-module/internal/adapters/scanner/filesystem","Elapsed":0.179}
+{"Time":"2026-04-11T21:28:23.154727364+07:00","Action":"pass","Package":"analysis-module/cmd/analysisd","Elapsed":0.201}
+{"Time":"2026-04-11T21:28:23.168366059+07:00","Action":"pass","Package":"analysis-module/internal/adapters/graphstore/memory","Elapsed":0.206}
+{"Time":"2026-04-11T21:28:23.170686581+07:00","Action":"pass","Package":"analysis-module/internal/app/bootstrap","Elapsed":0.202}
+{"Time":"2026-04-11T21:28:23.171235042+07:00","Action":"pass","Package":"analysis-module/internal/app/logging","Elapsed":0.2}
+{"Time":"2026-04-11T21:28:23.171924154+07:00","Action":"pass","Package":"analysis-module/internal/services/packet_build","Elapsed":0.18}
+{"Time":"2026-04-11T21:28:23.174030191+07:00","Action":"pass","Package":"analysis-module/internal/services/symbol_index","Elapsed":0.176}
+{"Time":"2026-04-11T21:28:23.174989626+07:00","Action":"pass","Package":"analysis-module/internal/services/snapshot_manage","Elapsed":0.179}
+{"Time":"2026-04-11T21:28:23.183745275+07:00","Action":"pass","Package":"analysis-module/internal/services/graph_query","Elapsed":0.193}
+{"Time":"2026-04-11T21:28:23.190002319+07:00","Action":"pass","Package":"analysis-module/internal/app/errors","Elapsed":0.219}
+{"Time":"2026-04-11T21:28:23.19558742+07:00","Action":"pass","Package":"analysis-module/internal/services/repomap_build","Elapsed":0.202}
+{"Time":"2026-04-11T21:28:23.200250545+07:00","Action":"pass","Package":"analysis-module/internal/app/config","Elapsed":0.23}
+{"Time":"2026-04-11T21:28:23.215687605+07:00","Action":"pass","Package":"analysis-module/internal/services/quality_report","Elapsed":0.222}
+{"Time":"2026-04-11T21:28:23.218472947+07:00","Action":"output","Package":"analysis-module/internal/tests/fixtures","Output":"\tanalysis-module/internal/tests/fixtures\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.281957518+07:00","Action":"pass","Package":"analysis-module/internal/tests/fixtures","Elapsed":0.161}
+{"Time":"2026-04-11T21:28:23.517932856+07:00","Action":"start","Package":"analysis-module/internal/tests/integration"}
+{"Time":"2026-04-11T21:28:23.518034236+07:00","Action":"run","Package":"analysis-module/internal/tests/integration","Test":"TestHTTPEndpoints"}
+{"Time":"2026-04-11T21:28:23.518110539+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Test":"TestHTTPEndpoints","Output":"=== RUN   TestHTTPEndpoints\n"}
+{"Time":"2026-04-11T21:28:23.518187523+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Test":"TestHTTPEndpoints","Output":"--- PASS: TestHTTPEndpoints (0.15s)\n"}
+{"Time":"2026-04-11T21:28:23.518258219+07:00","Action":"pass","Package":"analysis-module/internal/tests/integration","Test":"TestHTTPEndpoints","Elapsed":0.15}
+{"Time":"2026-04-11T21:28:23.518329231+07:00","Action":"run","Package":"analysis-module/internal/tests/integration","Test":"TestEndToEndWorkflows"}
+{"Time":"2026-04-11T21:28:23.518394462+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Test":"TestEndToEndWorkflows","Output":"=== RUN   TestEndToEndWorkflows\n"}
+{"Time":"2026-04-11T21:28:23.518461969+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Test":"TestEndToEndWorkflows","Output":"--- PASS: TestEndToEndWorkflows (0.09s)\n"}
+{"Time":"2026-04-11T21:28:23.518557133+07:00","Action":"pass","Package":"analysis-module/internal/tests/integration","Test":"TestEndToEndWorkflows","Elapsed":0.09}
+{"Time":"2026-04-11T21:28:23.518898465+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Output":"PASS\n"}
+{"Time":"2026-04-11T21:28:23.518994747+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Output":"coverage: 67.1% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:23.519094308+07:00","Action":"output","Package":"analysis-module/internal/tests/integration","Output":"ok  \tanalysis-module/internal/tests/integration\t(cached)\tcoverage: 67.1% of statements in ./...\n"}
+{"Time":"2026-04-11T21:28:23.519398767+07:00","Action":"pass","Package":"analysis-module/internal/tests/integration","Elapsed":0.001}
+{"Time":"2026-04-11T21:28:23.518116101+07:00","Action":"start","Package":"analysis-module/internal/workflows/analyze_workspace"}
+{"Time":"2026-04-11T21:28:23.520131719+07:00","Action":"start","Package":"analysis-module/internal/workflows/blast_radius"}
+{"Time":"2026-04-11T21:28:23.520247822+07:00","Action":"start","Package":"analysis-module/internal/workflows/build_packet"}
+{"Time":"2026-04-11T21:28:23.520350048+07:00","Action":"start","Package":"analysis-module/internal/workflows/build_repomap"}
+{"Time":"2026-04-11T21:28:23.520448647+07:00","Action":"start","Package":"analysis-module/internal/workflows/build_snapshot"}
+{"Time":"2026-04-11T21:28:23.520558161+07:00","Action":"start","Package":"analysis-module/internal/workflows/impacted_tests"}
+{"Time":"2026-04-11T21:28:23.520669447+07:00","Action":"start","Package":"analysis-module/pkg/contracts"}
+{"Time":"2026-04-11T21:28:23.521014691+07:00","Action":"start","Package":"analysis-module/pkg/ids"}
+{"Time":"2026-04-11T21:28:23.521215109+07:00","Action":"output","Package":"analysis-module/pkg/contracts","Output":"?   \tanalysis-module/pkg/contracts\t[no test files]\n"}
+{"Time":"2026-04-11T21:28:23.521700963+07:00","Action":"skip","Package":"analysis-module/pkg/contracts","Elapsed":0.001}
+{"Time":"2026-04-11T21:28:23.577464765+07:00","Action":"output","Package":"analysis-module/internal/workflows/analyze_workspace","Output":"\tanalysis-module/internal/workflows/analyze_workspace\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.579415478+07:00","Action":"output","Package":"analysis-module/internal/workflows/build_repomap","Output":"\tanalysis-module/internal/workflows/build_repomap\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.579695233+07:00","Action":"output","Package":"analysis-module/internal/workflows/build_packet","Output":"\tanalysis-module/internal/workflows/build_packet\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.582486595+07:00","Action":"output","Package":"analysis-module/pkg/ids","Output":"\tanalysis-module/pkg/ids\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.5839344+07:00","Action":"output","Package":"analysis-module/internal/workflows/blast_radius","Output":"\tanalysis-module/internal/workflows/blast_radius\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.586538305+07:00","Action":"output","Package":"analysis-module/internal/workflows/build_snapshot","Output":"\tanalysis-module/internal/workflows/build_snapshot\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.587093112+07:00","Action":"output","Package":"analysis-module/internal/workflows/impacted_tests","Output":"\tanalysis-module/internal/workflows/impacted_tests\t\tcoverage: 0.0% of statements\n"}
+{"Time":"2026-04-11T21:28:23.644735507+07:00","Action":"pass","Package":"analysis-module/internal/workflows/build_packet","Elapsed":0.124}
+{"Time":"2026-04-11T21:28:23.645257932+07:00","Action":"pass","Package":"analysis-module/internal/workflows/build_repomap","Elapsed":0.125}
+{"Time":"2026-04-11T21:28:23.64630394+07:00","Action":"pass","Package":"analysis-module/internal/workflows/impacted_tests","Elapsed":0.126}
+{"Time":"2026-04-11T21:28:23.646566971+07:00","Action":"pass","Package":"analysis-module/internal/workflows/blast_radius","Elapsed":0.126}
+{"Time":"2026-04-11T21:28:23.647993041+07:00","Action":"pass","Package":"analysis-module/internal/workflows/analyze_workspace","Elapsed":0.13}
+{"Time":"2026-04-11T21:28:23.648385848+07:00","Action":"pass","Package":"analysis-module/pkg/ids","Elapsed":0.127}
+{"Time":"2026-04-11T21:28:23.654557132+07:00","Action":"pass","Package":"analysis-module/internal/workflows/build_snapshot","Elapsed":0.134}

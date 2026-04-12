@@ -1,0 +1,77 @@
+{
+  "bundle_version": "v1",
+  "edge_kind_counts": {
+    "BELONGS_TO_SERVICE": 1,
+    "CONTAINS": 10,
+    "DEFINES": 2
+  },
+  "node_kind_counts": {
+    "FILE": 2,
+    "PACKAGE": 2,
+    "REPOSITORY": 3,
+    "SERVICE": 1,
+    "SYMBOL": 2,
+    "WORKSPACE": 1
+  },
+  "quality_gap_categories": [
+    "language_support"
+  ],
+  "repository_summaries": [
+    {
+      "name": "service-a",
+      "role": "service",
+      "languages": [
+        "go"
+      ],
+      "go_files": 1,
+      "config_files": 0,
+      "service_names": [
+        "service-a"
+      ]
+    },
+    {
+      "name": "service-b",
+      "role": "unknown",
+      "languages": [
+        "json"
+      ],
+      "go_files": 0,
+      "config_files": 1,
+      "service_names": []
+    },
+    {
+      "name": "shared-lib",
+      "role": "shared_lib",
+      "languages": [
+        "go"
+      ],
+      "go_files": 1,
+      "config_files": 0,
+      "service_names": []
+    }
+  ],
+  "searchable_symbols": [
+    "main.main",
+    "sharedlib.Value"
+  ],
+  "service_summaries": [
+    {
+      "name": "service-a",
+      "repository_id": "repo_5fb1f88c2357",
+      "entrypoints": [
+        "main.go"
+      ],
+      "boundaries": []
+    }
+  ],
+  "snapshot_metadata": {
+    "repository_count": 3,
+    "file_count": 2,
+    "symbol_count": 2,
+    "edge_count": 13
+  },
+  "workspace_languages": [
+    "go",
+    "json"
+  ]
+}

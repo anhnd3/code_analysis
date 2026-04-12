@@ -1,0 +1,62 @@
+{
+  "bundle_version": "v1",
+  "edge_kind_counts": {
+    "BELONGS_TO_SERVICE": 1,
+    "CONTAINS": 5,
+    "DEFINES": 1
+  },
+  "node_kind_counts": {
+    "FILE": 1,
+    "PACKAGE": 1,
+    "REPOSITORY": 1,
+    "SERVICE": 1,
+    "SYMBOL": 1,
+    "WORKSPACE": 1
+  },
+  "quality_gap_categories": [
+    "boundary_stitching",
+    "language_support"
+  ],
+  "repository_summaries": [
+    {
+      "name": "boundary_hints",
+      "role": "service",
+      "languages": [
+        "go",
+        "yaml"
+      ],
+      "go_files": 1,
+      "config_files": 3,
+      "service_names": [
+        "boundary_hints"
+      ]
+    }
+  ],
+  "searchable_symbols": [
+    "main.main"
+  ],
+  "service_summaries": [
+    {
+      "name": "boundary_hints",
+      "repository_id": "repo_376e8911dc96",
+      "entrypoints": [
+        "cmd/app/main.go"
+      ],
+      "boundaries": [
+        "grpc",
+        "http",
+        "kafka"
+      ]
+    }
+  ],
+  "snapshot_metadata": {
+    "repository_count": 1,
+    "file_count": 1,
+    "symbol_count": 1,
+    "edge_count": 7
+  },
+  "workspace_languages": [
+    "go",
+    "yaml"
+  ]
+}

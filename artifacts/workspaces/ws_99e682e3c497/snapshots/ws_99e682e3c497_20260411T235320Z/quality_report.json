@@ -1,0 +1,27 @@
+{
+  "snapshot_id": "ws_99e682e3c497_20260411T235320Z",
+  "metrics": [
+    {
+      "name": "repositories",
+      "value": 3,
+      "total": 3
+    },
+    {
+      "name": "go_files_parsed",
+      "value": 0,
+      "total": 0
+    },
+    {
+      "name": "symbols_indexed",
+      "value": 0,
+      "total": 0
+    }
+  ],
+  "gaps": [
+    {
+      "category": "language_support",
+      "message": "non-Go repositories were discovered but only Go extraction is implemented",
+      "count": 6
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+[
+  {
+    "artifact_type": "build_snapshot_result",
+    "relative_path": "build_snapshot_result.json",
+    "content_type": "application/json",
+    "preview_mode": "listed_only",
+    "has_embedded_json": false,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "graph_edges",
+    "relative_path": "graph_edges.jsonl",
+    "content_type": "application/x-ndjson",
+    "preview_mode": "listed_only",
+    "has_embedded_json": false,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "graph_nodes",
+    "relative_path": "graph_nodes.jsonl",
+    "content_type": "application/x-ndjson",
+    "preview_mode": "listed_only",
+    "has_embedded_json": false,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "quality_report",
+    "relative_path": "quality_report.json",
+    "content_type": "application/json",
+    "preview_mode": "embedded_json",
+    "has_embedded_json": true,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "repository_manifests",
+    "relative_path": "repository_manifests.json",
+    "content_type": "application/json",
+    "preview_mode": "embedded_json",
+    "has_embedded_json": true,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "review_bundle",
+    "relative_path": "review_bundle.json",
+    "content_type": "application/json",
+    "preview_mode": "listed_only",
+    "has_embedded_json": false,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "scan_warnings",
+    "relative_path": "scan_warnings.json",
+    "content_type": "application/json",
+    "preview_mode": "embedded_json",
+    "has_embedded_json": true,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "service_manifests",
+    "relative_path": "service_manifests.json",
+    "content_type": "application/json",
+    "preview_mode": "embedded_json",
+    "has_embedded_json": true,
+    "has_embedded_text": false
+  },
+  {
+    "artifact_type": "workspace_manifest",
+    "relative_path": "workspace_manifest.json",
+    "content_type": "application/json",
+    "preview_mode": "embedded_json",
+    "has_embedded_json": true,
+    "has_embedded_text": false
+  }
+]

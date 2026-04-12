@@ -1,0 +1,459 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://analysis-module.local/schemas/review_bundle.schema.json",
+  "title": "ReviewBundle",
+  "type": "object",
+  "required": [
+    "workspace_id",
+    "snapshot_id",
+    "bundle_version",
+    "generated_at",
+    "workspace_manifest",
+    "repository_manifests",
+    "service_manifests",
+    "snapshot",
+    "quality_report",
+    "graph",
+    "files"
+  ],
+  "properties": {
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bundle_version": {
+      "const": "v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workspace_manifest": {
+      "$ref": "#/$defs/workspaceManifest"
+    },
+    "repository_manifests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/repositoryManifest"
+      }
+    },
+    "service_manifests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/serviceManifest"
+      }
+    },
+    "snapshot": {
+      "$ref": "#/$defs/reviewSnapshot"
+    },
+    "quality_report": {
+      "$ref": "#/$defs/qualityReport"
+    },
+    "graph": {
+      "$ref": "#/$defs/reviewGraph"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reviewFile"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "workspaceManifest": {
+      "type": "object",
+      "required": [
+        "id",
+        "root_path",
+        "repository_ids",
+        "languages",
+        "warnings",
+        "scanned_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "root_path": {
+          "type": "string"
+        },
+        "repository_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scanned_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "repositoryManifest": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "root_path",
+        "role",
+        "tech_stack",
+        "go_files",
+        "config_files",
+        "boundary_hints",
+        "candidate_services"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "root_path": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "tech_stack": {
+          "type": "object"
+        },
+        "go_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "boundary_hints": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "candidate_services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/serviceManifest"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "serviceManifest": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "repository_id",
+        "root_path",
+        "entrypoints",
+        "boundaries"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "repository_id": {
+          "type": "string"
+        },
+        "root_path": {
+          "type": "string"
+        },
+        "entrypoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "reviewSnapshot": {
+      "type": "object",
+      "required": [
+        "id",
+        "workspace_id",
+        "created_at",
+        "metadata"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "workspace_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "metadata": {
+          "type": "object",
+          "required": [
+            "repository_count",
+            "file_count",
+            "symbol_count",
+            "edge_count"
+          ],
+          "properties": {
+            "repository_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "file_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "symbol_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "edge_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "qualityReport": {
+      "type": "object",
+      "required": [
+        "snapshot_id",
+        "metrics",
+        "gaps"
+      ],
+      "properties": {
+        "snapshot_id": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "reviewGraph": {
+      "type": "object",
+      "required": [
+        "nodes",
+        "edges",
+        "node_kind_counts",
+        "edge_kind_counts",
+        "total_node_count",
+        "total_edge_count"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/graphNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/graphEdge"
+          }
+        },
+        "node_kind_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "edge_kind_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "total_node_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_edge_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "graphNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "canonical_name",
+        "snapshot_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "canonical_name": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "repository_id": {
+          "type": "string"
+        },
+        "file_path": {
+          "type": "string"
+        },
+        "location": {
+          "type": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "snapshot_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "graphEdge": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "from",
+        "to",
+        "evidence",
+        "confidence",
+        "snapshot_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "object"
+        },
+        "confidence": {
+          "type": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "snapshot_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "reviewFile": {
+      "type": "object",
+      "required": [
+        "artifact_type",
+        "relative_path",
+        "content_type",
+        "size_bytes",
+        "preview_mode"
+      ],
+      "properties": {
+        "artifact_type": {
+          "type": "string"
+        },
+        "relative_path": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "preview_mode": {
+          "enum": [
+            "embedded_json",
+            "embedded_text",
+            "listed_only"
+          ]
+        },
+        "embedded_json": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "embedded_text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

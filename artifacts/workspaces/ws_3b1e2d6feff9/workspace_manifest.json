@@ -1,0 +1,15 @@
+{
+  "id": "ws_3b1e2d6feff9",
+  "root_path": "testdata/workspaces/mixed_language_app",
+  "repository_ids": [
+    "repo_3b1e2d6feff9"
+  ],
+  "languages": [
+    "javascript",
+    "json",
+    "python",
+    "typescript"
+  ],
+  "warnings": [],
+  "scanned_at": "2026-04-12T00:33:21.142173019Z"
+}
