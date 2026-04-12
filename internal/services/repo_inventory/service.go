@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"analysis-module/internal/domain/analysis"
 	"analysis-module/internal/domain/repository"
 	scannerport "analysis-module/internal/ports/scanner"
 )
@@ -17,8 +18,14 @@ func New() Service {
 func (Service) Build(workspaceID string, scan scannerport.ScanWorkspaceResult) repository.Inventory {
 	repos := make([]repository.Manifest, 0, len(scan.Repositories))
 	plans := []repository.ExtractionPlan{}
+	issueCounts := analysis.IssueCounts{}
+	ignoreSignature := ""
 	for _, repo := range scan.Repositories {
 		repo.Role = classifyRole(repo)
+		issueCounts.Add(repo.IssueCounts)
+		if ignoreSignature == "" {
+			ignoreSignature = repo.IgnoreSignature
+		}
 		repos = append(repos, repo)
 		for _, lang := range repo.TechStack.Languages {
 			if lang == repository.LanguageGo && len(repo.GoFiles) > 0 {
@@ -53,9 +60,11 @@ func (Service) Build(workspaceID string, scan scannerport.ScanWorkspaceResult) r
 	}
 	sort.Slice(repos, func(i, j int) bool { return repos[i].RootPath < repos[j].RootPath })
 	return repository.Inventory{
-		WorkspaceID:  workspaceID,
-		Repositories: repos,
-		Plans:        plans,
+		WorkspaceID:     workspaceID,
+		IgnoreSignature: ignoreSignature,
+		IssueCounts:     issueCounts,
+		Repositories:    repos,
+		Plans:           plans,
 	}
 }
 

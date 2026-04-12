@@ -1,12 +1,14 @@
 package graph_build
 
 import (
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"analysis-module/internal/app/progress"
+	"analysis-module/internal/domain/analysis"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
@@ -15,8 +17,8 @@ import (
 )
 
 type BuildResult struct {
-	Snapshot        graph.GraphSnapshot `json:"snapshot"`
-	UnresolvedCalls int                 `json:"unresolved_calls"`
+	Snapshot    graph.GraphSnapshot  `json:"snapshot"`
+	IssueCounts analysis.IssueCounts `json:"issue_counts"`
 }
 
 type Service struct {
@@ -34,9 +36,15 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 	s.reporter.StartStage("graph", 0)
 	nodes := []graph.Node{}
 	edges := []graph.Edge{}
+	issueCounts := inventory.IssueCounts
+
 	symbolByCanonical := map[string]symbol.Symbol{}
 	symbolNodeByID := map[symbol.ID]graph.Node{}
+	symbolsByFileAndName := map[string]map[string][]symbol.Symbol{}
+	exportCanonicalByFile := map[string]map[string]string{}
 	methodsBySuffix := map[string][]symbol.Symbol{}
+	serviceNodeIDs := map[string]map[string]string{}
+
 	workspaceNode := graph.Node{
 		ID:            ids.Stable("node", snapshotID, "workspace", workspaceID),
 		Kind:          graph.NodeWorkspace,
@@ -44,6 +52,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 		SnapshotID:    snapshotID,
 	}
 	nodes = append(nodes, workspaceNode)
+
 	for _, repo := range inventory.Repositories {
 		repoNode := graph.Node{
 			ID:            ids.Stable("node", snapshotID, "repo", string(repo.ID)),
@@ -56,6 +65,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 		}
 		nodes = append(nodes, repoNode)
 		edges = append(edges, newEdge(snapshotID, graph.EdgeContains, workspaceNode.ID, repoNode.ID, "scanner", graph.ConfidenceConfirmed, 1.0))
+		serviceNodeIDs[string(repo.ID)] = map[string]string{}
 		for _, svc := range repo.CandidateServices {
 			serviceNode := graph.Node{
 				ID:            ids.Stable("node", snapshotID, "service", string(svc.ID)),
@@ -66,6 +76,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				SnapshotID:    snapshotID,
 			}
 			nodes = append(nodes, serviceNode)
+			serviceNodeIDs[string(repo.ID)][string(svc.ID)] = serviceNode.ID
 			edges = append(edges, newEdge(snapshotID, graph.EdgeContains, repoNode.ID, serviceNode.ID, "scanner", graph.ConfidenceConfirmed, 1.0))
 		}
 	}
@@ -76,10 +87,10 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 		repo := repoExtraction.Repository
 		repoNodeID := ids.Stable("node", snapshotID, "repo", string(repo.ID))
 		packageNodes := map[string]string{}
-		serviceNodeID := ""
-		if len(repo.CandidateServices) > 0 {
-			serviceNodeID = ids.Stable("node", snapshotID, "service", string(repo.CandidateServices[0].ID))
-		}
+		fileNodeIDs := map[string]string{}
+		ownersByFile, repoAmbiguities := determineFileOwners(repo, repoExtraction.Files)
+		issueCounts.ServiceAttributionAmbiguities += repoAmbiguities
+
 		for _, fileResult := range repoExtraction.Files {
 			fileCount++
 			language := fileResult.Language
@@ -96,6 +107,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				Language:      language,
 				SnapshotID:    snapshotID,
 			}
+			fileNodeIDs[fileResult.FilePath] = fileNode.ID
 			nodes = append(nodes, fileNode)
 			edges = append(edges, newEdge(snapshotID, graph.EdgeContains, repoNodeID, fileNode.ID, "inventory", graph.ConfidenceConfirmed, 1.0))
 
@@ -128,10 +140,23 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				edges = append(edges, newEdge(snapshotID, graph.EdgeImports, fileNode.ID, importNode.ID, method, graph.ConfidenceConfirmed, 0.9))
 			}
 
+			exportCanonicalByFile[fileResult.FilePath] = map[string]string{}
+			for _, exportBinding := range fileResult.Exports {
+				exportCanonicalByFile[fileResult.FilePath][exportBinding.Name] = exportBinding.CanonicalName
+			}
+
+			for _, diag := range fileResult.Diagnostics {
+				issueCounts = incrementIssueCount(issueCounts, diag.Category)
+			}
+
+			if _, ok := symbolsByFileAndName[fileResult.FilePath]; !ok {
+				symbolsByFileAndName[fileResult.FilePath] = map[string][]symbol.Symbol{}
+			}
 			for _, sym := range fileResult.Symbols {
 				symbolByCanonical[sym.CanonicalName] = sym
 				suffix := "." + sym.Name
 				methodsBySuffix[suffix] = append(methodsBySuffix[suffix], sym)
+				symbolsByFileAndName[fileResult.FilePath][sym.Name] = append(symbolsByFileAndName[fileResult.FilePath][sym.Name], sym)
 				nodeKind := graph.NodeSymbol
 				if sym.Kind == symbol.KindTestFunction {
 					nodeKind = graph.NodeTest
@@ -156,15 +181,35 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				symbolNodeByID[sym.ID] = symbolNode
 				nodes = append(nodes, symbolNode)
 				edges = append(edges, newEdge(snapshotID, graph.EdgeDefines, fileNode.ID, symbolNode.ID, method, graph.ConfidenceConfirmed, 1.0))
-				if serviceNodeID != "" {
-					edges = append(edges, newEdge(snapshotID, graph.EdgeBelongsToService, symbolNode.ID, serviceNodeID, "inventory", graph.ConfidenceInferred, 0.7))
+
+				owners := sortedOwnerIDs(ownersByFile[fileResult.FilePath])
+				for _, ownerID := range owners {
+					serviceNodeID := serviceNodeIDs[string(repo.ID)][ownerID]
+					if serviceNodeID == "" {
+						continue
+					}
+					edge := newEdge(snapshotID, graph.EdgeBelongsToService, symbolNode.ID, serviceNodeID, "inventory", graph.ConfidenceInferred, 0.75)
+					if len(owners) > 1 {
+						edge.Properties = map[string]string{"shared": "true"}
+					}
+					edges = append(edges, edge)
 				}
 			}
 			s.reporter.Status("files=" + strconv.Itoa(fileCount) + " symbols=" + strconv.Itoa(len(symbolByCanonical)))
 		}
+
+		for _, svc := range repo.CandidateServices {
+			for _, entrypoint := range svc.Entrypoints {
+				fileNodeID := fileNodeIDs[filepath.ToSlash(entrypoint)]
+				serviceNodeID := serviceNodeIDs[string(repo.ID)][string(svc.ID)]
+				if fileNodeID == "" || serviceNodeID == "" {
+					continue
+				}
+				edges = append(edges, newEdge(snapshotID, graph.EdgeEntrypointTo, serviceNodeID, fileNodeID, "scanner", graph.ConfidenceConfirmed, 1.0))
+			}
+		}
 	}
 
-	unresolved := 0
 	for _, repoExtraction := range extraction.Repositories {
 		for _, fileResult := range repoExtraction.Files {
 			sourceByID := map[symbol.ID]symbol.Symbol{}
@@ -174,17 +219,16 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 			for _, relation := range fileResult.Relations {
 				source, ok := sourceByID[relation.SourceSymbolID]
 				if !ok {
-					unresolved++
 					continue
 				}
-				resolved, confidence, ok := resolveTarget(relation.TargetCanonicalName, symbolByCanonical, methodsBySuffix)
+				resolved, confidence, ok := resolveTarget(relation, symbolByCanonical, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
 				if !ok {
-					unresolved++
+					issueCounts.UnresolvedImports++
 					continue
 				}
 				fromNode := symbolNodeByID[source.ID]
 				toNode := symbolNodeByID[resolved.ID]
-				edges = append(edges, graph.Edge{
+				edge := graph.Edge{
 					ID:   ids.Stable("edge", snapshotID, fromNode.ID, toNode.ID, string(graph.EdgeCalls), relation.EvidenceSource),
 					Kind: graph.EdgeCalls,
 					From: fromNode.ID,
@@ -197,17 +241,19 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 					},
 					Confidence: confidence,
 					SnapshotID: snapshotID,
-				})
+				}
+				edges = append(edges, edge)
 				if source.Kind == symbol.KindTestFunction {
-					edges = append(edges, newEdge(snapshotID, graph.EdgeTestedBy, toNode.ID, fromNode.ID, relation.ExtractionMethod, graph.ConfidenceInferred, 0.8))
+					edges = append(edges, newEdge(snapshotID, graph.EdgeTestedBy, toNode.ID, fromNode.ID, relation.ExtractionMethod, graph.ConfidenceInferred, 0.85))
 				}
 			}
 		}
 	}
 
+	issueCounts.DeferredBoundaryStitching = boundaryHintCount(inventory.Repositories)
 	dedupedNodes := dedupeNodes(nodes)
 	dedupedEdges := dedupeEdges(edges)
-	s.reporter.FinishStage("nodes=" + strconv.Itoa(len(dedupedNodes)) + " edges=" + strconv.Itoa(len(dedupedEdges)) + " unresolved=" + strconv.Itoa(unresolved))
+	s.reporter.FinishStage("nodes=" + strconv.Itoa(len(dedupedNodes)) + " edges=" + strconv.Itoa(len(dedupedEdges)))
 	return BuildResult{
 		Snapshot: graph.GraphSnapshot{
 			ID:          snapshotID,
@@ -216,32 +262,176 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 			Nodes:       dedupedNodes,
 			Edges:       dedupedEdges,
 			Metadata: graph.SnapshotMetadata{
+				IgnoreSignature: inventory.IgnoreSignature,
 				RepositoryCount: len(inventory.Repositories),
 				FileCount:       fileCount,
 				SymbolCount:     len(symbolByCanonical),
 				EdgeCount:       len(dedupedEdges),
+				IssueCounts:     issueCounts,
 			},
 		},
-		UnresolvedCalls: unresolved,
+		IssueCounts: issueCounts,
 	}
 }
 
-func resolveTarget(target string, symbolByCanonical map[string]symbol.Symbol, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
-	if resolved, ok := symbolByCanonical[target]; ok {
-		return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.95}, true
+func resolveTarget(relation symbol.RelationCandidate, symbolByCanonical map[string]symbol.Symbol, symbolsByFileAndName map[string]map[string][]symbol.Symbol, exportCanonicalByFile map[string]map[string]string, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
+	if relation.TargetCanonicalName != "" {
+		if resolved, ok := symbolByCanonical[relation.TargetCanonicalName]; ok {
+			return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.95}, true
+		}
 	}
-	idx := strings.LastIndex(target, ".")
-	if idx < 0 {
-		return symbol.Symbol{}, graph.Confidence{}, false
+	if relation.TargetFilePath != "" && relation.TargetExportName != "" {
+		if exports := exportCanonicalByFile[relation.TargetFilePath]; exports != nil {
+			if canonical := exports[relation.TargetExportName]; canonical != "" {
+				if resolved, ok := symbolByCanonical[canonical]; ok {
+					return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.93}, true
+				}
+			}
+		}
+		if fileSymbols := symbolsByFileAndName[relation.TargetFilePath]; fileSymbols != nil {
+			candidates := fileSymbols[relation.TargetExportName]
+			if len(candidates) == 1 {
+				return candidates[0], graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.9}, true
+			}
+		}
 	}
-	suffix := target[idx:]
-	if suffix != "" {
-		candidates := methodsBySuffix[suffix]
-		if len(candidates) == 1 {
-			return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.6}, true
+	if relation.TargetCanonicalName != "" {
+		idx := strings.LastIndex(relation.TargetCanonicalName, ".")
+		if idx >= 0 {
+			suffix := relation.TargetCanonicalName[idx:]
+			candidates := methodsBySuffix[suffix]
+			if len(candidates) == 1 {
+				return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.6}, true
+			}
 		}
 	}
 	return symbol.Symbol{}, graph.Confidence{}, false
+}
+
+func determineFileOwners(repo repository.Manifest, files []symbol.FileExtractionResult) (map[string]map[string]struct{}, int) {
+	owners := map[string]map[string]struct{}{}
+	pathOwned := map[string]bool{}
+	importedBy := map[string]map[string]struct{}{}
+	for _, file := range files {
+		pathOwners, ownedByPath := ownersFromServiceRoots(repo, file.FilePath)
+		if len(pathOwners) > 0 {
+			owners[file.FilePath] = pathOwners
+			pathOwned[file.FilePath] = ownedByPath
+		}
+		for _, binding := range file.ImportBindings {
+			if !binding.IsLocal || binding.ResolvedPath == "" {
+				continue
+			}
+			if _, ok := importedBy[binding.ResolvedPath]; !ok {
+				importedBy[binding.ResolvedPath] = map[string]struct{}{}
+			}
+			importedBy[binding.ResolvedPath][file.FilePath] = struct{}{}
+		}
+	}
+
+	changed := true
+	for changed {
+		changed = false
+		for _, file := range files {
+			if pathOwned[file.FilePath] {
+				continue
+			}
+			importers := importedBy[file.FilePath]
+			if len(importers) == 0 {
+				continue
+			}
+			nextOwners := copyOwnerSet(owners[file.FilePath])
+			for importer := range importers {
+				for owner := range owners[importer] {
+					nextOwners[owner] = struct{}{}
+				}
+			}
+			if len(nextOwners) > len(owners[file.FilePath]) {
+				owners[file.FilePath] = nextOwners
+				changed = true
+			}
+		}
+	}
+
+	ambiguities := 0
+	if len(repo.CandidateServices) > 1 {
+		for _, file := range files {
+			if pathOwned[file.FilePath] {
+				continue
+			}
+			if len(owners[file.FilePath]) == 0 {
+				ambiguities++
+			}
+		}
+	}
+	return owners, ambiguities
+}
+
+func ownersFromServiceRoots(repo repository.Manifest, filePath string) (map[string]struct{}, bool) {
+	fileAbs := filepath.Join(repo.RootPath, filepath.FromSlash(filePath))
+	deepest := -1
+	owners := map[string]struct{}{}
+	for _, svc := range repo.CandidateServices {
+		root := filepath.Clean(svc.RootPath)
+		fileClean := filepath.Clean(fileAbs)
+		if !isWithinRoot(fileClean, root) {
+			continue
+		}
+		depth := strings.Count(filepath.ToSlash(strings.TrimPrefix(root, filepath.Clean(repo.RootPath))), "/")
+		switch {
+		case depth > deepest:
+			deepest = depth
+			owners = map[string]struct{}{string(svc.ID): {}}
+		case depth == deepest:
+			owners[string(svc.ID)] = struct{}{}
+		}
+	}
+	return owners, len(owners) > 0
+}
+
+func isWithinRoot(filePath, root string) bool {
+	rel, err := filepath.Rel(root, filePath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, "..") && rel != "")
+}
+
+func sortedOwnerIDs(owners map[string]struct{}) []string {
+	result := make([]string, 0, len(owners))
+	for owner := range owners {
+		result = append(result, owner)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func copyOwnerSet(src map[string]struct{}) map[string]struct{} {
+	dst := map[string]struct{}{}
+	for key := range src {
+		dst[key] = struct{}{}
+	}
+	return dst
+}
+
+func incrementIssueCount(counts analysis.IssueCounts, category string) analysis.IssueCounts {
+	switch category {
+	case "unresolved_import":
+		counts.UnresolvedImports++
+	case "ambiguous_relation":
+		counts.AmbiguousRelations++
+	case "unsupported_construct":
+		counts.UnsupportedConstructs++
+	}
+	return counts
+}
+
+func boundaryHintCount(repositories []repository.Manifest) int {
+	total := 0
+	for _, repo := range repositories {
+		total += len(repo.BoundaryHints)
+	}
+	return total
 }
 
 func primaryRepoLanguage(repo repository.Manifest) repository.Language {
@@ -266,9 +456,9 @@ func primaryRepoLanguage(repo repository.Manifest) repository.Language {
 func extractionMethod(language string) string {
 	switch language {
 	case string(repository.LanguagePython):
-		return "python-regex"
+		return "tree-sitter-python"
 	case string(repository.LanguageJS), string(repository.LanguageTS):
-		return "js-regex"
+		return "tree-sitter-js"
 	default:
 		return "tree-sitter-go"
 	}

@@ -1,10 +1,11 @@
 {
   "bundle_version": "v1",
   "edge_kind_counts": {
-    "BELONGS_TO_SERVICE": 5,
+    "BELONGS_TO_SERVICE": 4,
     "CALLS": 4,
     "CONTAINS": 13,
     "DEFINES": 5,
+    "ENTRYPOINT_TO": 1,
     "IMPORTS": 3,
     "TESTED_BY": 1
   },
@@ -30,7 +31,7 @@
       "go_files": 4,
       "config_files": 0,
       "service_names": [
-        "single_go_service"
+        "app"
       ]
     }
   ],
@@ -43,7 +44,7 @@
   ],
   "service_summaries": [
     {
-      "name": "single_go_service",
+      "name": "app",
       "repository_id": "repo_a4f035c85e70",
       "entrypoints": [
         "cmd/app/main.go"
@@ -52,10 +53,19 @@
     }
   ],
   "snapshot_metadata": {
+    "ignore_signature": "ignore_5ba93c9db0cf",
     "repository_count": 1,
     "file_count": 4,
     "symbol_count": 5,
-    "edge_count": 31
+    "edge_count": 31,
+    "issue_counts": {
+      "unresolved_imports": 1,
+      "ambiguous_relations": 0,
+      "unsupported_constructs": 0,
+      "skipped_ignored_files": 0,
+      "deferred_boundary_stitching": 0,
+      "service_attribution_ambiguities": 0
+    }
   },
   "workspace_languages": [
     "go"

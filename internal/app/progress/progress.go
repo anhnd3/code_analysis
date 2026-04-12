@@ -6,6 +6,16 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
+)
+
+type Mode string
+
+const (
+	ModeAuto  Mode = "auto"
+	ModeTTY   Mode = "tty"
+	ModePlain Mode = "plain"
+	ModeQuiet Mode = "quiet"
 )
 
 type Reporter interface {
@@ -23,21 +33,34 @@ func (NoopReporter) Status(string)          {}
 func (NoopReporter) FinishStage(string)     {}
 
 type StderrReporter struct {
-	mu         sync.Mutex
-	writer     io.Writer
-	isTerminal bool
-	stage      string
-	total      int
-	current    int
-	status     string
-	lastWidth  int
+	mu               sync.Mutex
+	writer           io.Writer
+	mode             Mode
+	stage            string
+	total            int
+	current          int
+	status           string
+	lastWidth        int
+	lastEmit         time.Time
+	lastEmittedCount int
 }
 
-func NewStderrReporter() Reporter {
-	return &StderrReporter{
-		writer:     os.Stderr,
-		isTerminal: isTerminal(os.Stderr),
+func NewReporter(mode string) Reporter {
+	resolved := normalizeMode(mode, isTerminal(os.Stderr))
+	if resolved == ModeQuiet {
+		return NoopReporter{}
 	}
+	return &StderrReporter{
+		writer: os.Stderr,
+		mode:   resolved,
+	}
+}
+
+func NewStderrReporter(mode ...string) Reporter {
+	if len(mode) > 0 {
+		return NewReporter(mode[0])
+	}
+	return NewReporter(string(ModeAuto))
 }
 
 func (r *StderrReporter) StartStage(name string, total int) {
@@ -48,7 +71,9 @@ func (r *StderrReporter) StartStage(name string, total int) {
 	r.total = total
 	r.current = 0
 	r.status = ""
-	r.renderLocked()
+	r.lastEmit = time.Time{}
+	r.lastEmittedCount = 0
+	r.renderLocked(true)
 }
 
 func (r *StderrReporter) Advance(delta int) {
@@ -57,14 +82,14 @@ func (r *StderrReporter) Advance(delta int) {
 	if delta > 0 {
 		r.current += delta
 	}
-	r.renderLocked()
+	r.renderLocked(false)
 }
 
 func (r *StderrReporter) Status(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.status = strings.TrimSpace(message)
-	r.renderLocked()
+	r.renderLocked(false)
 }
 
 func (r *StderrReporter) FinishStage(message string) {
@@ -74,42 +99,69 @@ func (r *StderrReporter) FinishStage(message string) {
 		r.status = strings.TrimSpace(message)
 	}
 	line := r.lineLocked()
-	if r.isTerminal {
+	switch r.mode {
+	case ModeTTY:
 		fmt.Fprintf(r.writer, "\r%s\n", padRight(line, r.lastWidth))
 		r.lastWidth = 0
-	} else {
+	default:
 		fmt.Fprintln(r.writer, line)
 	}
 	r.stage = ""
 	r.total = 0
 	r.current = 0
 	r.status = ""
+	r.lastEmit = time.Now()
+	r.lastEmittedCount = 0
 }
 
-func (r *StderrReporter) renderLocked() {
+func (r *StderrReporter) renderLocked(force bool) {
 	if r.stage == "" {
 		return
 	}
 	line := r.lineLocked()
-	if r.isTerminal {
+	switch r.mode {
+	case ModeTTY:
 		fmt.Fprintf(r.writer, "\r%s", padRight(line, r.lastWidth))
 		if len(line) > r.lastWidth {
 			r.lastWidth = len(line)
 		}
-		return
+	default:
+		if !force && !r.shouldEmitPlainLocked() {
+			return
+		}
+		fmt.Fprintln(r.writer, line)
+		r.lastEmit = time.Now()
+		r.lastEmittedCount = r.current
 	}
-	fmt.Fprintln(r.writer, line)
+}
+
+func (r *StderrReporter) shouldEmitPlainLocked() bool {
+	if r.lastEmit.IsZero() {
+		return true
+	}
+	if r.current-r.lastEmittedCount >= 100 {
+		return true
+	}
+	return time.Since(r.lastEmit) >= 250*time.Millisecond
 }
 
 func (r *StderrReporter) lineLocked() string {
-	if r.total > 0 {
-		return fmt.Sprintf("%s %s %d/%d %s", progressBar(r.current, r.total), r.stage, r.current, r.total, r.status)
+	switch r.mode {
+	case ModeTTY:
+		if r.total > 0 {
+			return fmt.Sprintf("%s %s %d/%d %s", progressBar(r.current, r.total), r.stage, r.current, r.total, r.status)
+		}
+		return fmt.Sprintf("[....] %s %d %s", r.stage, r.current, r.status)
+	default:
+		if r.total > 0 {
+			return fmt.Sprintf("stage=%s current=%d total=%d status=%s", r.stage, r.current, r.total, strings.TrimSpace(r.status))
+		}
+		return fmt.Sprintf("stage=%s current=%d status=%s", r.stage, r.current, strings.TrimSpace(r.status))
 	}
-	return fmt.Sprintf("[....] %s %d %s", r.stage, r.current, r.status)
 }
 
 func (r *StderrReporter) finishLineLocked() {
-	if r.isTerminal && r.lastWidth > 0 {
+	if r.mode == ModeTTY && r.lastWidth > 0 {
 		fmt.Fprintln(r.writer)
 		r.lastWidth = 0
 	}
@@ -138,6 +190,27 @@ func padRight(line string, width int) string {
 		return line
 	}
 	return line + strings.Repeat(" ", width-len(line))
+}
+
+func normalizeMode(raw string, terminal bool) Mode {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", string(ModeAuto):
+		if terminal {
+			return ModeTTY
+		}
+		return ModePlain
+	case string(ModeTTY):
+		return ModeTTY
+	case string(ModePlain):
+		return ModePlain
+	case string(ModeQuiet):
+		return ModeQuiet
+	default:
+		if terminal {
+			return ModeTTY
+		}
+		return ModePlain
+	}
 }
 
 func isTerminal(file *os.File) bool {

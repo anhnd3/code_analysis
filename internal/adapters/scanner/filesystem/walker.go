@@ -4,7 +4,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"analysis-module/internal/domain/analysis"
 )
 
 type Entry struct {
@@ -14,13 +15,20 @@ type Entry struct {
 
 type WalkObserver func(Entry)
 
-func Walk(root string, ignorePatterns []string, observer WalkObserver) ([]Entry, error) {
+type WalkResult struct {
+	Entries           []Entry
+	SkippedEntryCount int
+}
+
+func Walk(root string, policy analysis.IgnorePolicy, observer WalkObserver) (WalkResult, error) {
 	entries := make([]Entry, 0, 128)
+	skipped := 0
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if path != root && shouldIgnore(path, ignorePatterns) {
+		if path != root && policy.ShouldIgnore(root, path, d.IsDir()) {
+			skipped++
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -33,7 +41,7 @@ func Walk(root string, ignorePatterns []string, observer WalkObserver) ([]Entry,
 		}
 		return nil
 	})
-	return entries, err
+	return WalkResult{Entries: entries, SkippedEntryCount: skipped}, err
 }
 
 func FileExists(path string) bool {
@@ -52,17 +60,4 @@ func ReadText(path string) string {
 		return ""
 	}
 	return string(data)
-}
-
-func shouldIgnore(path string, patterns []string) bool {
-	for _, pattern := range patterns {
-		pattern = strings.TrimSpace(pattern)
-		if pattern == "" {
-			continue
-		}
-		if strings.Contains(path, pattern) {
-			return true
-		}
-	}
-	return false
 }

@@ -44,6 +44,7 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 		Warnings: []string{},
 	}
 	importAliases := map[string]string{}
+	modulePath := readGoModulePath(file.RepositoryRoot)
 	walk(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
 		case "package_clause":
@@ -60,6 +61,14 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 					alias = aliasNode.Utf8Text(content)
 				}
 				importAliases[alias] = importPath
+				resolvedPath, local := resolveGoImportPath(file.RepositoryRoot, modulePath, importPath)
+				result.ImportBindings = append(result.ImportBindings, symbol.ImportBinding{
+					Source:       importPath,
+					Alias:        alias,
+					ResolvedPath: resolvedPath,
+					IsNamespace:  true,
+					IsLocal:      local,
+				})
 			}
 		case "function_declaration", "method_declaration":
 			sym := buildSymbol(file, result.PackageName, node, content)
@@ -203,6 +212,54 @@ func normalizeReceiver(raw string) string {
 		return ""
 	}
 	return parts[len(parts)-1]
+}
+
+func readGoModulePath(repoRoot string) string {
+	data, err := os.ReadFile(filepath.Join(repoRoot, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
+}
+
+func resolveGoImportPath(repoRoot, modulePath, importPath string) (string, bool) {
+	if modulePath == "" || !strings.HasPrefix(importPath, modulePath) {
+		return "", false
+	}
+	relDir := strings.TrimPrefix(strings.TrimPrefix(importPath, modulePath), "/")
+	if relDir == "" {
+		return "", false
+	}
+	dir := filepath.Join(repoRoot, filepath.FromSlash(relDir))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	candidates := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		candidates = append(candidates, filepath.Join(dir, name))
+	}
+	if len(candidates) != 1 {
+		return "", false
+	}
+	rel, err := filepath.Rel(repoRoot, candidates[0])
+	if err != nil {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
 }
 
 func locationFromNode(path string, node *tree_sitter.Node) symbol.CodeLocation {

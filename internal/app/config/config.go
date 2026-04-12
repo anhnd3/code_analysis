@@ -9,6 +9,7 @@ type Config struct {
 	ArtifactRoot string
 	SQLitePath   string
 	HTTPAddr     string
+	ProgressMode string
 }
 
 func Default() Config {
@@ -24,9 +25,14 @@ func Default() Config {
 	if value := os.Getenv("ANALYSIS_HTTP_ADDR"); value != "" {
 		addr = value
 	}
+	progressMode := "auto"
+	if value := os.Getenv("ANALYSIS_PROGRESS_MODE"); value != "" {
+		progressMode = value
+	}
 	return Config{
 		ArtifactRoot: artifactRoot,
 		SQLitePath:   sqlitePath,
 		HTTPAddr:     addr,
+		ProgressMode: progressMode,
 	}
 }

@@ -2,6 +2,7 @@ package snapshot_manage
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"analysis-module/pkg/ids"
@@ -14,7 +15,9 @@ func New() Service {
 }
 
 func (Service) NewWorkspaceID(root string) string {
-	return ids.Stable("ws", root)
+	cleanRoot := filepath.Clean(root)
+	slug := ids.Slug(filepath.Base(cleanRoot))
+	return fmt.Sprintf("ws_%s_%s", slug, ids.StableSuffix(cleanRoot))
 }
 
 func (Service) NewSnapshotID(workspaceID string) string {

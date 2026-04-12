@@ -28,10 +28,36 @@ type CodeLocation struct {
 }
 
 type FileRef struct {
-	RepositoryID string `json:"repository_id"`
-	AbsolutePath string `json:"absolute_path"`
-	RelativePath string `json:"relative_path"`
-	Language     string `json:"language"`
+	RepositoryID   string `json:"repository_id"`
+	RepositoryRoot string `json:"repository_root"`
+	AbsolutePath   string `json:"absolute_path"`
+	RelativePath   string `json:"relative_path"`
+	Language       string `json:"language"`
+}
+
+type ImportBinding struct {
+	Source       string `json:"source"`
+	Alias        string `json:"alias,omitempty"`
+	ImportedName string `json:"imported_name,omitempty"`
+	ExportName   string `json:"export_name,omitempty"`
+	ResolvedPath string `json:"resolved_path,omitempty"`
+	IsDefault    bool   `json:"is_default,omitempty"`
+	IsNamespace  bool   `json:"is_namespace,omitempty"`
+	IsLocal      bool   `json:"is_local,omitempty"`
+}
+
+type ExportBinding struct {
+	Name          string `json:"name"`
+	CanonicalName string `json:"canonical_name,omitempty"`
+	IsDefault     bool   `json:"is_default,omitempty"`
+}
+
+type Diagnostic struct {
+	Category string `json:"category"`
+	Message  string `json:"message"`
+	FilePath string `json:"file_path,omitempty"`
+	SymbolID ID     `json:"symbol_id,omitempty"`
+	Evidence string `json:"evidence,omitempty"`
 }
 
 type Symbol struct {
@@ -51,6 +77,8 @@ type Symbol struct {
 type RelationCandidate struct {
 	SourceSymbolID      ID      `json:"source_symbol_id"`
 	TargetCanonicalName string  `json:"target_canonical_name"`
+	TargetFilePath      string  `json:"target_file_path,omitempty"`
+	TargetExportName    string  `json:"target_export_name,omitempty"`
 	Relationship        string  `json:"relationship"`
 	EvidenceType        string  `json:"evidence_type"`
 	EvidenceSource      string  `json:"evidence_source"`
@@ -59,11 +87,14 @@ type RelationCandidate struct {
 }
 
 type FileExtractionResult struct {
-	FilePath    string              `json:"file_path"`
-	Language    string              `json:"language,omitempty"`
-	PackageName string              `json:"package_name"`
-	Imports     []string            `json:"imports"`
-	Symbols     []Symbol            `json:"symbols"`
-	Relations   []RelationCandidate `json:"relations"`
-	Warnings    []string            `json:"warnings"`
+	FilePath       string              `json:"file_path"`
+	Language       string              `json:"language,omitempty"`
+	PackageName    string              `json:"package_name"`
+	Imports        []string            `json:"imports"`
+	ImportBindings []ImportBinding     `json:"import_bindings,omitempty"`
+	Exports        []ExportBinding     `json:"exports,omitempty"`
+	Symbols        []Symbol            `json:"symbols"`
+	Relations      []RelationCandidate `json:"relations"`
+	Diagnostics    []Diagnostic        `json:"diagnostics,omitempty"`
+	Warnings       []string            `json:"warnings"`
 }

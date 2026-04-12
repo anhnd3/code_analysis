@@ -3,7 +3,8 @@
   "edge_kind_counts": {
     "BELONGS_TO_SERVICE": 1,
     "CONTAINS": 10,
-    "DEFINES": 2
+    "DEFINES": 2,
+    "ENTRYPOINT_TO": 1
   },
   "node_kind_counts": {
     "FILE": 2,
@@ -65,10 +66,19 @@
     }
   ],
   "snapshot_metadata": {
+    "ignore_signature": "ignore_5ba93c9db0cf",
     "repository_count": 3,
     "file_count": 2,
     "symbol_count": 2,
-    "edge_count": 13
+    "edge_count": 14,
+    "issue_counts": {
+      "unresolved_imports": 0,
+      "ambiguous_relations": 0,
+      "unsupported_constructs": 0,
+      "skipped_ignored_files": 0,
+      "deferred_boundary_stitching": 0,
+      "service_attribution_ambiguities": 0
+    }
   },
   "workspace_languages": [
     "go",

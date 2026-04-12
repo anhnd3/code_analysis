@@ -74,12 +74,13 @@ func (w Workflow) Run(req Request) (Result, error) {
 	sort.Strings(languages)
 	warnings := append([]string{}, scanResult.Warnings...)
 	manifest := workspace.Manifest{
-		ID:            workspace.ID(workspaceID),
-		RootPath:      workspace.Path(workspacePath),
-		RepositoryIDs: repoIDs,
-		Languages:     languages,
-		Warnings:      warnings,
-		ScannedAt:     time.Now().UTC(),
+		ID:              workspace.ID(workspaceID),
+		RootPath:        workspace.Path(workspacePath),
+		IgnoreSignature: inventory.IgnoreSignature,
+		RepositoryIDs:   repoIDs,
+		Languages:       languages,
+		Warnings:        warnings,
+		ScannedAt:       time.Now().UTC(),
 	}
 	serviceManifests := collectServiceManifests(inventory.Repositories)
 	artifactRefs := []artifact.Ref{}

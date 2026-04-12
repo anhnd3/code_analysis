@@ -2,6 +2,7 @@ package golden
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,8 @@ import (
 	"analysis-module/internal/tests/fixtures"
 	"analysis-module/internal/workflows/build_review_bundle"
 )
+
+var updateGoldens = flag.Bool("update-goldens", false, "update golden files")
 
 func TestReviewBundleGoldenSingleGoService(t *testing.T) {
 	bundle := generateBundle(t, "single_go_service")
@@ -187,7 +190,7 @@ func assertGoldenJSON(t *testing.T, relativePath string, payload any) {
 		t.Fatalf("marshal golden payload: %v", err)
 	}
 	path := filepath.Join(relativePath)
-	if os.Getenv("UPDATE_GOLDEN") == "1" {
+	if *updateGoldens || os.Getenv("UPDATE_GOLDEN") == "1" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir golden dir: %v", err)
 		}

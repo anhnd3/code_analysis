@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"analysis-module/internal/app/progress"
+	"analysis-module/internal/domain/analysis"
 	scannerport "analysis-module/internal/ports/scanner"
 
 	adapterfs "analysis-module/internal/adapters/scanner/filesystem"
@@ -37,9 +38,9 @@ func NewRepoRootDetector(reporter progress.Reporter) scannerport.RepoRootDetecto
 	return RepoRootDetector{reporter: reporter}
 }
 
-func (d RepoRootDetector) Detect(root string, ignorePatterns []string) ([]string, error) {
+func (d RepoRootDetector) Detect(root string, policy analysis.IgnorePolicy) ([]string, error) {
 	entryCount := 0
-	entries, err := adapterfs.Walk(root, ignorePatterns, func(entry adapterfs.Entry) {
+	result, err := adapterfs.Walk(root, policy, func(entry adapterfs.Entry) {
 		entryCount++
 		if entryCount == 1 || entryCount%250 == 0 {
 			d.reporter.Status("entries=" + strconv.Itoa(entryCount))
@@ -49,7 +50,7 @@ func (d RepoRootDetector) Detect(root string, ignorePatterns []string) ([]string
 		return nil, err
 	}
 	roots := map[string]struct{}{}
-	for _, entry := range entries {
+	for _, entry := range result.Entries {
 		if !entry.IsDir {
 			base := filepath.Base(entry.Path)
 			for _, signal := range repoSignals {
@@ -66,11 +67,11 @@ func (d RepoRootDetector) Detect(root string, ignorePatterns []string) ([]string
 	if len(roots) == 0 {
 		roots[root] = struct{}{}
 	}
-	result := make([]string, 0, len(roots))
+	paths := make([]string, 0, len(roots))
 	for path := range roots {
-		result = append(result, filepath.Clean(path))
+		paths = append(paths, filepath.Clean(path))
 	}
-	sort.Strings(result)
-	d.reporter.Status("entries=" + strconv.Itoa(entryCount) + " repos=" + strconv.Itoa(len(result)))
-	return result, nil
+	sort.Strings(paths)
+	d.reporter.Status("entries=" + strconv.Itoa(entryCount) + " repos=" + strconv.Itoa(len(paths)))
+	return paths, nil
 }

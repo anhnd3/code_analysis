@@ -3,12 +3,13 @@ package detectors
 import (
 	"testing"
 
+	"analysis-module/internal/domain/analysis"
 	"analysis-module/internal/tests/fixtures"
 )
 
 func TestTechStackDetectorDetectsGoAndTests(t *testing.T) {
 	detector := NewTechStackDetector()
-	profile, err := detector.Detect(fixtures.WorkspacePath(t, "single_go_service"))
+	profile, err := detector.Detect(fixtures.WorkspacePath(t, "single_go_service"), analysis.NewIgnorePolicy(nil))
 	if err != nil {
 		t.Fatalf("detect: %v", err)
 	}

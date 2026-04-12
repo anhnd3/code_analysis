@@ -46,7 +46,9 @@ func runAnalyzeWorkspace(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("analyze-workspace", flag.ExitOnError)
 	workspacePath := fs.String("workspace", ".", "workspace path")
 	ignore := fs.String("ignore", "", "comma separated ignore patterns")
+	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
+	app = rebuildApp(app, *progressMode)
 	result, err := app.AnalyzeWorkspace.Run(analyze_workspace.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
@@ -61,7 +63,9 @@ func runBuildSnapshot(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("build-snapshot", flag.ExitOnError)
 	workspacePath := fs.String("workspace", ".", "workspace path")
 	ignore := fs.String("ignore", "", "comma separated ignore patterns")
+	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
+	app = rebuildApp(app, *progressMode)
 	result, err := app.BuildSnapshot.Run(build_snapshot.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
@@ -77,7 +81,9 @@ func runBuildReviewBundle(app *bootstrap.Application, args []string) {
 	workspacePath := fs.String("workspace", ".", "workspace path")
 	ignore := fs.String("ignore", "", "comma separated ignore patterns")
 	outDir := fs.String("out", "", "bundle output directory")
+	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
+	app = rebuildApp(app, *progressMode)
 	result, err := app.BuildReviewBundle.Run(build_review_bundle.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
@@ -125,6 +131,16 @@ func runImpactedTests(app *bootstrap.Application, args []string) {
 		fatal(err)
 	}
 	write(result)
+}
+
+func rebuildApp(existing *bootstrap.Application, progressMode string) *bootstrap.Application {
+	cfg := existing.Config
+	cfg.ProgressMode = progressMode
+	app, err := bootstrap.New(cfg, existing.Logger)
+	if err != nil {
+		fatal(err)
+	}
+	return app
 }
 
 func splitCSV(raw string) []string {

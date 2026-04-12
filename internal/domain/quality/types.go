@@ -1,5 +1,7 @@
 package quality
 
+import "analysis-module/internal/domain/analysis"
+
 type CoverageMetric struct {
 	Name  string `json:"name"`
 	Value int    `json:"value"`
@@ -13,7 +15,8 @@ type GapReport struct {
 }
 
 type AnalysisQualityReport struct {
-	SnapshotID string           `json:"snapshot_id"`
-	Metrics    []CoverageMetric `json:"metrics"`
-	Gaps       []GapReport      `json:"gaps"`
+	SnapshotID  string               `json:"snapshot_id"`
+	Metrics     []CoverageMetric     `json:"metrics"`
+	IssueCounts analysis.IssueCounts `json:"issue_counts"`
+	Gaps        []GapReport          `json:"gaps"`
 }

@@ -45,8 +45,15 @@ func TestPackageWritesReviewBundleDirectory(t *testing.T) {
 	if result.FileCount != 9 {
 		t.Fatalf("expected 9 bundle files, got %d", result.FileCount)
 	}
-	if !strings.HasSuffix(result.BundleDir, filepath.Join("snapshots", snapshotResult.Snapshot.ID, "review_bundle")) {
+	expectedBundleDir := filepath.Join(cfg.ArtifactRoot, "workspaces", snapshotResult.WorkspaceID, "snapshots", snapshotResult.Snapshot.ID, "review_bundle")
+	if result.BundleDir != expectedBundleDir {
 		t.Fatalf("unexpected bundle dir: %s", result.BundleDir)
+	}
+	if !strings.HasPrefix(snapshotResult.WorkspaceID, "ws_single_go_service_") {
+		t.Fatalf("expected friendly workspace id, got %s", snapshotResult.WorkspaceID)
+	}
+	if !strings.HasPrefix(snapshotResult.Snapshot.ID, snapshotResult.WorkspaceID+"_") {
+		t.Fatalf("expected friendly snapshot id, got %s", snapshotResult.Snapshot.ID)
 	}
 	if len(result.Bundle.ServiceManifests) != 1 {
 		t.Fatalf("expected 1 service manifest, got %d", len(result.Bundle.ServiceManifests))

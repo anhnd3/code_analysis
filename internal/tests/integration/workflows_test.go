@@ -3,6 +3,7 @@ package integration
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"analysis-module/internal/app/bootstrap"
@@ -31,6 +32,12 @@ func TestEndToEndWorkflows(t *testing.T) {
 	}
 	if snapshotResult.Snapshot.ID == "" {
 		t.Fatal("expected snapshot id")
+	}
+	if !strings.HasPrefix(snapshotResult.WorkspaceID, "ws_single_go_service_") {
+		t.Fatalf("expected friendly workspace id, got %s", snapshotResult.WorkspaceID)
+	}
+	if !strings.HasPrefix(snapshotResult.Snapshot.ID, snapshotResult.WorkspaceID+"_") {
+		t.Fatalf("expected snapshot id to start with workspace id, got %s", snapshotResult.Snapshot.ID)
 	}
 	blast, err := app.BlastRadius.Run(blast_radius.Request{
 		WorkspaceID: snapshotResult.WorkspaceID,

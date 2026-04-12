@@ -22,9 +22,15 @@ func (c *SnapshotCache) Put(snapshot graph.GraphSnapshot) {
 	c.snapshots[snapshot.ID] = snapshot
 }
 
-func (c *SnapshotCache) Get(snapshotID string) (graph.GraphSnapshot, bool) {
+func (c *SnapshotCache) Get(snapshotID, ignoreSignature string) (graph.GraphSnapshot, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	snapshot, ok := c.snapshots[snapshotID]
+	if !ok {
+		return graph.GraphSnapshot{}, false
+	}
+	if ignoreSignature != "" && snapshot.Metadata.IgnoreSignature != ignoreSignature {
+		return graph.GraphSnapshot{}, false
+	}
 	return snapshot, ok
 }

@@ -1,6 +1,9 @@
 package repository
 
-import "analysis-module/internal/domain/service"
+import (
+	"analysis-module/internal/domain/analysis"
+	"analysis-module/internal/domain/service"
+)
 
 type ID string
 type Role string
@@ -36,18 +39,20 @@ type TechStackProfile struct {
 }
 
 type Manifest struct {
-	ID                ID                 `json:"id"`
-	Name              string             `json:"name"`
-	RootPath          string             `json:"root_path"`
-	Role              Role               `json:"role"`
-	TechStack         TechStackProfile   `json:"tech_stack"`
-	GoFiles           []string           `json:"go_files"`
-	PythonFiles       []string           `json:"python_files,omitempty"`
-	JavaScriptFiles   []string           `json:"javascript_files,omitempty"`
-	TypeScriptFiles   []string           `json:"typescript_files,omitempty"`
-	ConfigFiles       []string           `json:"config_files"`
-	BoundaryHints     []BoundaryHint     `json:"boundary_hints"`
-	CandidateServices []service.Manifest `json:"candidate_services"`
+	ID                ID                   `json:"id"`
+	Name              string               `json:"name"`
+	RootPath          string               `json:"root_path"`
+	Role              Role                 `json:"role"`
+	IgnoreSignature   string               `json:"ignore_signature,omitempty"`
+	TechStack         TechStackProfile     `json:"tech_stack"`
+	GoFiles           []string             `json:"go_files"`
+	PythonFiles       []string             `json:"python_files,omitempty"`
+	JavaScriptFiles   []string             `json:"javascript_files,omitempty"`
+	TypeScriptFiles   []string             `json:"typescript_files,omitempty"`
+	ConfigFiles       []string             `json:"config_files"`
+	IssueCounts       analysis.IssueCounts `json:"issue_counts,omitempty"`
+	BoundaryHints     []BoundaryHint       `json:"boundary_hints"`
+	CandidateServices []service.Manifest   `json:"candidate_services"`
 }
 
 type ExtractionPlan struct {
@@ -57,7 +62,9 @@ type ExtractionPlan struct {
 }
 
 type Inventory struct {
-	WorkspaceID  string           `json:"workspace_id"`
-	Repositories []Manifest       `json:"repositories"`
-	Plans        []ExtractionPlan `json:"plans"`
+	WorkspaceID     string               `json:"workspace_id"`
+	IgnoreSignature string               `json:"ignore_signature"`
+	IssueCounts     analysis.IssueCounts `json:"issue_counts,omitempty"`
+	Repositories    []Manifest           `json:"repositories"`
+	Plans           []ExtractionPlan     `json:"plans"`
 }

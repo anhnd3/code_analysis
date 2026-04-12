@@ -3,6 +3,7 @@ package graph
 import (
 	"time"
 
+	"analysis-module/internal/domain/analysis"
 	"analysis-module/internal/domain/symbol"
 )
 
@@ -54,15 +55,15 @@ type Confidence struct {
 }
 
 type Node struct {
-	ID            string              `json:"id"`
-	Kind          NodeKind            `json:"kind"`
-	CanonicalName string              `json:"canonical_name"`
-	Language      string              `json:"language,omitempty"`
-	RepositoryID  string              `json:"repository_id,omitempty"`
-	FilePath      string              `json:"file_path,omitempty"`
+	ID            string               `json:"id"`
+	Kind          NodeKind             `json:"kind"`
+	CanonicalName string               `json:"canonical_name"`
+	Language      string               `json:"language,omitempty"`
+	RepositoryID  string               `json:"repository_id,omitempty"`
+	FilePath      string               `json:"file_path,omitempty"`
 	Location      *symbol.CodeLocation `json:"location,omitempty"`
-	Properties    map[string]string   `json:"properties,omitempty"`
-	SnapshotID    string              `json:"snapshot_id"`
+	Properties    map[string]string    `json:"properties,omitempty"`
+	SnapshotID    string               `json:"snapshot_id"`
 }
 
 type Edge struct {
@@ -77,10 +78,12 @@ type Edge struct {
 }
 
 type SnapshotMetadata struct {
-	RepositoryCount int `json:"repository_count"`
-	FileCount       int `json:"file_count"`
-	SymbolCount     int `json:"symbol_count"`
-	EdgeCount       int `json:"edge_count"`
+	IgnoreSignature string               `json:"ignore_signature,omitempty"`
+	RepositoryCount int                  `json:"repository_count"`
+	FileCount       int                  `json:"file_count"`
+	SymbolCount     int                  `json:"symbol_count"`
+	EdgeCount       int                  `json:"edge_count"`
+	IssueCounts     analysis.IssueCounts `json:"issue_counts,omitempty"`
 }
 
 type GraphSnapshot struct {

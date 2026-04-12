@@ -1,0 +1,6 @@
+{
+  "name": "node-service-app",
+  "scripts": {
+    "start": "node server.ts"
+  }
+}

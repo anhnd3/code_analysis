@@ -55,10 +55,11 @@ func (s Service) Build(inventory repository.Inventory) (Result, error) {
 		for _, relPath := range plan.Files {
 			s.reporter.Status("repo=" + repo.Name + " lang=" + string(plan.Language) + " file=" + relPath)
 			fileRef := symbol.FileRef{
-				RepositoryID: string(repo.ID),
-				AbsolutePath: filepath.Join(repo.RootPath, relPath),
-				RelativePath: relPath,
-				Language:     string(plan.Language),
+				RepositoryID:   string(repo.ID),
+				RepositoryRoot: repo.RootPath,
+				AbsolutePath:   filepath.Join(repo.RootPath, relPath),
+				RelativePath:   relPath,
+				Language:       string(plan.Language),
 			}
 			extraction, err := extractor.ExtractFile(fileRef)
 			if err != nil {

@@ -22,7 +22,7 @@ func (s Service) BlastRadius(req queryport.BlastRadiusRequest) (queryport.BlastR
 	if err != nil {
 		return queryport.BlastRadiusResult{}, err
 	}
-	impacted := bfs(nodes, edges, target.ID, req.MaxDepth, func(node graph.Node) bool { return true })
+	impacted := bfs(nodes, buildBlastRadiusAdjacency(edges), target.ID, req.MaxDepth, func(node graph.Node) bool { return true })
 	return queryport.BlastRadiusResult{SnapshotID: req.SnapshotID, Target: req.Target, Impacted: impacted}, nil
 }
 
@@ -31,7 +31,7 @@ func (s Service) ImpactedTests(req queryport.ImpactedTestsRequest) (queryport.Im
 	if err != nil {
 		return queryport.ImpactedTestsResult{}, err
 	}
-	tests := bfs(nodes, edges, target.ID, req.MaxDepth, func(node graph.Node) bool {
+	tests := bfs(nodes, buildImpactedTestsAdjacency(edges), target.ID, req.MaxDepth, func(node graph.Node) bool {
 		return node.Kind == graph.NodeTest
 	})
 	return queryport.ImpactedTestsResult{SnapshotID: req.SnapshotID, Target: req.Target, Tests: tests}, nil
@@ -64,14 +64,34 @@ func (s Service) load(workspaceID, snapshotID, target string) (map[string]graph.
 	return nodeMap, edges, targetNode, nil
 }
 
-func bfs(nodes map[string]graph.Node, edges []graph.Edge, start string, maxDepth int, include func(graph.Node) bool) []queryport.ImpactedEntity {
-	if maxDepth <= 0 {
-		maxDepth = 3
-	}
+func buildBlastRadiusAdjacency(edges []graph.Edge) map[string][]string {
 	adj := map[string][]string{}
 	for _, edge := range edges {
+		if edge.Kind != graph.EdgeCalls && edge.Kind != graph.EdgeTestedBy {
+			continue
+		}
 		adj[edge.From] = append(adj[edge.From], edge.To)
 		adj[edge.To] = append(adj[edge.To], edge.From)
+	}
+	return adj
+}
+
+func buildImpactedTestsAdjacency(edges []graph.Edge) map[string][]string {
+	adj := map[string][]string{}
+	for _, edge := range edges {
+		switch edge.Kind {
+		case graph.EdgeCalls:
+			adj[edge.To] = append(adj[edge.To], edge.From)
+		case graph.EdgeTestedBy:
+			adj[edge.From] = append(adj[edge.From], edge.To)
+		}
+	}
+	return adj
+}
+
+func bfs(nodes map[string]graph.Node, adj map[string][]string, start string, maxDepth int, include func(graph.Node) bool) []queryport.ImpactedEntity {
+	if maxDepth <= 0 {
+		maxDepth = 3
 	}
 	type step struct {
 		NodeID string

@@ -7,6 +7,7 @@ type SnapshotRef struct {
 
 type SnapshotFingerprint struct {
 	WorkspaceID      string   `json:"workspace_id"`
+	IgnoreSignature  string   `json:"ignore_signature"`
 	RepositoryIDs    []string `json:"repository_ids"`
 	TrackedFileCount int      `json:"tracked_file_count"`
 }

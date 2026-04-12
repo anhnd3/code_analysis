@@ -1,11 +1,12 @@
 package detectors
 
 import (
-	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	adapterfs "analysis-module/internal/adapters/scanner/filesystem"
+	"analysis-module/internal/domain/analysis"
 	"analysis-module/internal/domain/repository"
 	scannerport "analysis-module/internal/ports/scanner"
 )
@@ -16,22 +17,20 @@ func NewTechStackDetector() scannerport.TechStackDetector {
 	return TechStackDetector{}
 }
 
-func (TechStackDetector) Detect(repoPath string) (repository.TechStackProfile, error) {
+func (TechStackDetector) Detect(repoPath string, policy analysis.IgnorePolicy) (repository.TechStackProfile, error) {
 	langs := map[repository.Language]struct{}{}
 	buildFiles := []string{}
 	testFrameworks := map[string]struct{}{}
 	frameworkHints := map[string]struct{}{}
-	err := filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	walkResult, err := adapterfs.Walk(repoPath, policy, nil)
+	if err != nil {
+		return repository.TechStackProfile{}, err
+	}
+	for _, entry := range walkResult.Entries {
+		if entry.IsDir {
+			continue
 		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == ".git" || name == "node_modules" || name == "vendor" || name == "artifacts" || name == "__pycache__" || name == ".venv" || name == ".pytest_cache" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+		path := entry.Path
 		rel, _ := filepath.Rel(repoPath, path)
 		base := filepath.Base(path)
 		switch filepath.Ext(path) {
@@ -76,10 +75,6 @@ func (TechStackDetector) Detect(repoPath string) (repository.TechStackProfile, e
 		if strings.Contains(contentHintPath, "kafka") {
 			frameworkHints["kafka"] = struct{}{}
 		}
-		return nil
-	})
-	if err != nil {
-		return repository.TechStackProfile{}, err
 	}
 	languages := make([]repository.Language, 0, len(langs))
 	for lang := range langs {

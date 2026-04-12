@@ -42,7 +42,7 @@ type Application struct {
 
 func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	artifactStore := artifactfs.New(cfg.ArtifactRoot)
-	reporter := progress.NewStderrReporter()
+	reporter := progress.NewStderrReporter(cfg.ProgressMode)
 	graphStores := sqliteprovider.NewProvider(cfg.ArtifactRoot, cfg.SQLitePath)
 	cache := cachememory.NewSnapshotCache()
 	snapshotManageSvc := snapshot_manage.New()

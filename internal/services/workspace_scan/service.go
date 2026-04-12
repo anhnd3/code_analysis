@@ -1,15 +1,15 @@
 package workspace_scan
 
 import (
-	"io/fs"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
+	adapterfs "analysis-module/internal/adapters/scanner/filesystem"
 	"analysis-module/internal/app/progress"
+	"analysis-module/internal/domain/analysis"
 	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/domain/service"
 	scannerport "analysis-module/internal/ports/scanner"
 	"analysis-module/pkg/ids"
 )
@@ -34,8 +34,9 @@ func New(repoRootDetector scannerport.RepoRootDetector, techStackDetector scanne
 }
 
 func (s Service) Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWorkspaceResult, error) {
+	policy := analysis.NewIgnorePolicy(req.IgnorePatterns)
 	s.reporter.StartStage("scan", 0)
-	repoRoots, err := s.repoRootDetector.Detect(req.WorkspacePath, req.IgnorePatterns)
+	repoRoots, err := s.repoRootDetector.Detect(req.WorkspacePath, policy)
 	if err != nil {
 		s.reporter.FinishStage("scan failed")
 		return scannerport.ScanWorkspaceResult{}, err
@@ -44,9 +45,14 @@ func (s Service) Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWor
 	warnings := []string{}
 	for _, root := range repoRoots {
 		s.reporter.Status("repo=" + filepath.Base(root) + " warnings=" + strconv.Itoa(len(warnings)))
-		techStack, err := s.techStackDetector.Detect(root)
+		techStack, err := s.techStackDetector.Detect(root, policy)
 		if err != nil {
 			warnings = append(warnings, "tech stack detection failed for "+root+": "+err.Error())
+			continue
+		}
+		files, err := collectRepoFiles(root, policy)
+		if err != nil {
+			warnings = append(warnings, "file collection failed for "+root+": "+err.Error())
 			continue
 		}
 		repoManifest := repository.Manifest{
@@ -54,29 +60,21 @@ func (s Service) Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWor
 			Name:            filepath.Base(root),
 			RootPath:        root,
 			Role:            repository.RoleUnknown,
+			IgnoreSignature: policy.Signature,
 			TechStack:       techStack,
-			GoFiles:         collectGoFiles(root),
-			PythonFiles:     collectFilesByExt(root, ".py"),
-			JavaScriptFiles: collectFilesByExt(root, ".js", ".jsx", ".mjs", ".cjs"),
-			TypeScriptFiles: collectFilesByExt(root, ".ts", ".tsx"),
-			ConfigFiles:     collectConfigFiles(root),
+			GoFiles:         files.goFiles,
+			PythonFiles:     files.pythonFiles,
+			JavaScriptFiles: files.javascriptFiles,
+			TypeScriptFiles: files.typeScriptFiles,
+			ConfigFiles:     files.configFiles,
+			IssueCounts:     analysis.IssueCounts{SkippedIgnoredFiles: files.skippedCount},
 		}
-		entrypoints, hints, err := s.serviceDetector.Detect(repoManifest)
+		services, hints, err := s.serviceDetector.Detect(repoManifest, policy)
 		if err != nil {
 			warnings = append(warnings, "service detection failed for "+root+": "+err.Error())
 		}
 		repoManifest.BoundaryHints = hints
-		if len(entrypoints) > 0 {
-			serviceName := repoManifest.Name
-			repoManifest.CandidateServices = []service.Manifest{{
-				ID:           service.ID(ids.Stable("svc", repoManifest.RootPath, serviceName)),
-				Name:         serviceName,
-				RepositoryID: string(repoManifest.ID),
-				RootPath:     repoManifest.RootPath,
-				Entrypoints:  entrypoints,
-				Boundaries:   inferBoundaries(hints),
-			}}
-		}
+		repoManifest.CandidateServices = services
 		repos = append(repos, repoManifest)
 	}
 	sort.Slice(repos, func(i, j int) bool {
@@ -90,75 +88,46 @@ func (s Service) Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWor
 	}, nil
 }
 
-func collectGoFiles(root string) []string {
-	return collectFilesByExt(root, ".go")
+type collectedRepoFiles struct {
+	goFiles         []string
+	pythonFiles     []string
+	javascriptFiles []string
+	typeScriptFiles []string
+	configFiles     []string
+	skippedCount    int
 }
 
-func collectFilesByExt(root string, exts ...string) []string {
-	files := []string{}
-	extSet := map[string]struct{}{}
-	for _, ext := range exts {
-		extSet[strings.ToLower(ext)] = struct{}{}
+func collectRepoFiles(root string, policy analysis.IgnorePolicy) (collectedRepoFiles, error) {
+	walkResult, err := adapterfs.Walk(root, policy, nil)
+	if err != nil {
+		return collectedRepoFiles{}, err
 	}
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	result := collectedRepoFiles{skippedCount: walkResult.SkippedEntryCount}
+	for _, entry := range walkResult.Entries {
+		if entry.IsDir {
+			continue
 		}
-		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "vendor" || d.Name() == "node_modules" || d.Name() == "artifacts" || d.Name() == "__pycache__" || d.Name() == ".venv" || d.Name() == ".pytest_cache" {
-				return filepath.SkipDir
-			}
-			return nil
+		rel, _ := filepath.Rel(root, entry.Path)
+		rel = filepath.ToSlash(rel)
+		switch strings.ToLower(filepath.Ext(entry.Path)) {
+		case ".go":
+			result.goFiles = append(result.goFiles, rel)
+		case ".py":
+			result.pythonFiles = append(result.pythonFiles, rel)
+		case ".js", ".jsx", ".mjs", ".cjs":
+			result.javascriptFiles = append(result.javascriptFiles, rel)
+		case ".ts", ".tsx":
+			result.typeScriptFiles = append(result.typeScriptFiles, rel)
 		}
-		if _, ok := extSet[strings.ToLower(filepath.Ext(path))]; ok {
-			rel, _ := filepath.Rel(root, path)
-			files = append(files, rel)
-		}
-		return nil
-	})
-	sort.Strings(files)
-	return files
-}
-
-func collectConfigFiles(root string) []string {
-	files := []string{}
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "vendor" || d.Name() == "node_modules" || d.Name() == "artifacts" || d.Name() == "__pycache__" || d.Name() == ".venv" || d.Name() == ".pytest_cache" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		lower := strings.ToLower(path)
+		lower := strings.ToLower(rel)
 		if strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".json") || strings.HasSuffix(lower, ".toml") || strings.HasSuffix(lower, ".proto") {
-			rel, _ := filepath.Rel(root, path)
-			files = append(files, rel)
-		}
-		return nil
-	})
-	sort.Strings(files)
-	return files
-}
-
-func inferBoundaries(hints []repository.BoundaryHint) []service.BoundaryType {
-	seen := map[service.BoundaryType]struct{}{}
-	for _, hint := range hints {
-		switch hint.Type {
-		case "grpc":
-			seen[service.BoundaryGRPC] = struct{}{}
-		case "http":
-			seen[service.BoundaryHTTP] = struct{}{}
-		case "kafka":
-			seen[service.BoundaryKafka] = struct{}{}
+			result.configFiles = append(result.configFiles, rel)
 		}
 	}
-	result := make([]service.BoundaryType, 0, len(seen))
-	for boundary := range seen {
-		result = append(result, boundary)
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
-	return result
+	sort.Strings(result.goFiles)
+	sort.Strings(result.pythonFiles)
+	sort.Strings(result.javascriptFiles)
+	sort.Strings(result.typeScriptFiles)
+	sort.Strings(result.configFiles)
+	return result, nil
 }
