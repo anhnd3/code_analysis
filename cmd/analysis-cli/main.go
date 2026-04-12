@@ -10,11 +10,15 @@ import (
 	"analysis-module/internal/app/bootstrap"
 	"analysis-module/internal/app/config"
 	"analysis-module/internal/app/logging"
+	"analysis-module/internal/domain/reviewgraph"
 	"analysis-module/internal/workflows/analyze_workspace"
 	"analysis-module/internal/workflows/blast_radius"
 	"analysis-module/internal/workflows/build_review_bundle"
 	"analysis-module/internal/workflows/build_snapshot"
 	"analysis-module/internal/workflows/impacted_tests"
+	"analysis-module/internal/workflows/review_graph_export"
+	"analysis-module/internal/workflows/review_graph_import"
+	"analysis-module/internal/workflows/review_graph_list_startpoints"
 )
 
 func main() {
@@ -24,7 +28,7 @@ func main() {
 		fatal(err)
 	}
 	if len(os.Args) < 2 {
-		fatal(fmt.Errorf("expected subcommand: analyze-workspace | build-snapshot | build-review-bundle | blast-radius | impacted-tests"))
+		fatal(fmt.Errorf("expected subcommand: analyze-workspace | build-snapshot | build-review-bundle | blast-radius | impacted-tests | graph"))
 	}
 	switch os.Args[1] {
 	case "analyze-workspace":
@@ -37,6 +41,8 @@ func main() {
 		runBlastRadius(app, os.Args[2:])
 	case "impacted-tests":
 		runImpactedTests(app, os.Args[2:])
+	case "graph":
+		runGraph(app, os.Args[2:])
 	default:
 		fatal(fmt.Errorf("unknown subcommand: %s", os.Args[1]))
 	}
@@ -126,6 +132,99 @@ func runImpactedTests(app *bootstrap.Application, args []string) {
 		SnapshotID:  *snapshotID,
 		Target:      *target,
 		MaxDepth:    *maxDepth,
+	})
+	if err != nil {
+		fatal(err)
+	}
+	write(result)
+}
+
+func runGraph(app *bootstrap.Application, args []string) {
+	if len(args) == 0 {
+		fatal(fmt.Errorf("expected graph subcommand: import-sqlite | list-startpoints | export-markdown-review"))
+	}
+	switch args[0] {
+	case "import-sqlite":
+		runGraphImportSQLite(app, args[1:])
+	case "list-startpoints":
+		runGraphListStartpoints(app, args[1:])
+	case "export-markdown-review":
+		runGraphExportMarkdownReview(app, args[1:])
+	default:
+		fatal(fmt.Errorf("unknown graph subcommand: %s", args[0]))
+	}
+}
+
+func runGraphImportSQLite(app *bootstrap.Application, args []string) {
+	fs := flag.NewFlagSet("graph import-sqlite", flag.ExitOnError)
+	workspaceID := fs.String("workspace-id", "", "workspace id")
+	snapshotID := fs.String("snapshot-id", "", "snapshot id")
+	nodesPath := fs.String("nodes", "", "legacy graph nodes jsonl path")
+	edgesPath := fs.String("edges", "", "legacy graph edges jsonl path")
+	repoManifestPath := fs.String("repo-manifest", "", "repository manifests json path")
+	serviceManifestPath := fs.String("service-manifest", "", "service manifests json path")
+	qualityReportPath := fs.String("quality-report", "", "quality report json path")
+	ignoreFilePath := fs.String("ignore-file", "", "optional text review ignore file")
+	outDBPath := fs.String("out", "", "review graph sqlite output path")
+	_ = fs.Parse(args)
+	result, err := app.ReviewGraphImport.Run(review_graph_import.Request{
+		WorkspaceID:         *workspaceID,
+		SnapshotID:          *snapshotID,
+		NodesPath:           *nodesPath,
+		EdgesPath:           *edgesPath,
+		RepoManifestPath:    *repoManifestPath,
+		ServiceManifestPath: *serviceManifestPath,
+		QualityReportPath:   *qualityReportPath,
+		IgnoreFilePath:      *ignoreFilePath,
+		OutDBPath:           *outDBPath,
+	})
+	if err != nil {
+		fatal(err)
+	}
+	write(result)
+}
+
+func runGraphListStartpoints(app *bootstrap.Application, args []string) {
+	fs := flag.NewFlagSet("graph list-startpoints", flag.ExitOnError)
+	dbPath := fs.String("db", "", "review graph sqlite path")
+	mode := fs.String("mode", "", "selection mode: manual|entrypoints")
+	symbol := fs.String("symbol", "", "manual symbol selector")
+	file := fs.String("file", "", "manual file selector")
+	topic := fs.String("topic", "", "manual topic selector")
+	outPath := fs.String("out", "", "resolved targets output file")
+	_ = fs.Parse(args)
+	result, err := app.ReviewGraphListStartpoints.Run(review_graph_list_startpoints.Request{
+		DBPath:  *dbPath,
+		Mode:    *mode,
+		Symbol:  *symbol,
+		File:    *file,
+		Topic:   *topic,
+		OutPath: *outPath,
+	})
+	if err != nil {
+		fatal(err)
+	}
+	write(result)
+}
+
+func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
+	fs := flag.NewFlagSet("graph export-markdown-review", flag.ExitOnError)
+	dbPath := fs.String("db", "", "review graph sqlite path")
+	targetsFile := fs.String("targets-file", "", "resolved targets json file")
+	mode := fs.String("mode", string(reviewgraph.TraversalFullFlow), "traversal mode: full-flow|bounded")
+	includeAsync := fs.Bool("include-async", true, "include async traversal")
+	forwardDepth := fs.Int("forward-depth", 2, "bounded forward depth")
+	reverseDepth := fs.Int("reverse-depth", 2, "bounded reverse depth")
+	outDir := fs.String("out", "", "review directory output path")
+	_ = fs.Parse(args)
+	result, err := app.ReviewGraphExport.Run(review_graph_export.Request{
+		DBPath:       *dbPath,
+		TargetsFile:  *targetsFile,
+		Mode:         *mode,
+		IncludeAsync: *includeAsync,
+		ForwardDepth: *forwardDepth,
+		ReverseDepth: *reverseDepth,
+		OutDir:       *outDir,
 	})
 	if err != nil {
 		fatal(err)

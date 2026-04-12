@@ -18,6 +18,11 @@ import (
 	"analysis-module/internal/services/graph_query"
 	"analysis-module/internal/services/quality_report"
 	"analysis-module/internal/services/repo_inventory"
+	"analysis-module/internal/services/reviewgraph_export"
+	"analysis-module/internal/services/reviewgraph_import"
+	"analysis-module/internal/services/reviewgraph_paths"
+	"analysis-module/internal/services/reviewgraph_select"
+	"analysis-module/internal/services/reviewgraph_traverse"
 	"analysis-module/internal/services/review_bundle_packager"
 	"analysis-module/internal/services/snapshot_manage"
 	"analysis-module/internal/services/symbol_index"
@@ -27,6 +32,9 @@ import (
 	"analysis-module/internal/workflows/build_review_bundle"
 	"analysis-module/internal/workflows/build_snapshot"
 	"analysis-module/internal/workflows/impacted_tests"
+	"analysis-module/internal/workflows/review_graph_export"
+	"analysis-module/internal/workflows/review_graph_import"
+	"analysis-module/internal/workflows/review_graph_list_startpoints"
 )
 
 type Application struct {
@@ -37,6 +45,9 @@ type Application struct {
 	BuildReviewBundle build_review_bundle.Workflow
 	BlastRadius       blast_radius.Workflow
 	ImpactedTests     impacted_tests.Workflow
+	ReviewGraphImport review_graph_import.Workflow
+	ReviewGraphListStartpoints review_graph_list_startpoints.Workflow
+	ReviewGraphExport review_graph_export.Workflow
 	HTTPHandler       http.Handler
 }
 
@@ -63,6 +74,11 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	querySvc := graph_query.New(graphStores)
 	blastRadiusWorkflow := blast_radius.New(querySvc, artifactStore)
 	impactedTestsWorkflow := impacted_tests.New(querySvc, artifactStore)
+	reviewGraphPathsSvc := reviewgraph_paths.New(cfg.ArtifactRoot)
+	reviewGraphImportSvc := reviewgraph_import.New(reviewGraphPathsSvc)
+	reviewGraphTraverseSvc := reviewgraph_traverse.New()
+	reviewGraphSelectSvc := reviewgraph_select.New(reviewGraphPathsSvc)
+	reviewGraphExportSvc := reviewgraph_export.New(reviewGraphPathsSvc, reviewGraphTraverseSvc)
 	return &Application{
 		Config:            cfg,
 		Logger:            logger,
@@ -71,6 +87,9 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 		BuildReviewBundle: buildReviewBundleWorkflow,
 		BlastRadius:       blastRadiusWorkflow,
 		ImpactedTests:     impactedTestsWorkflow,
+		ReviewGraphImport: review_graph_import.New(reviewGraphImportSvc),
+		ReviewGraphListStartpoints: review_graph_list_startpoints.New(reviewGraphSelectSvc),
+		ReviewGraphExport: review_graph_export.New(reviewGraphExportSvc),
 		HTTPHandler:       httpapi.New(analyzeWorkflow, buildSnapshotWorkflow, blastRadiusWorkflow, impactedTestsWorkflow),
 	}, nil
 }
