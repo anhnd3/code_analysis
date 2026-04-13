@@ -17,23 +17,28 @@ import (
 )
 
 type Request struct {
-	DBPath       string `json:"db_path"`
-	TargetsFile  string `json:"targets_file"`
-	Mode         string `json:"mode,omitempty"`
-	IncludeAsync bool   `json:"include_async"`
-	ForwardDepth int    `json:"forward_depth,omitempty"`
-	ReverseDepth int    `json:"reverse_depth,omitempty"`
-	OutDir       string `json:"out_dir,omitempty"`
+	DBPath        string `json:"db_path"`
+	TargetsFile   string `json:"targets_file"`
+	Mode          string `json:"mode,omitempty"`
+	RenderMode    string `json:"render_mode,omitempty"`
+	CompanionView string `json:"companion_view,omitempty"`
+	IncludeAsync  bool   `json:"include_async"`
+	ForwardDepth  int    `json:"forward_depth,omitempty"`
+	ReverseDepth  int    `json:"reverse_depth,omitempty"`
+	OutDir        string `json:"out_dir,omitempty"`
 }
 
 type Result struct {
-	DBPath          string   `json:"db_path"`
-	ReviewDir       string   `json:"review_dir"`
-	IndexPath       string   `json:"index_path"`
-	FlowPaths       []string `json:"flow_paths"`
-	ResidualPath    string   `json:"residual_path"`
-	DiagnosticsPath string   `json:"diagnostics_path"`
-	RunManifestPath string   `json:"run_manifest_path"`
+	DBPath              string   `json:"db_path"`
+	ReviewDir           string   `json:"review_dir"`
+	IndexPath           string   `json:"index_path"`
+	FlowPaths           []string `json:"flow_paths"`
+	ThreadsIndexPath    string   `json:"threads_index_path,omitempty"`
+	ThreadOverviewPaths []string `json:"thread_overview_paths,omitempty"`
+	ThreadFocusPaths    []string `json:"thread_focus_paths,omitempty"`
+	ResidualPath        string   `json:"residual_path"`
+	DiagnosticsPath     string   `json:"diagnostics_path"`
+	RunManifestPath     string   `json:"run_manifest_path"`
 }
 
 type Service struct {
@@ -82,10 +87,23 @@ func (s Service) Export(req Request) (Result, error) {
 	if mode != reviewgraph.TraversalFullFlow && mode != reviewgraph.TraversalBounded {
 		return Result{}, fmt.Errorf("unsupported traversal mode: %s", req.Mode)
 	}
+	renderMode := firstNonEmpty(req.RenderMode, "grouped")
+	if renderMode != "grouped" && renderMode != "raw" {
+		return Result{}, fmt.Errorf("unsupported render mode: %s", req.RenderMode)
+	}
+	companionView := firstNonEmpty(req.CompanionView, "all")
+	if companionView != "none" && companionView != "overview" && companionView != "all" {
+		return Result{}, fmt.Errorf("unsupported companion view: %s", req.CompanionView)
+	}
 	reviewDir := firstNonEmpty(req.OutDir, s.paths.ReviewDirFromDBPath(req.DBPath))
 	flowsDir := filepath.Join(reviewDir, "flows")
+	threadsDir := filepath.Join(reviewDir, "threads")
 	summariesDir := filepath.Join(reviewDir, "summaries")
-	for _, dir := range []string{reviewDir, flowsDir, summariesDir} {
+	dirs := []string{reviewDir, flowsDir, summariesDir}
+	if companionView != "none" {
+		dirs = append(dirs, threadsDir)
+	}
+	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return Result{}, err
 		}
@@ -96,6 +114,9 @@ func (s Service) Export(req Request) (Result, error) {
 	importManifest := findImportManifest(artifacts)
 	caps := reviewgraph.DefaultTraversalCaps()
 	flowPaths := []string{}
+	threadOverviewPaths := []string{}
+	threadFocusPaths := []string{}
+	threadEntries := []threadArtifactEntry{}
 	slugCounts := map[string]int{}
 	unionNodes := map[string]struct{}{}
 	unionEdges := map[string]struct{}{}
@@ -118,7 +139,7 @@ func (s Service) Export(req Request) (Result, error) {
 		slugCounts[slug]++
 		flowPath := filepath.Join(flowsDir, fmt.Sprintf("%02d_%s.md", index+1, slug))
 		relatedDiagnostics := filterDiagnostics(importManifest.Diagnostics, result.AffectedFiles)
-		content := renderFlowMarkdown(index+1, target, targetNode, result, relatedDiagnostics)
+		content := renderFlowMarkdown(index+1, target, targetNode, result, relatedDiagnostics, nodeByID, renderMode)
 		if err := os.WriteFile(flowPath, []byte(content), 0o644); err != nil {
 			return Result{}, err
 		}
@@ -133,9 +154,49 @@ func (s Service) Export(req Request) (Result, error) {
 		}); err != nil {
 			return Result{}, err
 		}
+		if companionView != "none" {
+			threadDir := filepath.Join(threadsDir, fmt.Sprintf("%02d_%s", index+1, slug))
+			companionResult, err := exportThreadCompanionFiles(threadDir, reviewDir, flowPath, index+1, target, targetNode, result, nodeByID, companionView)
+			if err != nil {
+				return Result{}, err
+			}
+			if companionResult.OverviewPath != "" {
+				threadOverviewPaths = append(threadOverviewPaths, companionResult.OverviewPath)
+				if err := store.UpsertArtifact(reviewgraph.Artifact{
+					ID:           reviewgraph.ArtifactID(reviewgraph.ArtifactReviewThreadOverview, target.TargetNodeID, companionResult.OverviewPath),
+					SnapshotID:   snapshotID,
+					ArtifactType: reviewgraph.ArtifactReviewThreadOverview,
+					TargetNodeID: target.TargetNodeID,
+					Path:         companionResult.OverviewPath,
+					MetadataJSON: reviewsqlite.EncodeJSON(map[string]any{"index": index + 1, "slug": slug}),
+				}); err != nil {
+					return Result{}, err
+				}
+			}
+			for _, focus := range companionResult.FocusFiles {
+				threadFocusPaths = append(threadFocusPaths, focus.Path)
+				if err := store.UpsertArtifact(reviewgraph.Artifact{
+					ID:           reviewgraph.ArtifactID(reviewgraph.ArtifactReviewThreadFocus, target.TargetNodeID, focus.Path),
+					SnapshotID:   snapshotID,
+					ArtifactType: reviewgraph.ArtifactReviewThreadFocus,
+					TargetNodeID: target.TargetNodeID,
+					Path:         focus.Path,
+					MetadataJSON: reviewsqlite.EncodeJSON(map[string]any{"bucket_id": focus.BucketID, "bucket_kind": focus.Kind, "bucket_label": focus.Label}),
+				}); err != nil {
+					return Result{}, err
+				}
+			}
+			threadEntries = append(threadEntries, threadArtifactEntry{
+				Target:       target,
+				FlowPath:     flowPath,
+				OverviewPath: companionResult.OverviewPath,
+				FocusFiles:   companionResult.FocusFiles,
+			})
+		}
 	}
 
 	indexPath := filepath.Join(reviewDir, "00_index.md")
+	threadsIndexPath := ""
 	residualPath := filepath.Join(summariesDir, "98_orphans_and_residuals.md")
 	diagnosticsPath := filepath.Join(summariesDir, "99_diagnostics.md")
 	runManifestPath := filepath.Join(reviewDir, "run_manifest.json")
@@ -144,7 +205,23 @@ func (s Service) Export(req Request) (Result, error) {
 	qualityReport := buildQualityReport(importManifest)
 	diagnosticsContent := renderDiagnosticsMarkdown(importManifest, qualityReport, len(unionNodes), len(unionEdges))
 	residualContent := renderResidualMarkdown(residualGroups)
-	indexContent := renderIndexMarkdown(snapshotID, nodes, edges, flowPaths, len(targets), unionNodes, unionEdges, residualGroups, importManifest, qualityReport)
+	if companionView != "none" {
+		threadsIndexPath = filepath.Join(threadsDir, "00_index.md")
+		threadsIndexContent := renderThreadIndexMarkdown(snapshotID, reviewDir, threadsDir, threadEntries)
+		if err := os.WriteFile(threadsIndexPath, []byte(threadsIndexContent), 0o644); err != nil {
+			return Result{}, err
+		}
+		if err := store.UpsertArtifact(reviewgraph.Artifact{
+			ID:           reviewgraph.ArtifactID(reviewgraph.ArtifactReviewThreadIndex, "", threadsIndexPath),
+			SnapshotID:   snapshotID,
+			ArtifactType: reviewgraph.ArtifactReviewThreadIndex,
+			Path:         threadsIndexPath,
+			MetadataJSON: reviewsqlite.EncodeJSON(map[string]any{"count": len(threadEntries)}),
+		}); err != nil {
+			return Result{}, err
+		}
+	}
+	indexContent := renderIndexMarkdown(snapshotID, reviewDir, indexPath, threadsIndexPath, nodes, edges, flowPaths, len(targets), unionNodes, unionEdges, residualGroups, importManifest, qualityReport)
 
 	if err := os.WriteFile(indexPath, []byte(indexContent), 0o644); err != nil {
 		return Result{}, err
@@ -197,6 +274,9 @@ func (s Service) Export(req Request) (Result, error) {
 		ReviewDir:       reviewDir,
 		IndexPath:       indexPath,
 		FlowPaths:       flowPaths,
+		ThreadsIndexPath: threadsIndexPath,
+		ThreadOverviewPaths: threadOverviewPaths,
+		ThreadFocusPaths: threadFocusPaths,
 		ResidualPath:    residualPath,
 		DiagnosticsPath: diagnosticsPath,
 		RunManifestPath: runManifestPath,

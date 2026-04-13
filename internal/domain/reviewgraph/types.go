@@ -17,12 +17,16 @@ const (
 	NodeModule        NodeKind = "module"
 	NodeFile          NodeKind = "file"
 	NodeService       NodeKind = "service"
+	NodeWorkflow      NodeKind = "workflow"
+	NodeContainer     NodeKind = "container"
 	NodeHTTPEndpoint  NodeKind = "http_endpoint"
 	NodeGRPCMethod    NodeKind = "grpc_method"
 	NodeEventTopic    NodeKind = "event_topic"
 	NodePubSubChannel NodeKind = "pubsub_channel"
 	NodeQueue         NodeKind = "queue"
 	NodeSchedulerJob  NodeKind = "scheduler_job"
+	NodeAsyncTask     NodeKind = "async_task"
+	NodeInProcChannel NodeKind = "inproc_channel"
 
 	RoleNormal        NodeRole = "normal"
 	RoleEntrypoint    NodeRole = "entrypoint"
@@ -45,6 +49,16 @@ const (
 	EdgeDequeuesJob       EdgeType = "DEQUEUES_JOB"
 	EdgeSchedulesTask     EdgeType = "SCHEDULES_TASK"
 	EdgeTriggersHTTP      EdgeType = "TRIGGERS_HTTP"
+	EdgeSpawnsAsync       EdgeType = "SPAWNS_ASYNC"
+	EdgeRunsAsync         EdgeType = "RUNS_ASYNC"
+	EdgeSendsToChannel    EdgeType = "SENDS_TO_CHANNEL"
+	EdgeReceivesFromChannel EdgeType = "RECEIVES_FROM_CHANNEL"
+	EdgeContains          EdgeType = "CONTAINS"
+	EdgeBelongsToContainer EdgeType = "BELONGS_TO_CONTAINER"
+	EdgeEntrypointFor     EdgeType = "ENTRYPOINT_FOR"
+	EdgeOrchestrates      EdgeType = "ORCHESTRATES"
+	EdgeUsesSharedHelper  EdgeType = "USES_SHARED_HELPER"
+	EdgeCollapsesHelper   EdgeType = "COLLAPSES_HELPER"
 
 	FlowSync  FlowKind = "sync"
 	FlowAsync FlowKind = "async"
@@ -53,9 +67,15 @@ const (
 	ArtifactResolvedTargets ArtifactType = "resolved_targets"
 	ArtifactReviewFlow      ArtifactType = "review_flow"
 	ArtifactReviewIndex     ArtifactType = "review_index"
+	ArtifactReviewThreadIndex ArtifactType = "review_thread_index"
+	ArtifactReviewThreadOverview ArtifactType = "review_thread_overview"
+	ArtifactReviewThreadFocus ArtifactType = "review_thread_focus"
 	ArtifactResidualSummary ArtifactType = "review_residuals"
 	ArtifactDiagnostics     ArtifactType = "review_diagnostics"
 	ArtifactRunManifest     ArtifactType = "run_manifest"
+	ArtifactLayeringPlan    ArtifactType = "layering_plan"
+	ArtifactLayeredTargets  ArtifactType = "layered_targets"
+	ArtifactLayeringCompare ArtifactType = "layering_compare"
 
 	TraversalFullFlow TraversalMode = "full-flow"
 	TraversalBounded  TraversalMode = "bounded"
@@ -64,6 +84,7 @@ const (
 const (
 	ImporterVersion       = "review-graph-importer/v1"
 	AsyncHeuristicVersion = "async-heuristics/v1"
+	AsyncV2Version        = "async-v2"
 )
 
 type Node struct {
@@ -257,7 +278,7 @@ func IsStructuralEdge(edgeType EdgeType) bool {
 
 func IsAsyncEdge(edgeType EdgeType) bool {
 	switch edgeType {
-	case EdgeEmitsEvent, EdgeConsumesEvent, EdgePublishesMessage, EdgeSubscribesMessage, EdgeEnqueuesJob, EdgeDequeuesJob, EdgeSchedulesTask, EdgeTriggersHTTP:
+	case EdgeEmitsEvent, EdgeConsumesEvent, EdgePublishesMessage, EdgeSubscribesMessage, EdgeEnqueuesJob, EdgeDequeuesJob, EdgeSchedulesTask, EdgeTriggersHTTP, EdgeSpawnsAsync, EdgeRunsAsync, EdgeSendsToChannel, EdgeReceivesFromChannel:
 		return true
 	default:
 		return false

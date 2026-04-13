@@ -67,6 +67,9 @@ func TestReviewGraphImportCreatesTopicNodesFromConfig(t *testing.T) {
 	if filepath.Base(result.DBPath) != "review_graph.sqlite" {
 		t.Fatalf("expected default review graph db name, got %s", result.DBPath)
 	}
+	if result.Manifest.AsyncVersion != reviewgraph.AsyncV2Version {
+		t.Fatalf("expected async version %q, got %q", reviewgraph.AsyncV2Version, result.Manifest.AsyncVersion)
+	}
 	store, err := reviewsqlite.New(result.DBPath)
 	if err != nil {
 		t.Fatalf("open review db: %v", err)

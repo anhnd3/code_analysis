@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+GO_BIN="${GO_BIN:-go}"
+
+if ! "$GO_BIN" version >/dev/null 2>&1; then
+	echo "error: go is required to run the test report (set GO_BIN if go is installed outside PATH)" >&2
+	exit 1
+fi
+
 timestamp="$(date -u +%Y%m%d_%H%M%S)"
 out_dir="${1:-$ROOT_DIR/artifacts/test_reports/$timestamp}"
 
@@ -21,7 +28,7 @@ printf 'module\tfiles\tcovered_statements\ttotal_statements\tcoverage_percent\n'
 printf 'module\tfile\tcovered_statements\ttotal_statements\tcoverage_percent\n' > "$file_coverage_file"
 
 set +e
-go test -mod=mod -json -covermode=atomic -coverpkg=./... -coverprofile="$coverage_file" ./... > "$json_file"
+"$GO_BIN" test -mod=mod -json -covermode=atomic -coverpkg=./... -coverprofile="$coverage_file" ./... > "$json_file"
 test_exit=$?
 set -e
 
@@ -67,7 +74,7 @@ total_statements="0"
 module_count="0"
 file_count="0"
 if [[ -f "$coverage_file" ]]; then
-	go tool cover -html="$coverage_file" -o "$coverage_html_file"
+	"$GO_BIN" tool cover -html="$coverage_file" -o "$coverage_html_file"
 	module_raw="$out_dir/module-coverage.raw.tsv"
 	file_raw="$out_dir/file-coverage.raw.tsv"
 

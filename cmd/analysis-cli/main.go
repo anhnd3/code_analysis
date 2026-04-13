@@ -212,6 +212,8 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	dbPath := fs.String("db", "", "review graph sqlite path")
 	targetsFile := fs.String("targets-file", "", "resolved targets json file")
 	mode := fs.String("mode", string(reviewgraph.TraversalFullFlow), "traversal mode: full-flow|bounded")
+	renderMode := fs.String("render-mode", "grouped", "render mode: grouped|raw")
+	companionView := fs.String("companion-view", "all", "companion view generation: none|overview|all")
 	includeAsync := fs.Bool("include-async", true, "include async traversal")
 	forwardDepth := fs.Int("forward-depth", 2, "bounded forward depth")
 	reverseDepth := fs.Int("reverse-depth", 2, "bounded reverse depth")
@@ -221,6 +223,8 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 		DBPath:       *dbPath,
 		TargetsFile:  *targetsFile,
 		Mode:         *mode,
+		RenderMode:   *renderMode,
+		CompanionView: *companionView,
 		IncludeAsync: *includeAsync,
 		ForwardDepth: *forwardDepth,
 		ReverseDepth: *reverseDepth,

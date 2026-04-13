@@ -39,6 +39,14 @@ func SchedulerJobNodeID(scope, job string) string {
 	return fmt.Sprintf("scheduler_job:%s:%s", safeIDPart(scope), safeIDPart(job))
 }
 
+func AsyncTaskNodeID(scope, target string) string {
+	return fmt.Sprintf("async_task:%s:%s", safeIDPart(scope), safeIDPart(target))
+}
+
+func InProcChannelNodeID(scope, channel string) string {
+	return fmt.Sprintf("inproc_channel:%s:%s", safeIDPart(scope), safeIDPart(channel))
+}
+
 func EdgeID(srcID string, edgeType EdgeType, dstID string) string {
 	return fmt.Sprintf("%s->%s->%s", srcID, edgeType, dstID)
 }
@@ -59,6 +67,18 @@ func EdgeIDWithEvidence(srcID string, edgeType EdgeType, dstID string, discrimin
 
 func ArtifactID(artifactType ArtifactType, targetNodeID, path string) string {
 	return fmt.Sprintf("artifact:%s:%s", artifactType, ids.StableSuffix(targetNodeID, path))
+}
+
+func DerivedNodeID(snapshotID, anchorTargetID string, kind NodeKind, subtype, label string) string {
+	return fmt.Sprintf("derived_node:%s", ids.StableSuffix(snapshotID, anchorTargetID, string(kind), subtype, label))
+}
+
+func DerivedEdgeID(snapshotID, anchorTargetID, srcID string, edgeType EdgeType, dstID string) string {
+	return fmt.Sprintf("derived_edge:%s", ids.StableSuffix(snapshotID, anchorTargetID, srcID, string(edgeType), dstID))
+}
+
+func SourceFingerprint(filePath string, startLine, endLine int, contents string) string {
+	return ids.StableSuffix(filePath, fmt.Sprintf("%d", startLine), fmt.Sprintf("%d", endLine), contents)
 }
 
 func FlowSlug(raw string) string {

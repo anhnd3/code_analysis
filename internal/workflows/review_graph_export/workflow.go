@@ -3,13 +3,15 @@ package review_graph_export
 import "analysis-module/internal/services/reviewgraph_export"
 
 type Request struct {
-	DBPath       string `json:"db_path"`
-	TargetsFile  string `json:"targets_file"`
-	Mode         string `json:"mode,omitempty"`
-	IncludeAsync bool   `json:"include_async"`
-	ForwardDepth int    `json:"forward_depth,omitempty"`
-	ReverseDepth int    `json:"reverse_depth,omitempty"`
-	OutDir       string `json:"out_dir,omitempty"`
+	DBPath        string `json:"db_path"`
+	TargetsFile   string `json:"targets_file"`
+	Mode          string `json:"mode,omitempty"`
+	RenderMode    string `json:"render_mode,omitempty"`
+	CompanionView string `json:"companion_view,omitempty"`
+	IncludeAsync  bool   `json:"include_async"`
+	ForwardDepth  int    `json:"forward_depth,omitempty"`
+	ReverseDepth  int    `json:"reverse_depth,omitempty"`
+	OutDir        string `json:"out_dir,omitempty"`
 }
 
 type Result = reviewgraph_export.Result

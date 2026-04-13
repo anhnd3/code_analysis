@@ -189,7 +189,7 @@ func (s Service) Import(req Request) (Result, error) {
 		IgnoreRules:     ignoreRules.AllPatterns(),
 		Counts:          b.counts,
 		Diagnostics:     b.diagnostics,
-		AsyncVersion:    reviewgraph.AsyncHeuristicVersion,
+		AsyncVersion:    reviewgraph.AsyncV2Version,
 		Metadata: map[string]any{
 			"quality_report_issue_counts": qualityReport.IssueCounts,
 			"quality_report_gaps":         qualityReport.Gaps,
@@ -485,7 +485,7 @@ func (b *builder) inferNodeRoles(legacyNode legacygraph.Node, node reviewgraph.N
 		}
 	}
 	switch node.Kind {
-	case reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod, reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
+	case reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod, reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
 		roles = append(roles, reviewgraph.RoleBoundary)
 	}
 	return dedupeRoles(roles)

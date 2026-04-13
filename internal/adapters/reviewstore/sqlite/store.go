@@ -56,6 +56,12 @@ func (s *Store) ReplaceSnapshot(snapshotID string, nodes []reviewgraph.Node, edg
 	if _, err := tx.Exec(`delete from artifacts where snapshot_id = ?`, snapshotID); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`delete from derived_edges where snapshot_id = ?`, snapshotID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`delete from derived_nodes where snapshot_id = ?`, snapshotID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`delete from edges where snapshot_id = ?`, snapshotID); err != nil {
 		return err
 	}
@@ -104,6 +110,41 @@ func (s *Store) UpsertArtifact(artifact reviewgraph.Artifact) error {
 	on conflict(id) do update set snapshot_id = excluded.snapshot_id, artifact_type = excluded.artifact_type, target_node_id = excluded.target_node_id, path = excluded.path, metadata_json = excluded.metadata_json`,
 		artifact.ID, artifact.SnapshotID, string(artifact.ArtifactType), artifact.TargetNodeID, artifact.Path, artifact.MetadataJSON)
 	return err
+}
+
+func (s *Store) ReplaceDerivedForAnchor(snapshotID, anchorTargetID string, nodes []reviewgraph.DerivedNode, edges []reviewgraph.DerivedEdge) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`delete from derived_edges where snapshot_id = ? and anchor_target_id = ?`, snapshotID, anchorTargetID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`delete from derived_nodes where snapshot_id = ? and anchor_target_id = ?`, snapshotID, anchorTargetID); err != nil {
+		return err
+	}
+	nodeStmt, err := tx.Prepare(`insert into derived_nodes(id, snapshot_id, anchor_target_id, kind, label, metadata_json) values(?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer nodeStmt.Close()
+	for _, node := range nodes {
+		if _, err := nodeStmt.Exec(node.ID, node.SnapshotID, node.AnchorTargetID, string(node.Kind), node.Label, node.MetadataJSON); err != nil {
+			return err
+		}
+	}
+	edgeStmt, err := tx.Prepare(`insert into derived_edges(id, snapshot_id, anchor_target_id, src_id, dst_id, edge_type, metadata_json) values(?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer edgeStmt.Close()
+	for _, edge := range edges {
+		if _, err := edgeStmt.Exec(edge.ID, edge.SnapshotID, edge.AnchorTargetID, edge.SrcID, edge.DstID, string(edge.EdgeType), edge.MetadataJSON); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) SnapshotID() (string, error) {
@@ -168,6 +209,44 @@ func (s *Store) ListArtifacts() ([]reviewgraph.Artifact, error) {
 		}
 		artifact.ArtifactType = reviewgraph.ArtifactType(artifactType)
 		result = append(result, artifact)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) ListDerivedNodesByAnchor(anchorTargetID string) ([]reviewgraph.DerivedNode, error) {
+	rows, err := s.db.Query(`select id, snapshot_id, anchor_target_id, kind, label, metadata_json from derived_nodes where anchor_target_id = ? order by kind, label, id`, anchorTargetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []reviewgraph.DerivedNode{}
+	for rows.Next() {
+		var node reviewgraph.DerivedNode
+		var kind string
+		if err := rows.Scan(&node.ID, &node.SnapshotID, &node.AnchorTargetID, &kind, &node.Label, &node.MetadataJSON); err != nil {
+			return nil, err
+		}
+		node.Kind = reviewgraph.NodeKind(kind)
+		result = append(result, node)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) ListDerivedEdgesByAnchor(anchorTargetID string) ([]reviewgraph.DerivedEdge, error) {
+	rows, err := s.db.Query(`select id, snapshot_id, anchor_target_id, src_id, dst_id, edge_type, metadata_json from derived_edges where anchor_target_id = ? order by edge_type, src_id, dst_id, id`, anchorTargetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []reviewgraph.DerivedEdge{}
+	for rows.Next() {
+		var edge reviewgraph.DerivedEdge
+		var edgeType string
+		if err := rows.Scan(&edge.ID, &edge.SnapshotID, &edge.AnchorTargetID, &edge.SrcID, &edge.DstID, &edgeType, &edge.MetadataJSON); err != nil {
+			return nil, err
+		}
+		edge.EdgeType = reviewgraph.EdgeType(edgeType)
+		result = append(result, edge)
 	}
 	return result, rows.Err()
 }
@@ -251,11 +330,35 @@ func (s *Store) FindArtifactsByType(artifactType reviewgraph.ArtifactType) ([]re
 	return result, rows.Err()
 }
 
+func (s *Store) FindArtifactByTypeAndTarget(artifactType reviewgraph.ArtifactType, targetNodeID string) (reviewgraph.Artifact, error) {
+	row := s.db.QueryRow(`select id, snapshot_id, artifact_type, target_node_id, path, metadata_json from artifacts where artifact_type = ? and target_node_id = ? limit 1`, string(artifactType), targetNodeID)
+	var artifact reviewgraph.Artifact
+	var rawType string
+	if err := row.Scan(&artifact.ID, &artifact.SnapshotID, &rawType, &artifact.TargetNodeID, &artifact.Path, &artifact.MetadataJSON); err != nil {
+		return reviewgraph.Artifact{}, err
+	}
+	artifact.ArtifactType = reviewgraph.ArtifactType(rawType)
+	return artifact, nil
+}
+
+func (s *Store) FindArtifactByTypeAndPath(artifactType reviewgraph.ArtifactType, path string) (reviewgraph.Artifact, error) {
+	row := s.db.QueryRow(`select id, snapshot_id, artifact_type, target_node_id, path, metadata_json from artifacts where artifact_type = ? and path = ? limit 1`, string(artifactType), filepath.Clean(path))
+	var artifact reviewgraph.Artifact
+	var rawType string
+	if err := row.Scan(&artifact.ID, &artifact.SnapshotID, &rawType, &artifact.TargetNodeID, &artifact.Path, &artifact.MetadataJSON); err != nil {
+		return reviewgraph.Artifact{}, err
+	}
+	artifact.ArtifactType = reviewgraph.ArtifactType(rawType)
+	return artifact, nil
+}
+
 func (s *Store) migrate() error {
 	statements := []string{
 		`create table if not exists nodes(id text primary key, snapshot_id text not null, repo text not null, service text, language text not null, kind text not null, symbol text not null, file_path text not null, start_line integer, end_line integer, signature text, visibility text, node_role text, metadata_json text)`,
 		`create table if not exists edges(id text primary key, snapshot_id text not null, src_id text not null, dst_id text not null, edge_type text not null, flow_kind text not null, confidence real, evidence_file text, evidence_line integer, evidence_text text, transport text, topic_or_channel text, metadata_json text)`,
 		`create table if not exists artifacts(id text primary key, snapshot_id text not null, artifact_type text not null, target_node_id text, path text not null, metadata_json text)`,
+		`create table if not exists derived_nodes(id text primary key, snapshot_id text not null, anchor_target_id text not null, kind text not null, label text not null, metadata_json text not null)`,
+		`create table if not exists derived_edges(id text primary key, snapshot_id text not null, anchor_target_id text not null, src_id text not null, dst_id text not null, edge_type text not null, metadata_json text not null)`,
 		`create index if not exists idx_review_nodes_symbol on nodes(symbol)`,
 		`create index if not exists idx_review_nodes_file_path on nodes(file_path)`,
 		`create index if not exists idx_review_nodes_service on nodes(service)`,
@@ -265,6 +368,12 @@ func (s *Store) migrate() error {
 		`create index if not exists idx_review_edges_type on edges(edge_type)`,
 		`create index if not exists idx_review_edges_flow on edges(flow_kind)`,
 		`create index if not exists idx_review_edges_topic on edges(topic_or_channel)`,
+		`create index if not exists idx_review_derived_nodes_snapshot on derived_nodes(snapshot_id)`,
+		`create index if not exists idx_review_derived_nodes_anchor on derived_nodes(anchor_target_id)`,
+		`create index if not exists idx_review_derived_edges_snapshot on derived_edges(snapshot_id)`,
+		`create index if not exists idx_review_derived_edges_anchor on derived_edges(anchor_target_id)`,
+		`create index if not exists idx_review_derived_edges_src on derived_edges(src_id)`,
+		`create index if not exists idx_review_derived_edges_dst on derived_edges(dst_id)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {

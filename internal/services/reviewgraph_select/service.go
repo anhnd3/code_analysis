@@ -189,7 +189,7 @@ func resolveByTopic(nodes []reviewgraph.Node, raw string) []reviewgraph.Resolved
 	result := []reviewgraph.ResolvedTarget{}
 	for _, node := range nodes {
 		switch node.Kind {
-		case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
+		case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
 		default:
 			continue
 		}
@@ -211,12 +211,14 @@ func entrypointTargets(nodes []reviewgraph.Node) []reviewgraph.ResolvedTarget {
 	for _, node := range nodes {
 		switch node.NodeRole {
 		case reviewgraph.RoleEntrypoint, reviewgraph.RoleAsyncProducer, reviewgraph.RoleAsyncConsumer, reviewgraph.RoleScheduler:
-			result = append(result, reviewgraph.ResolvedTarget{
-				TargetNodeID: node.ID,
-				DisplayName:  node.Symbol,
-				Reason:       "entrypoint_scan",
-				SourceInput:  string(node.NodeRole),
-			})
+			if isEntrypointTargetNode(node) {
+				result = append(result, reviewgraph.ResolvedTarget{
+					TargetNodeID: node.ID,
+					DisplayName:  node.Symbol,
+					Reason:       "entrypoint_scan",
+					SourceInput:  string(node.NodeRole),
+				})
+			}
 		}
 		switch node.Kind {
 		case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
@@ -229,8 +231,10 @@ func entrypointTargets(nodes []reviewgraph.Node) []reviewgraph.ResolvedTarget {
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
-		if result[i].Reason != result[j].Reason {
-			return result[i].Reason < result[j].Reason
+		left := targetPriority(result[i], nodes)
+		right := targetPriority(result[j], nodes)
+		if left != right {
+			return left < right
 		}
 		return result[i].DisplayName < result[j].DisplayName
 	})
@@ -252,11 +256,37 @@ func fileAnchorPriority(node reviewgraph.Node) int {
 
 func isManualAnchorNode(node reviewgraph.Node) bool {
 	switch node.Kind {
-	case reviewgraph.NodeFunction, reviewgraph.NodeMethod, reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod, reviewgraph.NodeFile, reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
+	case reviewgraph.NodeFunction, reviewgraph.NodeMethod, reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod, reviewgraph.NodeFile, reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
 		return true
 	default:
 		return false
 	}
+}
+
+func isEntrypointTargetNode(node reviewgraph.Node) bool {
+	switch node.Kind {
+	case reviewgraph.NodeFunction, reviewgraph.NodeMethod, reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod:
+		return true
+	default:
+		return false
+	}
+}
+
+func targetPriority(target reviewgraph.ResolvedTarget, nodes []reviewgraph.Node) int {
+	for _, node := range nodes {
+		if node.ID != target.TargetNodeID {
+			continue
+		}
+		switch node.Kind {
+		case reviewgraph.NodeFunction, reviewgraph.NodeMethod, reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod:
+			return 0
+		case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
+			return 1
+		default:
+			return 2
+		}
+	}
+	return 3
 }
 
 func dedupeTargets(targets []reviewgraph.ResolvedTarget) []reviewgraph.ResolvedTarget {

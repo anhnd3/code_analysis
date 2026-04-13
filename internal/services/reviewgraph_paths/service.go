@@ -16,6 +16,7 @@ type ResolvedPaths struct {
 	ReviewGraphDBPath      string
 	ReviewDir              string
 	ResolvedTargetsPath    string
+	LayeringDir            string
 }
 
 type Service struct {
@@ -46,6 +47,7 @@ func (s Service) Resolve(workspaceID, snapshotID string) (ResolvedPaths, error) 
 		ReviewGraphDBPath:      filepath.Join(snapshotBase, "sqlite", "review_graph.sqlite"),
 		ReviewDir:              reviewDir,
 		ResolvedTargetsPath:    filepath.Join(reviewDir, "resolved_targets.json"),
+		LayeringDir:            filepath.Join(reviewDir, "layering"),
 	}, nil
 }
 
@@ -56,4 +58,12 @@ func (s Service) ReviewDirFromDBPath(dbPath string) string {
 		return filepath.Join(filepath.Dir(parent), "review")
 	}
 	return filepath.Join(filepath.Dir(clean), "review")
+}
+
+func (s Service) TargetsFileFromDBPath(dbPath string) string {
+	return filepath.Join(s.ReviewDirFromDBPath(dbPath), "resolved_targets.json")
+}
+
+func (s Service) LayeringRootFromDBPath(dbPath string) string {
+	return filepath.Join(s.ReviewDirFromDBPath(dbPath), "layering")
 }

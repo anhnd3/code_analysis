@@ -213,13 +213,13 @@ func (s *traversalState) expandAsync(targetID string, forwardDepth, reverseDepth
 		consumerEdges := []reviewgraph.Edge{}
 		for _, edge := range s.graph.IncomingAsync[bridgeID] {
 			switch edge.EdgeType {
-			case reviewgraph.EdgeEmitsEvent, reviewgraph.EdgePublishesMessage, reviewgraph.EdgeEnqueuesJob, reviewgraph.EdgeSchedulesTask:
+			case reviewgraph.EdgeEmitsEvent, reviewgraph.EdgePublishesMessage, reviewgraph.EdgeEnqueuesJob, reviewgraph.EdgeSchedulesTask, reviewgraph.EdgeSpawnsAsync, reviewgraph.EdgeSendsToChannel:
 				producerEdges = append(producerEdges, edge)
 			}
 		}
 		for _, edge := range s.graph.OutgoingAsync[bridgeID] {
 			switch edge.EdgeType {
-			case reviewgraph.EdgeConsumesEvent, reviewgraph.EdgeSubscribesMessage, reviewgraph.EdgeDequeuesJob:
+			case reviewgraph.EdgeConsumesEvent, reviewgraph.EdgeSubscribesMessage, reviewgraph.EdgeDequeuesJob, reviewgraph.EdgeRunsAsync, reviewgraph.EdgeReceivesFromChannel:
 				consumerEdges = append(consumerEdges, edge)
 			}
 		}
@@ -320,7 +320,7 @@ func (s *traversalState) recordCycle(path []string) {
 			services[node.Service] = struct{}{}
 		}
 		switch node.Kind {
-		case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
+		case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
 			asyncBoundary = true
 		}
 	}
@@ -421,7 +421,7 @@ func contains(values []string, target string) bool {
 
 func isBridgeKind(kind reviewgraph.NodeKind) bool {
 	switch kind {
-	case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob:
+	case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
 		return true
 	default:
 		return false
@@ -435,11 +435,17 @@ func limitAsyncEdges(edges []reviewgraph.Edge, limit int) []reviewgraph.Edge {
 	return edges[:limit]
 }
 
-func transportForBridge(producers, consumers []reviewgraph.Edge, _ reviewgraph.Node) string {
+func transportForBridge(producers, consumers []reviewgraph.Edge, bridge reviewgraph.Node) string {
 	for _, edge := range append(append([]reviewgraph.Edge{}, producers...), consumers...) {
 		if edge.Transport != "" {
 			return edge.Transport
 		}
+	}
+	switch bridge.Kind {
+	case reviewgraph.NodeAsyncTask:
+		return "inproc_async"
+	case reviewgraph.NodeInProcChannel:
+		return "inproc_channel"
 	}
 	return ""
 }

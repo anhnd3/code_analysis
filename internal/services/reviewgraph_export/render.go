@@ -10,7 +10,62 @@ import (
 	"analysis-module/internal/domain/reviewgraph"
 )
 
-func renderFlowMarkdown(index int, target reviewgraph.ResolvedTarget, node reviewgraph.Node, result reviewgraph.TraversalResult, diagnostics []reviewgraph.ImportDiagnostic) string {
+type treeStep struct {
+	Key   string
+	Label string
+}
+
+type groupedTreeNode struct {
+	Key      string
+	Label    string
+	Children map[string]*groupedTreeNode
+	Markers  map[string]struct{}
+}
+
+type renderContext struct {
+	fileLabel  string
+	classLabel string
+}
+
+func renderFlowMarkdown(index int, target reviewgraph.ResolvedTarget, node reviewgraph.Node, result reviewgraph.TraversalResult, diagnostics []reviewgraph.ImportDiagnostic, nodeByID map[string]reviewgraph.Node, renderMode string) string {
+	if renderMode == "raw" {
+		return renderFlowMarkdownRaw(index, target, node, result, diagnostics)
+	}
+	return renderFlowMarkdownGrouped(index, target, node, result, diagnostics, nodeByID)
+}
+
+func renderFlowMarkdownGrouped(index int, target reviewgraph.ResolvedTarget, node reviewgraph.Node, result reviewgraph.TraversalResult, diagnostics []reviewgraph.ImportDiagnostic, nodeByID map[string]reviewgraph.Node) string {
+	builder := &strings.Builder{}
+	fmt.Fprintf(builder, "# Impact Review\n")
+	fmt.Fprintf(builder, "Target: `%s`\n", target.DisplayName)
+	fmt.Fprintf(builder, "Reason: `%s`\n", target.Reason)
+	fmt.Fprintf(builder, "Flow Scope: `%s`\n\n", result.Mode)
+
+	builder.WriteString("## 1. Synchronous Flow\n")
+	writeGroupedPaths(builder, "Upstream", result.SyncUpstreamPaths, nodeByID)
+	writeGroupedPaths(builder, "Downstream", result.SyncDownstreamPaths, nodeByID)
+
+	builder.WriteString("\n## 2. Asynchronous Flow\n")
+	writeGroupedAsync(builder, result.AsyncBridges, nodeByID)
+
+	builder.WriteString("\n## 3. Affected Files\n")
+	writeAffectedFiles(builder, result.AffectedFiles)
+
+	builder.WriteString("\n## 4. Cross-Service Risk\n")
+	writeCrossServices(builder, result.CrossServices)
+
+	builder.WriteString("\n## 5. Ambiguities\n")
+	writeAmbiguities(builder, result.Ambiguities, diagnostics)
+
+	builder.WriteString("\n## 6. Flow Coverage\n")
+	writeCoverage(builder, result)
+
+	_ = index
+	_ = node
+	return builder.String()
+}
+
+func renderFlowMarkdownRaw(index int, target reviewgraph.ResolvedTarget, node reviewgraph.Node, result reviewgraph.TraversalResult, diagnostics []reviewgraph.ImportDiagnostic) string {
 	builder := &strings.Builder{}
 	fmt.Fprintf(builder, "# Impact Review\n")
 	fmt.Fprintf(builder, "Target: `%s`\n", target.DisplayName)
@@ -20,6 +75,7 @@ func renderFlowMarkdown(index int, target reviewgraph.ResolvedTarget, node revie
 	builder.WriteString("## 1. Synchronous Flow\n")
 	writePaths(builder, "Upstream", result.SyncUpstreamPaths)
 	writePaths(builder, "Downstream", result.SyncDownstreamPaths)
+
 	builder.WriteString("\n## 2. Asynchronous Flow\n")
 	if len(result.AsyncBridges) == 0 {
 		builder.WriteString("- none\n")
@@ -42,40 +98,107 @@ func renderFlowMarkdown(index int, target reviewgraph.ResolvedTarget, node revie
 	}
 
 	builder.WriteString("\n## 3. Affected Files\n")
-	if len(result.AffectedFiles) == 0 {
-		builder.WriteString("- none\n")
-	} else {
-		for _, file := range result.AffectedFiles {
-			fmt.Fprintf(builder, "- `%s`\n", file)
-		}
-	}
+	writeAffectedFiles(builder, result.AffectedFiles)
 
 	builder.WriteString("\n## 4. Cross-Service Risk\n")
-	if len(result.CrossServices) == 0 {
-		builder.WriteString("- none\n")
-	} else {
-		for _, service := range result.CrossServices {
-			fmt.Fprintf(builder, "- `%s`\n", service)
-		}
-	}
+	writeCrossServices(builder, result.CrossServices)
 
 	builder.WriteString("\n## 5. Ambiguities\n")
-	if len(diagnostics) == 0 && len(result.Ambiguities) == 0 {
-		builder.WriteString("- none\n")
-	} else {
-		for _, ambiguity := range result.Ambiguities {
-			fmt.Fprintf(builder, "- %s\n", ambiguity)
-		}
-		for _, diagnostic := range diagnostics {
-			if diagnostic.Line > 0 {
-				fmt.Fprintf(builder, "- `%s:%d` %s\n", diagnostic.FilePath, diagnostic.Line, diagnostic.Message)
-			} else {
-				fmt.Fprintf(builder, "- `%s` %s\n", diagnostic.FilePath, diagnostic.Message)
-			}
-		}
-	}
+	writeAmbiguities(builder, result.Ambiguities, diagnostics)
 
 	builder.WriteString("\n## 6. Flow Coverage\n")
+	writeCoverage(builder, result)
+
+	_ = index
+	_ = node
+	return builder.String()
+}
+
+func writeGroupedPaths(builder *strings.Builder, label string, paths []reviewgraph.PathSummary, nodeByID map[string]reviewgraph.Node) {
+	fmt.Fprintf(builder, "### %s\n", label)
+	if len(paths) == 0 {
+		builder.WriteString("- none\n")
+		return
+	}
+	root := buildGroupedTree(paths, nodeByID)
+	writeGroupedTree(builder, root, 0)
+}
+
+func writeGroupedAsync(builder *strings.Builder, bridges []reviewgraph.AsyncBridgeSummary, nodeByID map[string]reviewgraph.Node) {
+	if len(bridges) == 0 {
+		builder.WriteString("- none\n")
+		return
+	}
+	for _, bridge := range bridges {
+		transport := bridge.Transport
+		if transport == "" {
+			transport = "unknown"
+		}
+		fmt.Fprintf(builder, "- `%s` (`%s`, transport=`%s`) producers=%d consumers=%d\n", bridge.BridgeDisplayName, bridge.BridgeKind, transport, bridge.ProducerCount, bridge.ConsumerCount)
+		if len(bridge.Producers) > 0 {
+			builder.WriteString("  Producers:\n")
+			root := buildParticipantTree(bridge.Producers, nodeByID)
+			writeGroupedTree(builder, root, 1)
+			if len(bridge.UpstreamSyncPaths) > 0 {
+				builder.WriteString("  Producer Sync Context:\n")
+				root := buildGroupedTree(bridge.UpstreamSyncPaths, nodeByID)
+				writeGroupedTree(builder, root, 1)
+			}
+		}
+		if len(bridge.Consumers) > 0 {
+			builder.WriteString("  Consumers:\n")
+			root := buildParticipantTree(bridge.Consumers, nodeByID)
+			writeGroupedTree(builder, root, 1)
+			if len(bridge.DownstreamSyncPaths) > 0 {
+				builder.WriteString("  Consumer Sync Context:\n")
+				root := buildGroupedTree(bridge.DownstreamSyncPaths, nodeByID)
+				writeGroupedTree(builder, root, 1)
+			}
+		}
+		if bridge.FanoutTruncated {
+			builder.WriteString("  - `fanout truncated`\n")
+		}
+	}
+}
+
+func writeAffectedFiles(builder *strings.Builder, files []string) {
+	if len(files) == 0 {
+		builder.WriteString("- none\n")
+		return
+	}
+	for _, file := range files {
+		fmt.Fprintf(builder, "- `%s`\n", file)
+	}
+}
+
+func writeCrossServices(builder *strings.Builder, services []string) {
+	if len(services) == 0 {
+		builder.WriteString("- none\n")
+		return
+	}
+	for _, service := range services {
+		fmt.Fprintf(builder, "- `%s`\n", service)
+	}
+}
+
+func writeAmbiguities(builder *strings.Builder, ambiguities []string, diagnostics []reviewgraph.ImportDiagnostic) {
+	if len(diagnostics) == 0 && len(ambiguities) == 0 {
+		builder.WriteString("- none\n")
+		return
+	}
+	for _, ambiguity := range ambiguities {
+		fmt.Fprintf(builder, "- %s\n", ambiguity)
+	}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Line > 0 {
+			fmt.Fprintf(builder, "- `%s:%d` %s\n", diagnostic.FilePath, diagnostic.Line, diagnostic.Message)
+		} else {
+			fmt.Fprintf(builder, "- `%s` %s\n", diagnostic.FilePath, diagnostic.Message)
+		}
+	}
+}
+
+func writeCoverage(builder *strings.Builder, result reviewgraph.TraversalResult) {
 	fmt.Fprintf(builder, "- nodes in slice: %d\n", result.Coverage.CoveredNodeCount)
 	fmt.Fprintf(builder, "- edges in slice: %d\n", result.Coverage.CoveredEdgeCount)
 	fmt.Fprintf(builder, "- shared infra touched: %d\n", result.Coverage.SharedInfraCount)
@@ -91,12 +214,188 @@ func renderFlowMarkdown(index int, target reviewgraph.ResolvedTarget, node revie
 			fmt.Fprintf(builder, "  - %s\n", warning)
 		}
 	}
-	_ = index
-	_ = node
-	return builder.String()
 }
 
-func renderIndexMarkdown(snapshotID string, nodes []reviewgraph.Node, edges []reviewgraph.Edge, flowPaths []string, targetCount int, coveredNodes, coveredEdges map[string]struct{}, residualGroups []residualGroup, manifest reviewgraph.ImportManifest, report quality.AnalysisQualityReport) string {
+func buildGroupedTree(paths []reviewgraph.PathSummary, nodeByID map[string]reviewgraph.Node) *groupedTreeNode {
+	root := &groupedTreeNode{Children: map[string]*groupedTreeNode{}, Markers: map[string]struct{}{}}
+	for _, path := range paths {
+		insertPath(root, path, nodeByID)
+	}
+	return root
+}
+
+func buildParticipantTree(participants []reviewgraph.AsyncParticipant, nodeByID map[string]reviewgraph.Node) *groupedTreeNode {
+	root := &groupedTreeNode{Children: map[string]*groupedTreeNode{}, Markers: map[string]struct{}{}}
+	for _, participant := range participants {
+		insertParticipant(root, participant, nodeByID)
+	}
+	return root
+}
+
+func insertPath(root *groupedTreeNode, path reviewgraph.PathSummary, nodeByID map[string]reviewgraph.Node) {
+	current := root
+	ctx := renderContext{}
+	for _, nodeID := range path.NodeIDs {
+		node, ok := nodeByID[nodeID]
+		steps, next := stepsForNode(nodeID, node, ok, ctx, "")
+		ctx = next
+		for _, step := range steps {
+			current = ensureChild(current, step.Key, step.Label)
+		}
+	}
+	addPathMarkers(current, path.TerminalReason, path.Truncated)
+}
+
+func insertParticipant(root *groupedTreeNode, participant reviewgraph.AsyncParticipant, nodeByID map[string]reviewgraph.Node) {
+	current := root
+	node, ok := nodeByID[participant.NodeID]
+	steps, _ := stepsForNode(participant.NodeID, node, ok, renderContext{}, participant.DisplayName)
+	for _, step := range steps {
+		current = ensureChild(current, step.Key, step.Label)
+	}
+}
+
+func ensureChild(parent *groupedTreeNode, key, label string) *groupedTreeNode {
+	if parent.Children == nil {
+		parent.Children = map[string]*groupedTreeNode{}
+	}
+	if child, ok := parent.Children[key]; ok {
+		return child
+	}
+	child := &groupedTreeNode{
+		Key:      key,
+		Label:    label,
+		Children: map[string]*groupedTreeNode{},
+		Markers:  map[string]struct{}{},
+	}
+	parent.Children[key] = child
+	return child
+}
+
+func addPathMarkers(node *groupedTreeNode, terminalReason string, truncated bool) {
+	if node == nil {
+		return
+	}
+	if strings.TrimSpace(terminalReason) != "" {
+		node.Markers[terminalReason] = struct{}{}
+	}
+	if truncated {
+		node.Markers["truncated"] = struct{}{}
+	}
+}
+
+func stepsForNode(nodeID string, node reviewgraph.Node, found bool, ctx renderContext, fallbackLabel string) ([]treeStep, renderContext) {
+	if !found {
+		label := firstNonEmpty(fallbackLabel, nodeID)
+		return []treeStep{{Key: "external:" + nodeID, Label: label}}, renderContext{}
+	}
+	if isStandaloneNode(node) {
+		return []treeStep{{Key: "external:" + nodeID, Label: standaloneNodeLabel(node, fallbackLabel)}}, renderContext{}
+	}
+	if node.Kind == reviewgraph.NodeFile {
+		label := firstNonEmpty(filepath.ToSlash(node.Symbol), filepath.ToSlash(node.FilePath), node.ID)
+		return []treeStep{{Key: "file:" + label, Label: label}}, renderContext{fileLabel: label}
+	}
+
+	fileLabel := filepath.ToSlash(firstNonEmpty(node.FilePath, node.Symbol))
+	steps := []treeStep{}
+	if fileLabel != "" && fileLabel != ctx.fileLabel {
+		steps = append(steps, treeStep{Key: "file:" + fileLabel, Label: fileLabel})
+		ctx.fileLabel = fileLabel
+		ctx.classLabel = ""
+	}
+	classLabel := ownerLabel(node)
+	if classLabel != "" {
+		if classLabel != ctx.classLabel {
+			steps = append(steps, treeStep{Key: "class:" + fileLabel + ":" + classLabel, Label: classLabel})
+			ctx.classLabel = classLabel
+		}
+	} else {
+		ctx.classLabel = ""
+	}
+	steps = append(steps, treeStep{Key: "node:" + nodeID, Label: callableNodeLabel(node, fallbackLabel)})
+	return steps, ctx
+}
+
+func isStandaloneNode(node reviewgraph.Node) bool {
+	switch node.Kind {
+	case reviewgraph.NodeService, reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
+		return true
+	default:
+		return node.FilePath == ""
+	}
+}
+
+func standaloneNodeLabel(node reviewgraph.Node, fallbackLabel string) string {
+	base := firstNonEmpty(node.Symbol, fallbackLabel, node.ID)
+	switch node.Kind {
+	case reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
+		return fmt.Sprintf("%s [%s]", base, node.Kind)
+	default:
+		return base
+	}
+}
+
+func callableNodeLabel(node reviewgraph.Node, fallbackLabel string) string {
+	label := firstNonEmpty(node.Symbol, fallbackLabel, node.ID)
+	switch node.Kind {
+	case reviewgraph.NodeFunction, reviewgraph.NodeMethod, reviewgraph.NodeHTTPEndpoint, reviewgraph.NodeGRPCMethod:
+		parts := strings.Split(label, ".")
+		if len(parts) > 0 {
+			label = parts[len(parts)-1]
+		}
+	}
+	return label
+}
+
+func ownerLabel(node reviewgraph.Node) string {
+	if node.Kind != reviewgraph.NodeMethod {
+		return ""
+	}
+	parts := strings.Split(node.Symbol, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[len(parts)-2]
+}
+
+func writeGroupedTree(builder *strings.Builder, root *groupedTreeNode, depth int) {
+	children := sortedChildren(root)
+	for _, child := range children {
+		indent := strings.Repeat("  ", depth)
+		markers := markerSuffix(child.Markers)
+		fmt.Fprintf(builder, "%s- `%s`%s\n", indent, child.Label, markers)
+		writeGroupedTree(builder, child, depth+1)
+	}
+}
+
+func markerSuffix(markers map[string]struct{}) string {
+	if len(markers) == 0 {
+		return ""
+	}
+	values := make([]string, 0, len(markers))
+	for marker := range markers {
+		values = append(values, marker)
+	}
+	sort.Strings(values)
+	return fmt.Sprintf(" (%s)", strings.Join(values, ", "))
+}
+
+func sortedChildren(root *groupedTreeNode) []*groupedTreeNode {
+	children := make([]*groupedTreeNode, 0, len(root.Children))
+	for _, child := range root.Children {
+		children = append(children, child)
+	}
+	sort.Slice(children, func(i, j int) bool {
+		if children[i].Label != children[j].Label {
+			return children[i].Label < children[j].Label
+		}
+		return children[i].Key < children[j].Key
+	})
+	return children
+}
+
+func renderIndexMarkdown(snapshotID, reviewDir, currentPath, threadsIndexPath string, nodes []reviewgraph.Node, edges []reviewgraph.Edge, flowPaths []string, targetCount int, coveredNodes, coveredEdges map[string]struct{}, residualGroups []residualGroup, manifest reviewgraph.ImportManifest, report quality.AnalysisQualityReport) string {
 	builder := &strings.Builder{}
 	fmt.Fprintf(builder, "# Review Index\n")
 	fmt.Fprintf(builder, "- snapshot: `%s`\n", snapshotID)
@@ -109,10 +408,16 @@ func renderIndexMarkdown(snapshotID string, nodes []reviewgraph.Node, edges []re
 	fmt.Fprintf(builder, "- residual groups: %d\n", len(residualGroups))
 	fmt.Fprintf(builder, "- ambiguous/diagnostic entries: %d\n\n", len(manifest.Diagnostics)+len(report.Gaps))
 
+	if strings.TrimSpace(threadsIndexPath) != "" {
+		fmt.Fprintf(builder, "## Companion Thread Views\n")
+		fmt.Fprintf(builder, "- [threads/00_index.md](%s)\n\n", relativeLink(currentPath, threadsIndexPath))
+	}
+
 	builder.WriteString("## Flow Files\n")
 	for _, path := range flowPaths {
-		fmt.Fprintf(builder, "- `%s`\n", filepath.Base(path))
+		fmt.Fprintf(builder, "- [%s](%s)\n", filepath.Base(path), relativeLink(currentPath, path))
 	}
+	_ = reviewDir
 	return builder.String()
 }
 
