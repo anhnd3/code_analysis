@@ -5,26 +5,26 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_WORKSPACE="$(cd "$ROOT_DIR/.." && pwd)"
 WORKSPACE_PATH="${1:-$DEFAULT_WORKSPACE}"
-STARTPOINT_MODE="${STARTPOINT_MODE:-entrypoints}"
+STARTPOINT_MODE="${STARTPOINT_MODE:-workflow}"
 RENDER_MODE="${RENDER_MODE:-grouped}"
-COMPANION_VIEW="${COMPANION_VIEW:-all}"
+COMPANION_VIEW="${COMPANION_VIEW:-none}"
 GO_BIN="${GO_BIN:-go}"
 PYTHON_BIN=""
 
 usage() {
 	cat <<'EOF'
 Usage:
-  STARTPOINT_MODE=entrypoints bash ./scripts/run-review-report.sh [workspace]
+  bash ./scripts/run-review-report.sh [workspace]
 
 Environment variables:
-  STARTPOINT_MODE   Startpoint selection mode. Default: entrypoints
+  STARTPOINT_MODE   Startpoint selection mode. Default: workflow
   RENDER_MODE       Review render mode. Default: grouped
-  COMPANION_VIEW    Companion thread views. Default: all
+  COMPANION_VIEW    Companion thread views. Default: none
   GO_BIN            Go binary path. Default: go
   TEST_REPORT_OUT   Optional output directory for scripts/test_report.sh
 
 Example:
-  STARTPOINT_MODE=entrypoints bash ./scripts/run-review-report.sh /mnt/d/Workspace/Local_Agent/software_agent_src/analysis_module/
+  bash ./scripts/run-review-report.sh /mnt/d/Workspace/Local_Agent/software_agent_src/analysis_module/
 EOF
 }
 

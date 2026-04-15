@@ -272,10 +272,10 @@ func (s *traversalState) terminalReason(nodeID, startID string, forward bool) (s
 		return "", false
 	}
 	node := s.graph.NodeByID[nodeID]
-	if !forward && (node.NodeRole == reviewgraph.RoleEntrypoint || node.NodeRole == reviewgraph.RoleBoundary || node.Kind == reviewgraph.NodeService) {
+	if !forward && (node.NodeRole == reviewgraph.RoleEntrypoint || node.NodeRole == reviewgraph.RoleBoundary || isTerminalSyncBoundary(node)) {
 		return string(nodeRoleOrDefault(node)), true
 	}
-	if forward && (node.NodeRole == reviewgraph.RoleBoundary || node.Kind == reviewgraph.NodeService) {
+	if forward && isTerminalSyncBoundary(node) {
 		return string(nodeRoleOrDefault(node)), true
 	}
 	return "", false
@@ -463,4 +463,13 @@ func nodeRoleOrDefault(node reviewgraph.Node) reviewgraph.NodeRole {
 		return reviewgraph.RoleNormal
 	}
 	return node.NodeRole
+}
+
+func isTerminalSyncBoundary(node reviewgraph.Node) bool {
+	switch node.Kind {
+	case reviewgraph.NodeService, reviewgraph.NodeEventTopic, reviewgraph.NodePubSubChannel, reviewgraph.NodeQueue, reviewgraph.NodeSchedulerJob, reviewgraph.NodeAsyncTask, reviewgraph.NodeInProcChannel:
+		return true
+	default:
+		return false
+	}
 }

@@ -91,16 +91,20 @@ func (s Service) Export(req Request) (Result, error) {
 	if renderMode != "grouped" && renderMode != "raw" {
 		return Result{}, fmt.Errorf("unsupported render mode: %s", req.RenderMode)
 	}
-	companionView := firstNonEmpty(req.CompanionView, "all")
+	companionView := firstNonEmpty(req.CompanionView, "none")
 	if companionView != "none" && companionView != "overview" && companionView != "all" {
 		return Result{}, fmt.Errorf("unsupported companion view: %s", req.CompanionView)
 	}
+	overallMode := renderMode == "grouped" && companionView == "none"
 	reviewDir := firstNonEmpty(req.OutDir, s.paths.ReviewDirFromDBPath(req.DBPath))
 	flowsDir := filepath.Join(reviewDir, "flows")
 	threadsDir := filepath.Join(reviewDir, "threads")
 	summariesDir := filepath.Join(reviewDir, "summaries")
-	dirs := []string{reviewDir, flowsDir, summariesDir}
-	if companionView != "none" {
+	dirs := []string{reviewDir}
+	if !overallMode {
+		dirs = append(dirs, flowsDir, summariesDir)
+	}
+	if !overallMode && companionView != "none" {
 		dirs = append(dirs, threadsDir)
 	}
 	for _, dir := range dirs {
@@ -113,6 +117,27 @@ func (s Service) Export(req Request) (Result, error) {
 	nodeByID := graph.NodeByID
 	importManifest := findImportManifest(artifacts)
 	caps := reviewgraph.DefaultTraversalCaps()
+	if overallMode {
+		return s.exportOverall(
+			store,
+			snapshotID,
+			nodes,
+			edges,
+			artifacts,
+			targets,
+			graph,
+			nodeByID,
+			importManifest,
+			req.DBPath,
+			req.TargetsFile,
+			reviewDir,
+			mode,
+			req.IncludeAsync,
+			req.ForwardDepth,
+			req.ReverseDepth,
+			caps,
+		)
+	}
 	flowPaths := []string{}
 	threadOverviewPaths := []string{}
 	threadFocusPaths := []string{}
@@ -455,4 +480,227 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func (s Service) exportOverall(
+	store *reviewsqlite.Store,
+	snapshotID string,
+	nodes []reviewgraph.Node,
+	edges []reviewgraph.Edge,
+	artifacts []reviewgraph.Artifact,
+	targets []reviewgraph.ResolvedTarget,
+	graph reviewgraph_traverse.GraphData,
+	nodeByID map[string]reviewgraph.Node,
+	importManifest reviewgraph.ImportManifest,
+	dbPath, targetsFile, reviewDir string,
+	mode reviewgraph.TraversalMode,
+	includeAsync bool,
+	forwardDepth, reverseDepth int,
+	caps reviewgraph.TraversalCaps,
+) (Result, error) {
+	if len(targets) == 0 {
+		return Result{}, fmt.Errorf("no startpoints resolved")
+	}
+
+	coveredNodes := map[string]struct{}{}
+	coveredEdges := map[string]struct{}{}
+	affectedFiles := map[string]struct{}{}
+	crossServices := map[string]struct{}{}
+	cycles := map[string]reviewgraph.CycleSummary{}
+	warnings := map[string]struct{}{}
+	ambiguities := map[string]struct{}{}
+	sources := make([]overallTraversalSource, 0, len(targets))
+	hasAsync := false
+
+	for _, target := range targets {
+		result, err := s.traverse.Traverse(graph, target.TargetNodeID, mode, includeAsync, forwardDepth, reverseDepth, caps)
+		if err != nil {
+			return Result{}, err
+		}
+		for _, nodeID := range result.CoveredNodeIDs {
+			coveredNodes[nodeID] = struct{}{}
+		}
+		for _, edgeID := range result.CoveredEdgeIDs {
+			coveredEdges[edgeID] = struct{}{}
+		}
+		for _, file := range result.AffectedFiles {
+			affectedFiles[file] = struct{}{}
+		}
+		for _, serviceName := range result.CrossServices {
+			crossServices[serviceName] = struct{}{}
+		}
+		for _, cycle := range result.Cycles {
+			key := strings.Join(cycle.Path, "->")
+			cycles[key] = cycle
+		}
+		for _, warning := range result.TruncationWarnings {
+			warnings[warning] = struct{}{}
+		}
+		for _, ambiguity := range result.Ambiguities {
+			ambiguities[ambiguity] = struct{}{}
+		}
+		if len(result.AsyncBridges) > 0 {
+			hasAsync = true
+		}
+		sources = append(sources, overallTraversalSource{
+			Target:     target,
+			TargetNode: nodeByID[target.TargetNodeID],
+			Result:     result,
+		})
+	}
+
+	selectedFiles := sortedStringsFromSet(affectedFiles)
+	filteredDiagnostics := filterDiagnostics(importManifest.Diagnostics, selectedFiles)
+	qualityReport := buildQualityReport(importManifest)
+	residualGroups := buildResidualGroups(nodes, edges, coveredNodes)
+	summary := reviewgraph.TraversalResult{
+		Coverage: reviewgraph.CoverageStats{
+			CoveredNodeCount: len(coveredNodes),
+			CoveredEdgeCount: len(coveredEdges),
+			SharedInfraCount: countSharedInfraNodes(nodeByID, coveredNodes),
+		},
+		AffectedFiles:       selectedFiles,
+		CrossServices:       sortedStringsFromSet(crossServices),
+		Ambiguities:        sortedStringsFromSet(ambiguities),
+		Cycles:             cycleListFromMap(cycles),
+		TruncationWarnings: sortedStringsFromSet(warnings),
+	}
+
+	flowPaths := []string{}
+	syncPath := filepath.Join(reviewDir, "01_sync_system.md")
+	content := renderOverallSyncMarkdown(sources, graph, selectedFiles, sortedStringsFromSet(crossServices), filteredDiagnostics, summary)
+	if err := os.WriteFile(syncPath, []byte(content), 0o644); err != nil {
+		return Result{}, err
+	}
+	flowPaths = append(flowPaths, syncPath)
+	if err := store.UpsertArtifact(reviewgraph.Artifact{
+		ID:           reviewgraph.ArtifactID(reviewgraph.ArtifactReviewFlow, "", syncPath),
+		SnapshotID:   snapshotID,
+		ArtifactType: reviewgraph.ArtifactReviewFlow,
+		Path:         syncPath,
+		MetadataJSON: reviewsqlite.EncodeJSON(map[string]any{"layout": "overall", "graph": "sync", "selected_targets": len(targets)}),
+	}); err != nil {
+		return Result{}, err
+	}
+
+	if hasAsync {
+		asyncPath := filepath.Join(reviewDir, "02_async_system.md")
+		content = renderOverallAsyncMarkdown(sources, graph, selectedFiles, sortedStringsFromSet(crossServices), filteredDiagnostics, summary)
+		if err := os.WriteFile(asyncPath, []byte(content), 0o644); err != nil {
+			return Result{}, err
+		}
+		flowPaths = append(flowPaths, asyncPath)
+		if err := store.UpsertArtifact(reviewgraph.Artifact{
+			ID:           reviewgraph.ArtifactID(reviewgraph.ArtifactReviewFlow, "", asyncPath),
+			SnapshotID:   snapshotID,
+			ArtifactType: reviewgraph.ArtifactReviewFlow,
+			Path:         asyncPath,
+			MetadataJSON: reviewsqlite.EncodeJSON(map[string]any{"layout": "overall", "graph": "async", "selected_targets": len(targets)}),
+		}); err != nil {
+			return Result{}, err
+		}
+	}
+
+	indexPath := filepath.Join(reviewDir, "00_index.md")
+	runManifestPath := filepath.Join(reviewDir, "run_manifest.json")
+	indexContent := renderOverallIndexMarkdown(snapshotID, indexPath, nodes, edges, flowPaths, len(targets), coveredNodes, coveredEdges, residualGroups, importManifest, qualityReport)
+
+	if err := os.WriteFile(indexPath, []byte(indexContent), 0o644); err != nil {
+		return Result{}, err
+	}
+
+	runManifest := reviewgraph.RunManifest{
+		WorkspaceID:     importManifest.WorkspaceID,
+		SnapshotID:      snapshotID,
+		ImporterVersion: importManifest.ImporterVersion,
+		AsyncVersion:    importManifest.AsyncVersion,
+		GeneratedAt:     time.Now().UTC(),
+		InputPaths:      importManifest.InputPaths,
+		IgnoreFiles:     importManifest.IgnoreFiles,
+		IgnoreRules:     importManifest.IgnoreRules,
+		DroppedCounts:   importManifest.Counts,
+		TargetFile:      targetsFile,
+	}
+	runManifest.TraversalDefaults.Mode = mode
+	runManifest.TraversalDefaults.IncludeAsync = includeAsync
+	runManifest.TraversalDefaults.Caps = caps
+	runManifest.TraversalDefaults.ForwardDepth = forwardDepth
+	runManifest.TraversalDefaults.ReverseDepth = reverseDepth
+	data, err := json.MarshalIndent(runManifest, "", "  ")
+	if err != nil {
+		return Result{}, err
+	}
+	if err := os.WriteFile(runManifestPath, data, 0o644); err != nil {
+		return Result{}, err
+	}
+
+	for _, artifact := range []reviewgraph.Artifact{
+		{ID: reviewgraph.ArtifactID(reviewgraph.ArtifactReviewIndex, "", indexPath), SnapshotID: snapshotID, ArtifactType: reviewgraph.ArtifactReviewIndex, Path: indexPath},
+		{ID: reviewgraph.ArtifactID(reviewgraph.ArtifactRunManifest, "", runManifestPath), SnapshotID: snapshotID, ArtifactType: reviewgraph.ArtifactRunManifest, Path: runManifestPath, MetadataJSON: reviewsqlite.EncodeJSON(runManifest)},
+	} {
+		if err := store.UpsertArtifact(artifact); err != nil {
+			return Result{}, err
+		}
+	}
+
+	return Result{
+		DBPath:          dbPath,
+		ReviewDir:       reviewDir,
+		IndexPath:       indexPath,
+		FlowPaths:       flowPaths,
+		RunManifestPath: runManifestPath,
+	}, nil
+}
+
+func mergeMergedGraph(dst, src *mergedGraph) {
+	if dst == nil || src == nil {
+		return
+	}
+	for _, bucket := range src.Nodes {
+		dst.addBucket(*bucket)
+	}
+	for _, edge := range src.Edges {
+		key := edge.SrcID + "->" + edge.DstID
+		if existing, ok := dst.Edges[key]; ok {
+			existing.Count += edge.Count
+			continue
+		}
+		dst.Edges[key] = &mergedEdge{
+			SrcID: edge.SrcID,
+			DstID: edge.DstID,
+			Count: edge.Count,
+		}
+	}
+}
+
+func cycleListFromMap(cycles map[string]reviewgraph.CycleSummary) []reviewgraph.CycleSummary {
+	result := make([]reviewgraph.CycleSummary, 0, len(cycles))
+	for _, cycle := range cycles {
+		result = append(result, cycle)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		left := strings.Join(result[i].Path, "->")
+		right := strings.Join(result[j].Path, "->")
+		return left < right
+	})
+	return result
+}
+
+func sortedStringsFromSet[T comparable](values map[T]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, fmt.Sprint(value))
+	}
+	sort.Strings(result)
+	return result
+}
+
+func countSharedInfraNodes(nodeByID map[string]reviewgraph.Node, covered map[string]struct{}) int {
+	count := 0
+	for nodeID := range covered {
+		if nodeByID[nodeID].NodeRole == reviewgraph.RoleSharedInfra {
+			count++
+		}
+	}
+	return count
 }

@@ -14,6 +14,11 @@ const (
 	TypeReviewBundle        Type = "review_bundle"
 	TypeBlastRadius         Type = "blast_radius"
 	TypeImpactedTests       Type = "impacted_tests"
+	TypeFlowBundle          Type = "flow_bundle"
+	TypeBoundaryBundle      Type = "boundary_bundle"
+	TypeReducedChain        Type = "reduced_chain"
+	TypeSequenceModel       Type = "sequence_model"
+	TypeMermaidDiagram      Type = "mermaid_diagram"
 )
 
 type Ref struct {

@@ -57,6 +57,17 @@ func (s Store) SaveQualityReport(workspaceID, snapshotID string, report quality.
 	return s.SaveJSON(workspaceID, snapshotID, "quality_report.json", artifact.TypeQualityReport, report)
 }
 
+func (s Store) SaveText(workspaceID, snapshotID, fileName string, artifactType artifact.Type, body string) (artifact.Ref, error) {
+	path := s.pathFor(workspaceID, snapshotID, fileName)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return artifact.Ref{}, err
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return artifact.Ref{}, err
+	}
+	return artifact.Ref{Type: artifactType, WorkspaceID: workspaceID, SnapshotID: snapshotID, Path: path}, nil
+}
+
 func (s Store) pathFor(workspaceID, snapshotID, fileName string) string {
 	if snapshotID == "" {
 		return filepath.Join(s.root, "workspaces", workspaceID, fileName)

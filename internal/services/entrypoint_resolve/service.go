@@ -1,0 +1,246 @@
+package entrypoint_resolve
+
+import (
+	"sort"
+	"strings"
+
+	"analysis-module/internal/domain/entrypoint"
+	"analysis-module/internal/domain/graph"
+	"analysis-module/internal/domain/repository"
+	"analysis-module/internal/domain/symbol"
+)
+
+// Service resolves real executable roots from a snapshot and inventory.
+type Service struct{}
+
+// New creates an entrypoint resolver.
+func New() Service {
+	return Service{}
+}
+
+// Resolve scans the snapshot and inventory for bootstrap, HTTP, gRPC, CLI,
+// worker, and consumer roots, returning them with confidence classifications.
+func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inventory) (entrypoint.Result, error) {
+	nodesByID := indexNodes(snapshot.Nodes)
+	symbolNodes := filterSymbolNodes(snapshot.Nodes)
+	entrypointEdges := filterEdges(snapshot.Edges, graph.EdgeEntrypointTo)
+
+	var roots []entrypoint.Root
+
+	// 1. Bootstrap roots: main.main, cmd.Execute, Start patterns
+	roots = append(roots, s.resolveBootstrapRoots(symbolNodes)...)
+
+	// 2. HTTP route handlers: symbol kind == route_handler
+	roots = append(roots, s.resolveHTTPRoots(symbolNodes)...)
+
+	// 3. gRPC handlers: symbol kind == grpc_handler
+	roots = append(roots, s.resolveGRPCRoots(symbolNodes)...)
+
+	// 4. CLI roots from entrypoint edges
+	roots = append(roots, s.resolveCLIRoots(entrypointEdges, nodesByID)...)
+
+	// 5. Worker/consumer roots: symbol kind == consumer or producer
+	roots = append(roots, s.resolveWorkerRoots(symbolNodes)...)
+
+	roots = deduplicateRoots(roots)
+	sort.Slice(roots, func(i, j int) bool {
+		return roots[i].CanonicalName < roots[j].CanonicalName
+	})
+
+	return entrypoint.Result{Roots: roots}, nil
+}
+
+func (s Service) resolveBootstrapRoots(nodes []graph.Node) []entrypoint.Root {
+	var roots []entrypoint.Root
+	for _, n := range nodes {
+		name := n.CanonicalName
+		kind := nodeSymbolKind(n)
+		if kind != string(symbol.KindFunction) && kind != string(symbol.KindMethod) {
+			continue
+		}
+		shortName := shortSymbolName(name)
+		switch {
+		case shortName == "main" && strings.HasSuffix(packageName(name), "main"):
+			roots = append(roots, entrypoint.Root{
+				NodeID:        n.ID,
+				CanonicalName: name,
+				RootType:      entrypoint.RootBootstrap,
+				Confidence:    entrypoint.ConfidenceHigh,
+				RepositoryID:  n.RepositoryID,
+				Evidence:      "main.main pattern",
+			})
+		case shortName == "Execute" || shortName == "Run" || shortName == "Start":
+			if isLikelyCmdPackage(name) {
+				roots = append(roots, entrypoint.Root{
+					NodeID:        n.ID,
+					CanonicalName: name,
+					RootType:      entrypoint.RootBootstrap,
+					Confidence:    entrypoint.ConfidenceMedium,
+					RepositoryID:  n.RepositoryID,
+					Evidence:      "cmd entry pattern: " + shortName,
+				})
+			}
+		}
+	}
+	return roots
+}
+
+func (s Service) resolveHTTPRoots(nodes []graph.Node) []entrypoint.Root {
+	var roots []entrypoint.Root
+	for _, n := range nodes {
+		if nodeSymbolKind(n) != string(symbol.KindRouteHandler) {
+			continue
+		}
+		roots = append(roots, entrypoint.Root{
+			NodeID:        n.ID,
+			CanonicalName: n.CanonicalName,
+			RootType:      entrypoint.RootHTTP,
+			Confidence:    entrypoint.ConfidenceHigh,
+			RepositoryID:  n.RepositoryID,
+			Evidence:      "route_handler symbol kind",
+		})
+	}
+	return roots
+}
+
+func (s Service) resolveGRPCRoots(nodes []graph.Node) []entrypoint.Root {
+	var roots []entrypoint.Root
+	for _, n := range nodes {
+		if nodeSymbolKind(n) != string(symbol.KindGRPCHandler) {
+			continue
+		}
+		roots = append(roots, entrypoint.Root{
+			NodeID:        n.ID,
+			CanonicalName: n.CanonicalName,
+			RootType:      entrypoint.RootGRPC,
+			Confidence:    entrypoint.ConfidenceHigh,
+			RepositoryID:  n.RepositoryID,
+			Evidence:      "grpc_handler symbol kind",
+		})
+	}
+	return roots
+}
+
+func (s Service) resolveCLIRoots(entrypointEdges []graph.Edge, nodesByID map[string]graph.Node) []entrypoint.Root {
+	var roots []entrypoint.Root
+	for _, edge := range entrypointEdges {
+		target, ok := nodesByID[edge.To]
+		if !ok {
+			continue
+		}
+		roots = append(roots, entrypoint.Root{
+			NodeID:        target.ID,
+			CanonicalName: target.CanonicalName,
+			RootType:      entrypoint.RootCLI,
+			Confidence:    entrypoint.ConfidenceHigh,
+			RepositoryID:  target.RepositoryID,
+			Evidence:      "ENTRYPOINT_TO edge from service",
+		})
+	}
+	return roots
+}
+
+func (s Service) resolveWorkerRoots(nodes []graph.Node) []entrypoint.Root {
+	var roots []entrypoint.Root
+	for _, n := range nodes {
+		kind := nodeSymbolKind(n)
+		switch kind {
+		case string(symbol.KindConsumer):
+			roots = append(roots, entrypoint.Root{
+				NodeID:        n.ID,
+				CanonicalName: n.CanonicalName,
+				RootType:      entrypoint.RootConsumer,
+				Confidence:    entrypoint.ConfidenceHigh,
+				RepositoryID:  n.RepositoryID,
+				Evidence:      "consumer symbol kind",
+			})
+		case string(symbol.KindProducer):
+			roots = append(roots, entrypoint.Root{
+				NodeID:        n.ID,
+				CanonicalName: n.CanonicalName,
+				RootType:      entrypoint.RootWorker,
+				Confidence:    entrypoint.ConfidenceMedium,
+				RepositoryID:  n.RepositoryID,
+				Evidence:      "producer symbol kind",
+			})
+		}
+	}
+	return roots
+}
+
+// --- helpers ---
+
+func indexNodes(nodes []graph.Node) map[string]graph.Node {
+	m := make(map[string]graph.Node, len(nodes))
+	for _, n := range nodes {
+		m[n.ID] = n
+	}
+	return m
+}
+
+func filterSymbolNodes(nodes []graph.Node) []graph.Node {
+	var out []graph.Node
+	for _, n := range nodes {
+		if n.Kind == graph.NodeSymbol || n.Kind == graph.NodeTest {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func filterEdges(edges []graph.Edge, kind graph.EdgeKind) []graph.Edge {
+	var out []graph.Edge
+	for _, e := range edges {
+		if e.Kind == kind {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func nodeSymbolKind(n graph.Node) string {
+	if n.Properties == nil {
+		return ""
+	}
+	return n.Properties["kind"]
+}
+
+func shortSymbolName(canonical string) string {
+	idx := strings.LastIndex(canonical, ".")
+	if idx >= 0 {
+		return canonical[idx+1:]
+	}
+	return canonical
+}
+
+func packageName(canonical string) string {
+	idx := strings.LastIndex(canonical, ".")
+	if idx >= 0 {
+		return canonical[:idx]
+	}
+	return ""
+}
+
+func isLikelyCmdPackage(canonical string) bool {
+	pkg := packageName(canonical)
+	parts := strings.Split(pkg, "/")
+	for _, part := range parts {
+		if part == "cmd" || part == "command" || part == "cli" {
+			return true
+		}
+	}
+	return false
+}
+
+func deduplicateRoots(roots []entrypoint.Root) []entrypoint.Root {
+	seen := make(map[string]bool, len(roots))
+	var out []entrypoint.Root
+	for _, r := range roots {
+		if seen[r.NodeID] {
+			continue
+		}
+		seen[r.NodeID] = true
+		out = append(out, r)
+	}
+	return out
+}

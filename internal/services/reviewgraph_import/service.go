@@ -363,12 +363,12 @@ func (b *builder) importEdge(legacyEdge legacygraph.Edge) {
 	if srcID == "" || dstID == "" {
 		return
 	}
+	if legacyEdge.Kind == legacygraph.EdgeCallsHTTP || legacyEdge.Kind == legacygraph.EdgeCallsGRPC || legacyEdge.Kind == legacygraph.EdgeEntrypointTo {
+		b.counts.ContextualBoundaryEdges++
+	}
 	switch legacyEdge.Kind {
-	case legacygraph.EdgeCalls, legacygraph.EdgeDefines, legacygraph.EdgeImports, legacygraph.EdgeBelongsToService:
+	case legacygraph.EdgeCalls, legacygraph.EdgeDefines, legacygraph.EdgeImports, legacygraph.EdgeBelongsToService, legacygraph.EdgeCallsHTTP, legacygraph.EdgeCallsGRPC, legacygraph.EdgeEntrypointTo:
 	default:
-		if legacyEdge.Kind == legacygraph.EdgeCallsHTTP || legacyEdge.Kind == legacygraph.EdgeCallsGRPC || legacyEdge.Kind == legacygraph.EdgeEntrypointTo {
-			b.counts.ContextualBoundaryEdges++
-		}
 		return
 	}
 	edgeType, flowKind := mapLegacyEdgeKind(legacyEdge.Kind)

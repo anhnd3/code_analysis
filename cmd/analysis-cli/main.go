@@ -187,7 +187,7 @@ func runGraphImportSQLite(app *bootstrap.Application, args []string) {
 func runGraphListStartpoints(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("graph list-startpoints", flag.ExitOnError)
 	dbPath := fs.String("db", "", "review graph sqlite path")
-	mode := fs.String("mode", "", "selection mode: manual|entrypoints")
+	mode := fs.String("mode", "workflow", "selection mode: manual|workflow|entrypoints")
 	symbol := fs.String("symbol", "", "manual symbol selector")
 	file := fs.String("file", "", "manual file selector")
 	topic := fs.String("topic", "", "manual topic selector")
@@ -213,7 +213,7 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	targetsFile := fs.String("targets-file", "", "resolved targets json file")
 	mode := fs.String("mode", string(reviewgraph.TraversalFullFlow), "traversal mode: full-flow|bounded")
 	renderMode := fs.String("render-mode", "grouped", "render mode: grouped|raw")
-	companionView := fs.String("companion-view", "all", "companion view generation: none|overview|all")
+	companionView := fs.String("companion-view", "none", "companion view generation: none|overview|all")
 	includeAsync := fs.Bool("include-async", true, "include async traversal")
 	forwardDepth := fs.Int("forward-depth", 2, "bounded forward depth")
 	reverseDepth := fs.Int("reverse-depth", 2, "bounded reverse depth")

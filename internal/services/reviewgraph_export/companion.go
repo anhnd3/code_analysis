@@ -454,6 +454,36 @@ func renderThreadFocusMarkdown(target reviewgraph.ResolvedTarget, flowPath, curr
 	return builder.String()
 }
 
+func renderOverallWorkflowMarkdown(title, graphLabel string, targets []reviewgraph.ResolvedTarget, graph *mergedGraph, affectedFiles, crossServices []string, diagnostics []reviewgraph.ImportDiagnostic, summary reviewgraph.TraversalResult) string {
+	builder := &strings.Builder{}
+	fmt.Fprintf(builder, "# %s\n", title)
+	fmt.Fprintf(builder, "- selected roots: %d\n\n", len(targets))
+
+	if len(targets) > 0 {
+		builder.WriteString("## Selected Roots\n")
+		for _, target := range targets {
+			fmt.Fprintf(builder, "- `%s` (%s)\n", target.DisplayName, target.Reason)
+		}
+		builder.WriteString("\n")
+	}
+
+	fmt.Fprintf(builder, "## 1. %s Workflow\n", graphLabel)
+	builder.WriteString(renderMermaidGraph(graph, "", ""))
+
+	builder.WriteString("\n## 2. Affected Files\n")
+	writeAffectedFiles(builder, affectedFiles)
+
+	builder.WriteString("\n## 3. Cross-Service Risk\n")
+	writeCrossServices(builder, crossServices)
+
+	builder.WriteString("\n## 4. Ambiguities\n")
+	writeAmbiguities(builder, summary.Ambiguities, diagnostics)
+
+	builder.WriteString("\n## 5. Flow Coverage\n")
+	writeCoverage(builder, summary)
+	return builder.String()
+}
+
 func renderThreadIndexMarkdown(snapshotID, reviewDir, threadsDir string, entries []threadArtifactEntry) string {
 	builder := &strings.Builder{}
 	fmt.Fprintf(builder, "# Thread Companion Views\n")

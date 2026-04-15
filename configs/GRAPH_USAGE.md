@@ -22,7 +22,7 @@ That means repeated prefixes appear once in the rendered flow tree instead of be
 From the `analysis_module` directory:
 
 ```bash
-STARTPOINT_MODE=entrypoints bash ./scripts/run-review-report.sh /mnt/d/Workspace/Local_Agent/software_agent_src/analysis_module/
+bash ./scripts/run-review-report.sh /mnt/d/Workspace/Local_Agent/software_agent_src/analysis_module/
 ```
 
 What the script does:
@@ -30,7 +30,7 @@ What the script does:
 1. runs `build-snapshot --progress-mode plain`
 2. runs `graph import-sqlite`
 3. runs `graph list-startpoints`
-4. runs `graph export-markdown-review --render-mode grouped --companion-view all --include-async`
+4. runs `graph export-markdown-review --render-mode grouped --companion-view none --include-async`
 5. runs `scripts/test_report.sh`
 
 Environment variables supported by the script:
@@ -43,9 +43,9 @@ Environment variables supported by the script:
 
 Defaults:
 
-- `STARTPOINT_MODE=entrypoints`
+- `STARTPOINT_MODE=workflow`
 - `RENDER_MODE=grouped`
-- `COMPANION_VIEW=all`
+- `COMPANION_VIEW=none`
 - `GO_BIN=go`
 - `TEST_REPORT_OUT=<snapshot review dir>/test-report`
 
@@ -82,7 +82,7 @@ Broad review pass:
 ```bash
 go run ./cmd/analysis-cli graph list-startpoints \
   --db artifacts/workspaces/<workspace_id>/snapshots/<snapshot_id>/sqlite/review_graph.sqlite \
-  --mode entrypoints
+  --mode workflow
 ```
 
 Targeted review:
@@ -108,7 +108,7 @@ go run ./cmd/analysis-cli graph export-markdown-review \
   --targets-file artifacts/workspaces/<workspace_id>/snapshots/<snapshot_id>/review/resolved_targets.json \
   --mode full-flow \
   --render-mode grouped \
-  --companion-view all \
+  --companion-view none \
   --include-async
 ```
 

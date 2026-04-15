@@ -20,12 +20,24 @@ var builtInIgnoredDirs = map[string]struct{}{
 	"testdata":     {},
 }
 
-var builtInIgnoredFilePatterns = []string{
+var builtInTestFilePatterns = []string{
 	"*_test.go",
 	"*.spec.ts",
 	"*.test.ts",
 	"*.spec.js",
 	"*.test.js",
+}
+
+var builtInGeneratedFilePatterns = []string{
+	"*.pb.go",
+	"*_grpc.pb.go",
+	"*.pb.gw.go",
+}
+
+var builtInGeneratedPathPatterns = []string{
+	"pkg/proto/",
+	"proto/gen/",
+	"proto_gen/",
 }
 
 type IgnoreRules struct {
@@ -71,10 +83,12 @@ func LoadIgnoreRules(paths ...string) (IgnoreRules, []string, error) {
 }
 
 func (r IgnoreRules) AllPatterns() []string {
-	patterns := append([]string{}, builtInIgnoredFilePatterns...)
+	patterns := append([]string{}, builtInTestFilePatterns...)
+	patterns = append(patterns, builtInGeneratedFilePatterns...)
 	for dir := range builtInIgnoredDirs {
 		patterns = append(patterns, dir+"/")
 	}
+	patterns = append(patterns, builtInGeneratedPathPatterns...)
 	patterns = append(patterns, r.Patterns...)
 	sort.Strings(patterns)
 	return patterns
@@ -86,9 +100,14 @@ func (r IgnoreRules) Match(relPath string) (matched bool, generated bool) {
 		return false, false
 	}
 	base := pathBase(relPath)
-	for _, pattern := range builtInIgnoredFilePatterns {
+	for _, pattern := range builtInTestFilePatterns {
 		if ok, _ := filepath.Match(pattern, base); ok {
-			return true, strings.Contains(pattern, ".spec.") || strings.Contains(pattern, ".test.") || strings.HasSuffix(pattern, "_test.go")
+			return true, false
+		}
+	}
+	for _, pattern := range builtInGeneratedFilePatterns {
+		if ok, _ := filepath.Match(pattern, base); ok {
+			return true, true
 		}
 	}
 	parts := strings.Split(relPath, "/")
@@ -96,6 +115,11 @@ func (r IgnoreRules) Match(relPath string) (matched bool, generated bool) {
 		if _, ok := builtInIgnoredDirs[part]; ok {
 			generated = part != "tests" && part != "test" && part != "__tests__"
 			return true, generated
+		}
+	}
+	for _, pattern := range builtInGeneratedPathPatterns {
+		if matchesIgnorePattern(relPath, pattern) {
+			return true, true
 		}
 	}
 	lower := strings.ToLower(relPath)
