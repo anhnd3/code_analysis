@@ -74,11 +74,72 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 			sym := buildSymbol(file, result.PackageName, node, content)
 			result.Symbols = append(result.Symbols, sym)
 			body := node.ChildByFieldName("body")
+			
+			// Extract semantic hints for the full symbol body
+			result.Hints = append(result.Hints, extractClosureHints(body, content)...)
+			result.Hints = append(result.Hints, extractAsyncHints(body, content)...)
+			result.Hints = append(result.Hints, extractControlHints(body, content)...)
+
+			closureCount := 0
+			inlineCount := 0
+
+			// Store bounds of functional scopes we create so we can attribute calls dynamically.
+			type scope struct {
+				start, end uint32
+				sym        symbol.Symbol
+			}
+			var scopes []scope
+
+			// First pass: identify closures and inline handlers inside this function body
+			walk(body, func(inner *tree_sitter.Node) {
+				if inner == nil || inner.Kind() != "func_literal" {
+					return
+				}
+				parent := inner.Parent()
+				isReturn := false
+				if parent != nil && (parent.Kind() == "return_statement" || parent.Kind() == "expression_list") {
+					isReturn = true
+				}
+
+				var synth symbol.Symbol
+				if isReturn {
+					synth = GenerateClosureSymbol(file, result.PackageName, sym.CanonicalName, closureCount, inner)
+					closureCount++
+				} else {
+					synth = GenerateInlineSymbol(file, result.PackageName, sym.CanonicalName, inlineCount, inner)
+					inlineCount++
+				}
+				result.Symbols = append(result.Symbols, synth)
+				scopes = append(scopes, scope{
+					start: uint32(inner.StartByte()),
+					end:   uint32(inner.EndByte()),
+					sym:   synth,
+				})
+			})
+
+			// Second pass: extract calls with nearest scope affiliation
 			walk(body, func(inner *tree_sitter.Node) {
 				if inner == nil || inner.Kind() != "call_expression" {
 					return
 				}
-				candidate := buildCallCandidate(sym.ID, inner, content, result.PackageName, importAliases)
+
+				// Determine active symbol (nested scopes take priority since they are physically inside)
+				activeSym := sym
+				start, end := uint32(inner.StartByte()), uint32(inner.EndByte())
+				var tightest *scope
+				for i := range scopes {
+					s := &scopes[i]
+					if start >= s.start && end <= s.end {
+						if tightest == nil || (s.end-s.start < tightest.end-tightest.start) {
+							tightest = s
+						}
+					}
+				}
+				if tightest != nil {
+					activeSym = tightest.sym
+				}
+
+				candidate := buildCallCandidate(activeSym.ID, inner, content, result.PackageName, importAliases)
 				if candidate.TargetCanonicalName != "" {
 					result.Relations = append(result.Relations, candidate)
 				}

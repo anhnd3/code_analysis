@@ -8,6 +8,7 @@ const (
 	StepConstruct  StepKind = "construct"
 	StepAsync      StepKind = "async"
 	StepDefer      StepKind = "defer"
+	StepWait       StepKind = "wait"
 	StepBranch     StepKind = "branch"
 	StepBoundary   StepKind = "boundary"
 )

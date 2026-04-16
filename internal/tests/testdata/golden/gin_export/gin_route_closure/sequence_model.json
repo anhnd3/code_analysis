@@ -1,0 +1,25 @@
+{
+  "title": "http flow",
+  "participants": [
+    {
+      "id": "gin:GET:/closure",
+      "label": "GET /closure",
+      "short_name": "GET /closure"
+    },
+    {
+      "id": "node_0984c79eb26a",
+      "label": "$inline_handler_0",
+      "short_name": "$inline_handler_0"
+    }
+  ],
+  "elements": [
+    {
+      "message": {
+        "from_id": "gin:GET:/closure",
+        "to_id": "node_0984c79eb26a",
+        "label": "$inline_handler_0",
+        "kind": "sync"
+      }
+    }
+  ]
+}

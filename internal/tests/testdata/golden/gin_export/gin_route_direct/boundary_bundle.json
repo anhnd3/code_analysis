@@ -1,0 +1,13 @@
+{
+  "links": [
+    {
+      "outbound_node_id": "gin:GET:/ping",
+      "inbound_node_id": "unresolved_directHandler",
+      "protocol": "rest",
+      "status": "external_only",
+      "outbound_repo_id": "",
+      "inbound_repo_id": "",
+      "evidence": "unresolved boundary handler target"
+    }
+  ]
+}

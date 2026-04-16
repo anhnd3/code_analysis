@@ -1,0 +1,33 @@
+{
+  "root_node_id": "gin:GET:/ping",
+  "nodes": [
+    {
+      "id": "",
+      "canonical_name": "",
+      "short_name": "",
+      "role": "remote"
+    },
+    {
+      "id": "gin:GET:/ping",
+      "canonical_name": "GET /ping",
+      "short_name": "GET /ping",
+      "role": "root"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "gin:GET:/ping",
+      "to_id": "unresolved_directHandler",
+      "cross_repo": true,
+      "link_status": "external_only"
+    }
+  ],
+  "blocks": null,
+  "notes": [
+    {
+      "at_node_id": "unresolved_directHandler",
+      "text": "external-only boundary (no inbound match)",
+      "kind": "candidate"
+    }
+  ]
+}

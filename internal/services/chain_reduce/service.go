@@ -45,7 +45,7 @@ func (s Service) Reduce(snapshot graph.GraphSnapshot, flows flow.Bundle, links b
 	primary := flows.Chains[0]
 
 	// Build reduced nodes and edges
-	nodes, edges, notes := s.walkAndReduce(primary, idx, cfg)
+	nodes, edges, blocks, notes := s.walkAndReduce(primary, idx, cfg)
 
 	// Sort for deterministic output
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
@@ -61,6 +61,7 @@ func (s Service) Reduce(snapshot graph.GraphSnapshot, flows flow.Bundle, links b
 		RootNodeID: primary.RootNodeID,
 		Nodes:      nodes,
 		Edges:      edges,
+		Blocks:     blocks,
 		Notes:      notes,
 	}, nil
 }
@@ -89,13 +90,17 @@ func normalizeConfig(req Request) reduceConfig {
 	return cfg
 }
 
-func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceConfig) ([]reduced.Node, []reduced.Edge, []reduced.Note) {
+func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceConfig) ([]reduced.Node, []reduced.Edge, []reduced.Block, []reduced.Note) {
 	var nodes []reduced.Node
 	var edges []reduced.Edge
+	var blocks []reduced.Block
 	var notes []reduced.Note
 
 	nodeSet := map[string]bool{}
 	visited := map[string]bool{}
+	var deferredEdges []reduced.Edge
+
+	orderCounter := 0
 
 	// Always keep the root
 	rootNode := idx.nodeByID[chain.RootNodeID]
@@ -141,11 +146,21 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 		crossRepo := false
 		linkStatus := ""
 		fromGraphNode := idx.nodeByID[step.FromNodeID]
-		if fromGraphNode.RepositoryID != "" && targetGraphNode.RepositoryID != "" &&
+		
+		if strings.HasPrefix(step.ToNodeID, "unresolved_") {
+			crossRepo = true
+			linkStatus = idx.linkStatusBetween(step.FromNodeID, step.ToNodeID)
+			targetGraphNode = graph.Node{
+				ID:            step.ToNodeID,
+				CanonicalName: strings.TrimPrefix(step.ToNodeID, "unresolved_"),
+			}
+		} else if fromGraphNode.RepositoryID != "" && targetGraphNode.RepositoryID != "" &&
 			fromGraphNode.RepositoryID != targetGraphNode.RepositoryID {
 			crossRepo = true
 			linkStatus = idx.linkStatusBetween(step.FromNodeID, step.ToNodeID)
-
+		}
+		
+		if crossRepo {
 			// Cross-project crossing rules
 			switch boundary.LinkStatus(linkStatus) {
 			case boundary.StatusConfirmed, boundary.StatusCompatibleSubset:
@@ -207,14 +222,32 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 			nodeSet[fn.ID] = true
 		}
 
-		edges = append(edges, reduced.Edge{
+		edge := reduced.Edge{
 			FromID:     step.FromNodeID,
 			ToID:       step.ToNodeID,
 			Label:      step.Label,
 			Inferred:   step.Inferred,
 			CrossRepo:  crossRepo,
 			LinkStatus: linkStatus,
-		})
+		}
+
+		if step.Kind == flow.StepDefer {
+			deferredEdges = append(deferredEdges, edge)
+		} else if role == reduced.RoleAsync || step.Kind == flow.StepAsync {
+			blocks = append(blocks, reduced.Block{
+				Kind:       reduced.BlockPar,
+				Label:      "goroutine",
+				OrderIndex: orderCounter,
+				Branches: []reduced.Branch{
+					{Edges: []reduced.Edge{edge}},
+				},
+			})
+			orderCounter++
+		} else {
+			edge.OrderIndex = orderCounter
+			edges = append(edges, edge)
+			orderCounter++
+		}
 
 		if step.Inferred {
 			notes = append(notes, reduced.Note{
@@ -239,7 +272,13 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 		depth++
 	}
 
-	return nodes, edges, notes
+	for i := range deferredEdges {
+		deferredEdges[i].OrderIndex = orderCounter
+		orderCounter++
+	}
+	edges = append(edges, deferredEdges...)
+
+	return nodes, edges, blocks, notes
 }
 
 // classifyRole determines what role a node plays in the reduced chain.

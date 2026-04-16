@@ -45,6 +45,7 @@ type Edge struct {
 	Inferred   bool   `json:"inferred,omitempty"`
 	CrossRepo  bool   `json:"cross_repo,omitempty"`
 	LinkStatus string `json:"link_status,omitempty"`
+	OrderIndex int    `json:"order_index,omitempty"`
 }
 
 // Block represents a branching structure wrapping edges.
@@ -52,6 +53,7 @@ type Block struct {
 	Kind      BlockKind `json:"kind"`
 	Label     string    `json:"label,omitempty"`
 	Branches  []Branch  `json:"branches"`
+	OrderIndex int      `json:"order_index,omitempty"`
 }
 
 // Branch is one arm inside a Block.

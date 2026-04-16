@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/entrypoint"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
@@ -20,12 +21,30 @@ func New() Service {
 
 // Resolve scans the snapshot and inventory for bootstrap, HTTP, gRPC, CLI,
 // worker, and consumer roots, returning them with confidence classifications.
-func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inventory) (entrypoint.Result, error) {
+func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inventory, detectedRoots []boundaryroot.Root) (entrypoint.Result, error) {
 	nodesByID := indexNodes(snapshot.Nodes)
 	symbolNodes := filterSymbolNodes(snapshot.Nodes)
 	entrypointEdges := filterEdges(snapshot.Edges, graph.EdgeEntrypointTo)
 
 	var roots []entrypoint.Root
+
+	// 0. explicitly detected boundary roots
+	for _, br := range detectedRoots {
+		target, ok := nodesByID[br.ID]
+		repoID := ""
+		if ok {
+			repoID = target.RepositoryID
+		}
+		
+		roots = append(roots, entrypoint.Root{
+			NodeID:        br.ID,
+			CanonicalName: br.CanonicalName,
+			RootType:      mapBoundaryKind(br.Kind),
+			Confidence:    entrypoint.ConfidenceHigh, // Explicit detection is highly confident
+			RepositoryID:  repoID,
+			Evidence:      "framework adapter: " + br.Framework,
+		})
+	}
 
 	// 1. Bootstrap roots: main.main, cmd.Execute, Start patterns
 	roots = append(roots, s.resolveBootstrapRoots(symbolNodes)...)
@@ -243,4 +262,21 @@ func deduplicateRoots(roots []entrypoint.Root) []entrypoint.Root {
 		out = append(out, r)
 	}
 	return out
+}
+
+func mapBoundaryKind(kind boundaryroot.Kind) entrypoint.RootType {
+	switch kind {
+	case boundaryroot.KindHTTP, boundaryroot.KindHTTPGateway:
+		return entrypoint.RootHTTP
+	case boundaryroot.KindGRPC:
+		return entrypoint.RootGRPC
+	case boundaryroot.KindCLI:
+		return entrypoint.RootCLI
+	case boundaryroot.KindWorker:
+		return entrypoint.RootWorker
+	case boundaryroot.KindConsumer:
+		return entrypoint.RootConsumer
+	default:
+		return entrypoint.RootHTTP // Safe default
+	}
 }

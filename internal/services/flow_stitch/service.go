@@ -171,6 +171,14 @@ func classifyStep(edge graph.Edge, idx *snapshotIndex) flow.StepKind {
 	switch edge.Kind {
 	case graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic:
 		return flow.StepBoundary
+	case graph.EdgeRegistersBoundary:
+		return flow.StepBoundary
+	case graph.EdgeSpawns:
+		return flow.StepAsync
+	case graph.EdgeDefers:
+		return flow.StepDefer
+	case graph.EdgeWaitsOn:
+		return flow.StepWait
 	case graph.EdgeCalls:
 		targetNode, ok := idx.nodeByID[edge.To]
 		if ok {
@@ -178,12 +186,6 @@ func classifyStep(edge graph.Edge, idx *snapshotIndex) flow.StepKind {
 			name := nodeShortName(targetNode)
 			if isConstructorName(name) || kind == string(symbol.KindStruct) {
 				return flow.StepConstruct
-			}
-			if isAsyncIndicator(name) {
-				return flow.StepAsync
-			}
-			if isDeferIndicator(name) {
-				return flow.StepDefer
 			}
 		}
 		return flow.StepCall
@@ -278,7 +280,7 @@ func (idx *snapshotIndex) outgoingCalls(nodeID string) []graph.Edge {
 	var calls []graph.Edge
 	for _, e := range idx.outgoing[nodeID] {
 		switch e.Kind {
-		case graph.EdgeCalls, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic:
+		case graph.EdgeCalls, graph.EdgeSpawns, graph.EdgeDefers, graph.EdgeWaitsOn, graph.EdgeReturnsHandler, graph.EdgeRegistersBoundary, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic:
 			calls = append(calls, e)
 		}
 	}

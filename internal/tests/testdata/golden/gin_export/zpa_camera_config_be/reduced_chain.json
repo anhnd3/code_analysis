@@ -1,0 +1,27 @@
+{
+  "root_node_id": "gin:GET:/camera/config",
+  "nodes": [
+    {
+      "id": "gin:GET:/camera/config",
+      "canonical_name": "GET /camera/config",
+      "short_name": "GET /camera/config",
+      "role": "root"
+    },
+    {
+      "id": "node_598a2299e8f9",
+      "canonical_name": "main.CameraController.GetConfig",
+      "short_name": "GetConfig",
+      "role": "boundary",
+      "repository_id": "repo_cab3c197dc37"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "gin:GET:/camera/config",
+      "to_id": "node_598a2299e8f9",
+      "label": "GetConfig"
+    }
+  ],
+  "blocks": null,
+  "notes": null
+}

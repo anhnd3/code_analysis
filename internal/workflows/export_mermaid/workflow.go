@@ -9,9 +9,12 @@ import (
 	"analysis-module/internal/domain/flow"
 	"analysis-module/internal/domain/quality"
 	"analysis-module/internal/domain/reduced"
+	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
+	"analysis-module/internal/domain/symbol"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	graphstoreport "analysis-module/internal/ports/graphstore"
+	"analysis-module/internal/services/boundary_detect"
 	"analysis-module/internal/services/chain_reduce"
 	"analysis-module/internal/services/cross_boundary_link"
 	"analysis-module/internal/services/entrypoint_resolve"
@@ -63,6 +66,7 @@ type Workflow struct {
 	chainReduce       chain_reduce.Service
 	sequenceModel     sequence_model_build.Service
 	mermaidEmit       mermaid_emit.Service
+	boundaryDetect    boundary_detect.Service
 }
 
 // New creates the export_mermaid workflow.
@@ -75,6 +79,7 @@ func New(
 	chainReduce chain_reduce.Service,
 	sequenceModel sequence_model_build.Service,
 	mermaidEmit mermaid_emit.Service,
+	boundaryDetect boundary_detect.Service,
 ) Workflow {
 	return Workflow{
 		graphStores:       graphStores,
@@ -85,6 +90,7 @@ func New(
 		chainReduce:       chainReduce,
 		sequenceModel:     sequenceModel,
 		mermaidEmit:       mermaidEmit,
+		boundaryDetect:    boundaryDetect,
 	}
 }
 
@@ -104,7 +110,19 @@ func (w Workflow) Run(req Request, inventory repository.Inventory) (Result, erro
 	}
 
 	// 2. Resolve entrypoints
-	resolved, err := w.entrypointResolve.Resolve(snapshot, inventory)
+	var symbols []symbol.Symbol
+	for _, node := range snapshot.Nodes {
+		if node.Kind == graph.NodeSymbol && node.Location != nil {
+			symbols = append(symbols, symbol.Symbol{
+				ID:           symbol.ID(node.ID),
+				RepositoryID: node.RepositoryID,
+				FilePath:     node.FilePath,
+				Location:     *node.Location,
+			})
+		}
+	}
+	detectedRoots, _ := w.boundaryDetect.DetectAll(inventory, symbols)
+	resolved, err := w.entrypointResolve.Resolve(snapshot, inventory, detectedRoots)
 	if err != nil {
 		return Result{}, fmt.Errorf("export_mermaid: resolve entrypoints: %w", err)
 	}

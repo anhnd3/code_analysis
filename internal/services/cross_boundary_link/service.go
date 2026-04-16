@@ -34,6 +34,9 @@ func (s Service) Build(snapshot graph.GraphSnapshot, inventory repository.Invent
 	// Kafka linking (Milestone 3 full implementation, basic stub here)
 	links = append(links, s.matchKafka(idx)...)
 
+	// Unresolved handlers become external links
+	links = append(links, s.matchUnresolvedBoundaries(idx)...)
+
 	links = deduplicateLinks(links)
 	sort.Slice(links, func(i, j int) bool {
 		if links[i].OutboundNodeID != links[j].OutboundNodeID {
@@ -180,6 +183,30 @@ func (s Service) matchKafka(idx *linkIndex) []boundary.Link {
 		}
 	}
 
+	return links
+}
+
+// matchUnresolvedBoundaries marks any EdgeRegistersBoundary targeting an unresolved node as StatusExternalOnly
+// so downstream chain reduction converts it into a RoleRemote Mermaid participant.
+func (s Service) matchUnresolvedBoundaries(idx *linkIndex) []boundary.Link {
+	var links []boundary.Link
+	for _, edges := range idx.outgoing {
+		for _, e := range edges {
+			if e.Kind == graph.EdgeRegistersBoundary {
+				if strings.HasPrefix(e.To, "unresolved_") {
+					fromNode := idx.nodeByID[e.From]
+					links = append(links, boundary.Link{
+						OutboundNodeID: e.From,
+						InboundNodeID:  e.To,
+						Protocol:       boundary.ProtocolREST, // Generic protocol for unresolved boundaries
+						Status:         boundary.StatusExternalOnly,
+						OutboundRepoID: fromNode.RepositoryID,
+						Evidence:       "unresolved boundary handler target",
+					})
+				}
+			}
+		}
+	}
 	return links
 }
 

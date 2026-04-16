@@ -1,5 +1,7 @@
 package symbol
 
+import "analysis-module/internal/domain/executionhint"
+
 type ID string
 type Kind string
 
@@ -70,8 +72,9 @@ type Symbol struct {
 	Receiver      string       `json:"receiver,omitempty"`
 	CanonicalName string       `json:"canonical_name"`
 	Kind          Kind         `json:"kind"`
-	Signature     string       `json:"signature"`
-	Location      CodeLocation `json:"location"`
+	Signature     string            `json:"signature"`
+	Location      CodeLocation      `json:"location"`
+	Properties    map[string]string `json:"properties,omitempty"`
 }
 
 type RelationCandidate struct {
@@ -94,7 +97,8 @@ type FileExtractionResult struct {
 	ImportBindings []ImportBinding     `json:"import_bindings,omitempty"`
 	Exports        []ExportBinding     `json:"exports,omitempty"`
 	Symbols        []Symbol            `json:"symbols"`
-	Relations      []RelationCandidate `json:"relations"`
-	Diagnostics    []Diagnostic        `json:"diagnostics,omitempty"`
-	Warnings       []string            `json:"warnings"`
+	Relations      []RelationCandidate    `json:"relations"`
+	Hints          []executionhint.Hint   `json:"hints,omitempty"`
+	Diagnostics    []Diagnostic           `json:"diagnostics,omitempty"`
+	Warnings       []string               `json:"warnings"`
 }

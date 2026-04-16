@@ -1,0 +1,17 @@
+{
+  "title": "http flow",
+  "participants": [
+    {
+      "id": "gin:GET:/ping",
+      "label": "GET /ping",
+      "short_name": "GET /ping"
+    },
+    {
+      "id": "",
+      "label": "",
+      "short_name": "",
+      "is_external": true
+    }
+  ],
+  "elements": null
+}

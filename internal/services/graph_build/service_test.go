@@ -40,7 +40,7 @@ func TestBuildCreatesCallAndTestEdges(t *testing.T) {
 			}},
 		}},
 	}
-	result := builder.Build("ws_demo", "snap_demo", inventory, extraction)
+	result := builder.Build("ws1", "snap1", inventory, extraction, nil)
 	if result.Snapshot.Metadata.SymbolCount != 3 {
 		t.Fatalf("expected 3 symbols, got %d", result.Snapshot.Metadata.SymbolCount)
 	}

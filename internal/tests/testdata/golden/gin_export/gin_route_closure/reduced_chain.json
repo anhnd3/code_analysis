@@ -1,0 +1,27 @@
+{
+  "root_node_id": "gin:GET:/closure",
+  "nodes": [
+    {
+      "id": "gin:GET:/closure",
+      "canonical_name": "GET /closure",
+      "short_name": "GET /closure",
+      "role": "root"
+    },
+    {
+      "id": "node_0984c79eb26a",
+      "canonical_name": "main.main.$inline_handler_0",
+      "short_name": "$inline_handler_0",
+      "role": "boundary",
+      "repository_id": "repo_bc038c15b354"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "gin:GET:/closure",
+      "to_id": "node_0984c79eb26a",
+      "label": "$inline_handler_0"
+    }
+  ],
+  "blocks": null,
+  "notes": null
+}

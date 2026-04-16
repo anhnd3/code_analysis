@@ -1,0 +1,17 @@
+{
+  "chains": [
+    {
+      "root_node_id": "gin:GET:/ping",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "gin:GET:/ping",
+          "to_node_id": "unresolved_directHandler",
+          "edge_id": "edge_129c7fffafca",
+          "kind": "boundary"
+        }
+      ]
+    }
+  ],
+  "boundary_markers": null
+}

@@ -1,0 +1,27 @@
+{
+  "root_node_id": "gin:POST:/process",
+  "nodes": [
+    {
+      "id": "gin:POST:/process",
+      "canonical_name": "POST /process",
+      "short_name": "POST /process",
+      "role": "root"
+    },
+    {
+      "id": "node_0f1af429ee86",
+      "canonical_name": "main.main.$inline_handler_0",
+      "short_name": "$inline_handler_0",
+      "role": "boundary",
+      "repository_id": "repo_e6879466a39f"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "gin:POST:/process",
+      "to_id": "node_0f1af429ee86",
+      "label": "$inline_handler_0"
+    }
+  ],
+  "blocks": null,
+  "notes": null
+}

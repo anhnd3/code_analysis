@@ -1,0 +1,18 @@
+{
+  "chains": [
+    {
+      "root_node_id": "gin:POST:/process",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "gin:POST:/process",
+          "to_node_id": "node_0f1af429ee86",
+          "edge_id": "edge_c7d2e51edde7",
+          "kind": "boundary",
+          "label": "$inline_handler_0"
+        }
+      ]
+    }
+  ],
+  "boundary_markers": null
+}

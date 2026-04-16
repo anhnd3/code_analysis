@@ -120,55 +120,89 @@ func buildElements(chain reduced.Chain, participants []sequence.Participant) []s
 	// Track which notes have been emitted
 	emittedNotes := map[int]bool{}
 
-	for _, edge := range chain.Edges {
-		// Skip edges referencing unknown participants
-		if !participantSet[edge.FromID] || !participantSet[edge.ToID] {
-			continue
-		}
+	type OrderedItem struct {
+		Index int
+		Edge  *reduced.Edge
+		Block *reduced.Block
+	}
+	var items []OrderedItem
+	for i := range chain.Edges {
+		items = append(items, OrderedItem{Index: chain.Edges[i].OrderIndex, Edge: &chain.Edges[i]})
+	}
+	for i := range chain.Blocks {
+		items = append(items, OrderedItem{Index: chain.Blocks[i].OrderIndex, Block: &chain.Blocks[i]})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Index < items[j].Index })
 
-		// Emit notes for the target node before the message
-		for i, note := range chain.Notes {
-			if emittedNotes[i] {
+	for _, item := range items {
+		if item.Edge != nil {
+			edge := *item.Edge
+			if !participantSet[edge.FromID] || !participantSet[edge.ToID] {
 				continue
 			}
-			if note.AtNodeID == edge.ToID || note.AtNodeID == edge.FromID {
-				if participantSet[note.AtNodeID] {
-					elements = append(elements, sequence.Element{
-						Note: &sequence.Note{
-							OverID: note.AtNodeID,
-							Text:   note.Text,
-						},
-					})
-					emittedNotes[i] = true
+
+			// Emit notes for the target node before the message
+			emitNotesForTarget(&elements, edge.ToID, edge.FromID, chain.Notes, emittedNotes, participantSet)
+
+			// Determine message kind
+			kind := sequence.MessageSync
+			if edge.CrossRepo {
+				kind = sequence.MessageAsync
+			}
+
+			label := edge.Label
+			if label == "" {
+				label = "call"
+			}
+			if edge.Inferred {
+				label += " [inferred]"
+			}
+			if edge.CrossRepo && edge.LinkStatus != "" {
+				label += " [" + edge.LinkStatus + "]"
+			}
+
+			elements = append(elements, sequence.Element{
+				Message: &sequence.Message{
+					FromID: edge.FromID,
+					ToID:   edge.ToID,
+					Label:  label,
+					Kind:   kind,
+				},
+			})
+		} else if item.Block != nil {
+			block := *item.Block
+			seqBlock := sequence.Block{
+				Kind:  sequence.BlockKind(block.Kind),
+				Label: block.Label,
+			}
+			for _, branch := range block.Branches {
+				section := sequence.BlockSection{
+					Label: branch.Condition,
 				}
+				for _, edge := range branch.Edges {
+					if !participantSet[edge.FromID] || !participantSet[edge.ToID] {
+						continue
+					}
+					emitNotesForTarget(&elements, edge.ToID, edge.FromID, chain.Notes, emittedNotes, participantSet)
+					
+					kind := sequence.MessageSync
+					if edge.CrossRepo {
+						kind = sequence.MessageAsync
+					}
+					
+					section.Messages = append(section.Messages, sequence.Message{
+						FromID: edge.FromID,
+						ToID:   edge.ToID,
+						Label:  edge.Label,
+						Kind:   kind,
+					})
+				}
+				seqBlock.Sections = append(seqBlock.Sections, section)
+			}
+			if len(seqBlock.Sections) > 0 {
+				elements = append(elements, sequence.Element{Block: &seqBlock})
 			}
 		}
-
-		// Determine message kind
-		kind := sequence.MessageSync
-		if edge.CrossRepo {
-			kind = sequence.MessageAsync
-		}
-
-		label := edge.Label
-		if label == "" {
-			label = "call"
-		}
-		if edge.Inferred {
-			label += " [inferred]"
-		}
-		if edge.CrossRepo && edge.LinkStatus != "" {
-			label += " [" + edge.LinkStatus + "]"
-		}
-
-		elements = append(elements, sequence.Element{
-			Message: &sequence.Message{
-				FromID: edge.FromID,
-				ToID:   edge.ToID,
-				Label:  label,
-				Kind:   kind,
-			},
-		})
 	}
 
 	// Emit any remaining notes
@@ -185,35 +219,26 @@ func buildElements(chain reduced.Chain, participants []sequence.Participant) []s
 		})
 	}
 
-	// Add block structures
-	for _, block := range chain.Blocks {
-		seqBlock := sequence.Block{
-			Kind:  sequence.BlockKind(block.Kind),
-			Label: block.Label,
+	return elements
+}
+
+func emitNotesForTarget(elements *[]sequence.Element, toID, fromID string, notes []reduced.Note, emittedNotes map[int]bool, participantSet map[string]bool) {
+	for i, note := range notes {
+		if emittedNotes[i] {
+			continue
 		}
-		for _, branch := range block.Branches {
-			section := sequence.BlockSection{
-				Label: branch.Condition,
-			}
-			for _, edge := range branch.Edges {
-				if !participantSet[edge.FromID] || !participantSet[edge.ToID] {
-					continue
-				}
-				section.Messages = append(section.Messages, sequence.Message{
-					FromID: edge.FromID,
-					ToID:   edge.ToID,
-					Label:  edge.Label,
-					Kind:   sequence.MessageSync,
+		if note.AtNodeID == toID || note.AtNodeID == fromID {
+			if participantSet[note.AtNodeID] {
+				*elements = append(*elements, sequence.Element{
+					Note: &sequence.Note{
+						OverID: note.AtNodeID,
+						Text:   note.Text,
+					},
 				})
+				emittedNotes[i] = true
 			}
-			seqBlock.Sections = append(seqBlock.Sections, section)
-		}
-		if len(seqBlock.Sections) > 0 {
-			elements = append(elements, sequence.Element{Block: &seqBlock})
 		}
 	}
-
-	return elements
 }
 
 func remainingNotes(notes []reduced.Note, emitted map[int]bool, participantSet map[string]bool) []reduced.Note {

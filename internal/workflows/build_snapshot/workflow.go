@@ -8,9 +8,11 @@ import (
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/quality"
 	"analysis-module/internal/domain/repository"
+	"analysis-module/internal/domain/symbol"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	cacheport "analysis-module/internal/ports/cache"
 	graphstoreport "analysis-module/internal/ports/graphstore"
+	"analysis-module/internal/services/boundary_detect"
 	"analysis-module/internal/services/graph_build"
 	"analysis-module/internal/services/quality_report"
 	"analysis-module/internal/services/snapshot_manage"
@@ -41,10 +43,11 @@ type Workflow struct {
 	artifactStore  artifactstoreport.Store
 	qualityReport  quality_report.Service
 	snapshotManage snapshot_manage.Service
+	boundaryDetect boundary_detect.Service
 	reporter       progress.Reporter
 }
 
-func New(analyze analyze_workspace.Workflow, symbolIndex symbol_index.Service, graphBuild graph_build.Service, graphStores graphstoreport.Provider, cache cacheport.SnapshotCache, artifactStore artifactstoreport.Store, qualityReport quality_report.Service, snapshotManage snapshot_manage.Service, reporter progress.Reporter) Workflow {
+func New(analyze analyze_workspace.Workflow, symbolIndex symbol_index.Service, graphBuild graph_build.Service, graphStores graphstoreport.Provider, cache cacheport.SnapshotCache, artifactStore artifactstoreport.Store, qualityReport quality_report.Service, snapshotManage snapshot_manage.Service, boundaryDetect boundary_detect.Service, reporter progress.Reporter) Workflow {
 	if reporter == nil {
 		reporter = progress.NoopReporter{}
 	}
@@ -57,6 +60,7 @@ func New(analyze analyze_workspace.Workflow, symbolIndex symbol_index.Service, g
 		artifactStore:  artifactStore,
 		qualityReport:  qualityReport,
 		snapshotManage: snapshotManage,
+		boundaryDetect: boundaryDetect,
 		reporter:       reporter,
 	}
 }
@@ -75,7 +79,18 @@ func (w Workflow) Run(req Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	graphResult := w.graphBuild.Build(string(analyzeResult.WorkspaceManifest.ID), snapshotID, analyzeResult.Inventory, extraction)
+	var allSymbols []symbol.Symbol
+	for _, repoExt := range extraction.Repositories {
+		for _, fileExt := range repoExt.Files {
+			allSymbols = append(allSymbols, fileExt.Symbols...)
+		}
+	}
+	detectedRoots, err := w.boundaryDetect.DetectAll(analyzeResult.Inventory, allSymbols)
+	if err != nil {
+		w.reporter.Status("boundary detection error: " + err.Error())
+	}
+
+	graphResult := w.graphBuild.Build(string(analyzeResult.WorkspaceManifest.ID), snapshotID, analyzeResult.Inventory, extraction, detectedRoots)
 	store, err := w.graphStores.ForWorkspace(string(analyzeResult.WorkspaceManifest.ID))
 	if err != nil {
 		return Result{}, err

@@ -15,7 +15,7 @@ func TestResolve_BootstrapMainMain(t *testing.T) {
 			symbolNode("n1", "cmd/server/main.main", "function", "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestResolve_BootstrapCmdExecute(t *testing.T) {
 			symbolNode("n1", "cmd/root.Execute", "method", "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestResolve_HTTPHandler(t *testing.T) {
 			symbolNode("n1", "api/handler.GetUser", string(symbol.KindRouteHandler), "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestResolve_GRPCHandler(t *testing.T) {
 			symbolNode("n1", "internal/grpc.CreateOrder", string(symbol.KindGRPCHandler), "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestResolve_Consumer(t *testing.T) {
 			symbolNode("n1", "worker/handler.ProcessEvent", string(symbol.KindConsumer), "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestResolve_CLIFromEntrypointEdge(t *testing.T) {
 			{ID: "e1", Kind: graph.EdgeEntrypointTo, From: "svc1", To: "f1"},
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestResolve_DeterministicOrder(t *testing.T) {
 			symbolNode("n1", "api/handler.GetUser", string(symbol.KindRouteHandler), "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestResolve_Deduplicate(t *testing.T) {
 			symbolNode("n1", "cmd/server/main.main", "function", "repo1"),
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestResolve_NoRoots(t *testing.T) {
 			{ID: "n1", Kind: graph.NodePackage, CanonicalName: "utils"},
 		},
 	}
-	result, err := New().Resolve(snapshot, repository.Inventory{})
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

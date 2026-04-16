@@ -12,6 +12,8 @@ import (
 	cachememory "analysis-module/internal/adapters/graphstore/memory"
 	sqliteprovider "analysis-module/internal/adapters/graphstore/sqlite"
 	scannerdetectors "analysis-module/internal/adapters/scanner/detectors"
+	"analysis-module/internal/adapters/boundary/go"
+	"analysis-module/internal/adapters/boundary/go/frameworks"
 	"analysis-module/internal/app/config"
 	"analysis-module/internal/app/progress"
 	"analysis-module/internal/services/graph_build"
@@ -42,6 +44,7 @@ import (
 	"analysis-module/internal/services/chain_reduce"
 	"analysis-module/internal/services/sequence_model_build"
 	"analysis-module/internal/services/mermaid_emit"
+	"analysis-module/internal/services/boundary_detect"
 )
 
 type Application struct {
@@ -75,8 +78,15 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	analyzeWorkflow := analyze_workspace.New(workspaceScanSvc, inventorySvc, artifactStore, snapshotManageSvc)
 	symbolIndexSvc := symbol_index.New(reporter, goextractor.New(), pythonextractor.New(), jsextractor.New())
 	graphBuildSvc := graph_build.New(reporter)
+	
+	boundaryRegistry := boundary.NewRegistry()
+	boundaryRegistry.Register(frameworks.NewGinDetector())
+	boundaryRegistry.Register(frameworks.NewNetHTTPDetector())
+	boundaryRegistry.Register(frameworks.NewGRPCGatewayDetector())
+	boundaryDetectSvc := boundary_detect.New(boundaryRegistry)
+
 	qualityReportSvc := quality_report.New()
-	buildSnapshotWorkflow := build_snapshot.New(analyzeWorkflow, symbolIndexSvc, graphBuildSvc, graphStores, cache, artifactStore, qualityReportSvc, snapshotManageSvc, reporter)
+	buildSnapshotWorkflow := build_snapshot.New(analyzeWorkflow, symbolIndexSvc, graphBuildSvc, graphStores, cache, artifactStore, qualityReportSvc, snapshotManageSvc, boundaryDetectSvc, reporter)
 	reviewBundlePackager := review_bundle_packager.New(cfg.ArtifactRoot, reporter)
 	buildReviewBundleWorkflow := build_review_bundle.New(buildSnapshotWorkflow, reviewBundlePackager)
 	querySvc := graph_query.New(graphStores)
@@ -94,7 +104,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	chainReduceSvc := chain_reduce.New()
 	sequenceModelSvc := sequence_model_build.New()
 	mermaidEmitSvc := mermaid_emit.New()
-	exportMermaidWorkflow := export_mermaid.New(graphStores, artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc)
+	exportMermaidWorkflow := export_mermaid.New(graphStores, artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc, boundaryDetectSvc)
 
 	return &Application{
 		Config:            cfg,

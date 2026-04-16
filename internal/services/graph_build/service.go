@@ -9,6 +9,8 @@ import (
 
 	"analysis-module/internal/app/progress"
 	"analysis-module/internal/domain/analysis"
+	"analysis-module/internal/domain/boundaryroot"
+	"analysis-module/internal/domain/executionhint"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
@@ -32,18 +34,38 @@ func New(reporter progress.Reporter) Service {
 	return Service{reporter: reporter}
 }
 
-func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inventory, extraction symbol_index.Result) BuildResult {
+func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inventory, extraction symbol_index.Result, detectedRoots []boundaryroot.Root) BuildResult {
 	s.reporter.StartStage("graph", 0)
 	nodes := []graph.Node{}
 	edges := []graph.Edge{}
 	issueCounts := inventory.IssueCounts
 
 	symbolByCanonical := map[string]symbol.Symbol{}
+	symbolByID := map[symbol.ID]symbol.Symbol{}
 	symbolNodeByID := map[symbol.ID]graph.Node{}
 	symbolsByFileAndName := map[string]map[string][]symbol.Symbol{}
 	exportCanonicalByFile := map[string]map[string]string{}
 	methodsBySuffix := map[string][]symbol.Symbol{}
 	serviceNodeIDs := map[string]map[string]string{}
+
+	for _, repoExt := range extraction.Repositories {
+		for _, fileResult := range repoExt.Files {
+			if _, ok := symbolsByFileAndName[fileResult.FilePath]; !ok {
+				symbolsByFileAndName[fileResult.FilePath] = map[string][]symbol.Symbol{}
+			}
+			for _, sym := range fileResult.Symbols {
+				symbolByCanonical[sym.CanonicalName] = sym
+				symbolByID[sym.ID] = sym
+				suffix := "." + sym.Name
+				methodsBySuffix[suffix] = append(methodsBySuffix[suffix], sym)
+				symbolsByFileAndName[fileResult.FilePath][sym.Name] = append(symbolsByFileAndName[fileResult.FilePath][sym.Name], sym)
+			}
+			exportCanonicalByFile[fileResult.FilePath] = map[string]string{}
+			for _, exportBinding := range fileResult.Exports {
+				exportCanonicalByFile[fileResult.FilePath][exportBinding.Name] = exportBinding.CanonicalName
+			}
+		}
+	}
 
 	workspaceNode := graph.Node{
 		ID:            ids.Stable("node", snapshotID, "workspace", workspaceID),
@@ -149,14 +171,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				issueCounts = incrementIssueCount(issueCounts, diag.Category)
 			}
 
-			if _, ok := symbolsByFileAndName[fileResult.FilePath]; !ok {
-				symbolsByFileAndName[fileResult.FilePath] = map[string][]symbol.Symbol{}
-			}
 			for _, sym := range fileResult.Symbols {
-				symbolByCanonical[sym.CanonicalName] = sym
-				suffix := "." + sym.Name
-				methodsBySuffix[suffix] = append(methodsBySuffix[suffix], sym)
-				symbolsByFileAndName[fileResult.FilePath][sym.Name] = append(symbolsByFileAndName[fileResult.FilePath][sym.Name], sym)
 				nodeKind := graph.NodeSymbol
 				if sym.Kind == symbol.KindTestFunction {
 					nodeKind = graph.NodeTest
@@ -221,7 +236,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				if !ok {
 					continue
 				}
-				resolved, confidence, ok := resolveTarget(relation, symbolByCanonical, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
+				resolved, confidence, ok := resolveTarget(relation, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
 				if !ok {
 					issueCounts.UnresolvedImports++
 					continue
@@ -247,6 +262,83 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 					edges = append(edges, newEdge(snapshotID, graph.EdgeTestedBy, toNode.ID, fromNode.ID, relation.ExtractionMethod, graph.ConfidenceInferred, 0.85))
 				}
 			}
+
+			// Add semantic hint edges
+			for _, hint := range fileResult.Hints {
+				source, ok := sourceByID[symbol.ID(hint.SourceSymbolID)]
+				if !ok {
+					continue
+				}
+
+				targetNodeID := "unresolved_" + hint.TargetSymbol
+				if hint.TargetSymbol != "" {
+					targetSym, _, resolved := resolveTarget(symbol.RelationCandidate{TargetCanonicalName: hint.TargetSymbol}, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
+					if resolved {
+						targetNodeID = symbolNodeByID[targetSym.ID].ID
+					}
+				}
+
+				fromNode := symbolNodeByID[source.ID]
+
+				edgeKind := mapHintToEdgeKind(hint.Kind)
+				edge := graph.Edge{
+					ID:   ids.Stable("edge", snapshotID, fromNode.ID, targetNodeID, string(edgeKind), hint.Evidence),
+					Kind: edgeKind,
+					From: fromNode.ID,
+					To:   targetNodeID,
+					Evidence: graph.Evidence{
+						Type:             "semantic",
+						Source:           hint.Evidence,
+						ExtractionMethod: extractionMethod(fileResult.Language),
+						Details:          string(hint.Kind),
+					},
+					Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.8},
+					SnapshotID: snapshotID,
+				}
+				edges = append(edges, edge)
+			}
+		}
+	}
+
+	// Persist upstream framework boundary roots
+	for _, br := range detectedRoots {
+		rootNode := graph.Node{
+			ID:            br.ID,
+			Kind:          graph.NodeEndpoint, // or custom NodeBoundary
+			CanonicalName: br.CanonicalName,
+			Properties: map[string]string{
+				"framework":       br.Framework,
+				"boundary_kind":   string(br.Kind),
+				"method":          br.Method,
+				"path":            br.Path,
+				"handler_target":  br.HandlerTarget,
+			},
+			SnapshotID: snapshotID,
+		}
+		nodes = append(nodes, rootNode)
+		
+		// If handler target is resolved to a symbol:
+		if br.HandlerTarget != "" {
+			targetSym, _, resolved := resolveTarget(symbol.RelationCandidate{TargetCanonicalName: br.HandlerTarget}, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
+			targetNodeID := "unresolved_" + br.HandlerTarget
+			if resolved {
+				targetNodeID = symbolNodeByID[targetSym.ID].ID
+			}
+			edge := graph.Edge{
+				ID:   ids.Stable("edge", snapshotID, rootNode.ID, targetNodeID, string(graph.EdgeRegistersBoundary)),
+				Kind: graph.EdgeRegistersBoundary,
+				From: rootNode.ID,
+				To:   targetNodeID,
+				Evidence: graph.Evidence{
+					Type:             "static",
+					Source:           br.SourceExpr,
+					ExtractionMethod: br.Framework,
+					Details:          "boundary_detector",
+				},
+				Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1.0},
+				SnapshotID: snapshotID,
+			}
+			edges = append(edges, edge)
 		}
 	}
 
@@ -274,8 +366,13 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 	}
 }
 
-func resolveTarget(relation symbol.RelationCandidate, symbolByCanonical map[string]symbol.Symbol, symbolsByFileAndName map[string]map[string][]symbol.Symbol, exportCanonicalByFile map[string]map[string]string, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
+func resolveTarget(relation symbol.RelationCandidate, symbolByCanonical map[string]symbol.Symbol, symbolByID map[symbol.ID]symbol.Symbol, symbolsByFileAndName map[string]map[string][]symbol.Symbol, exportCanonicalByFile map[string]map[string]string, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
 	if relation.TargetCanonicalName != "" {
+		// First try exact ID matching (e.g. for already resolved closure IDs)
+		if resolved, ok := symbolByID[symbol.ID(relation.TargetCanonicalName)]; ok {
+			return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.99}, true
+		}
+		// Then try canonical matching
 		if resolved, ok := symbolByCanonical[relation.TargetCanonicalName]; ok {
 			return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.95}, true
 		}
@@ -509,4 +606,21 @@ func dedupeEdges(edges []graph.Edge) []graph.Edge {
 		return result[i].ID < result[j].ID
 	})
 	return result
+}
+
+func mapHintToEdgeKind(kind executionhint.HintKind) graph.EdgeKind {
+	switch kind {
+	case executionhint.HintReturnHandler:
+		return graph.EdgeReturnsHandler
+	case executionhint.HintSpawn:
+		return graph.EdgeSpawns
+	case executionhint.HintDefer:
+		return graph.EdgeDefers
+	case executionhint.HintWait:
+		return graph.EdgeWaitsOn
+	case executionhint.HintBranch:
+		return graph.EdgeCalls // Branches can map to explicit flow objects later
+	default:
+		return graph.EdgeCalls
+	}
 }
