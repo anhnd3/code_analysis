@@ -19,6 +19,7 @@ import (
 	"analysis-module/internal/workflows/review_graph_export"
 	"analysis-module/internal/workflows/review_graph_import"
 	"analysis-module/internal/workflows/review_graph_list_startpoints"
+	"analysis-module/internal/workflows/export_mermaid"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func main() {
 		fatal(err)
 	}
 	if len(os.Args) < 2 {
-		fatal(fmt.Errorf("expected subcommand: analyze-workspace | build-snapshot | build-review-bundle | blast-radius | impacted-tests | graph"))
+		fatal(fmt.Errorf("expected subcommand: analyze-workspace | build-snapshot | build-review-bundle | blast-radius | impacted-tests | graph | export-mermaid | build-all-mermaid"))
 	}
 	switch os.Args[1] {
 	case "analyze-workspace":
@@ -41,6 +42,10 @@ func main() {
 		runBlastRadius(app, os.Args[2:])
 	case "impacted-tests":
 		runImpactedTests(app, os.Args[2:])
+	case "export-mermaid":
+		runExportMermaid(app, os.Args[2:])
+	case "build-all-mermaid":
+		runBuildAllMermaid(app, os.Args[2:])
 	case "graph":
 		runGraph(app, os.Args[2:])
 	default:
@@ -137,6 +142,124 @@ func runImpactedTests(app *bootstrap.Application, args []string) {
 		fatal(err)
 	}
 	write(result)
+}
+
+func runExportMermaid(app *bootstrap.Application, args []string) {
+	fs := flag.NewFlagSet("export-mermaid", flag.ExitOnError)
+	workspaceID := fs.String("workspace-id", "", "workspace id")
+	snapshotID := fs.String("snapshot-id", "", "snapshot id")
+	rootType := fs.String("root-type", "master", "root type: bootstrap|http|worker|symbol|master")
+	rootSelector := fs.String("root-selector", "", "target canonical name or node id")
+	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
+	maxBranches := fs.Int("max-branches", 5, "max branch limit")
+	collapseMode := fs.String("collapse-mode", "default", "collapse mode: default|none|aggressive")
+	serviceName := fs.String("service-name", "", "service short name")
+	incCandidates := fs.Bool("include-candidates", false, "include candidate boundary links")
+	_ = fs.Parse(args)
+
+	// Need inventory for ExportMermaid. We can get it via AnalyzeWorkspace.
+	wsPath := "." 
+	if len(args) > 0 {
+		// Just guess path or use "." to get basic inventory
+	}
+	analyzeResult, err := app.AnalyzeWorkspace.Run(analyze_workspace.Request{
+		WorkspacePath: wsPath,
+	})
+	if err != nil {
+		fatal(fmt.Errorf("failed to analyze workspace for inventory: %w", err))
+	}
+
+	result, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:       *workspaceID,
+		SnapshotID:        *snapshotID,
+		RootType:          export_mermaid.RootTypeFilter(*rootType),
+		RootSelector:      *rootSelector,
+		MaxDepth:          *maxDepth,
+		MaxBranches:       *maxBranches,
+		CollapseMode:      *collapseMode,
+		ServiceShortName:  *serviceName,
+		IncludeCandidates: *incCandidates,
+	}, analyzeResult.Inventory) 
+	if err != nil {
+		fatal(err)
+	}
+	// Print JSON result structure output
+	write(result)
+}
+
+func runBuildAllMermaid(app *bootstrap.Application, args []string) {
+	fs := flag.NewFlagSet("build-all-mermaid", flag.ExitOnError)
+	workspacePath := fs.String("workspace", ".", "workspace path")
+	ignore := fs.String("ignore", "", "comma separated ignore patterns")
+	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
+	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
+	maxBranches := fs.Int("max-branches", 5, "max branch limit")
+	_ = fs.Parse(args)
+	app = rebuildApp(app, *progressMode)
+
+	// Step 1: Build Snapshot
+	app.Logger.Info("Building snapshot...")
+	snapResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath:  *workspacePath,
+		IgnorePatterns: splitCSV(*ignore),
+	})
+	if err != nil {
+		fatal(fmt.Errorf("failed to build snapshot: %w", err))
+	}
+	app.Logger.Info("Snapshot built", "workspace_id", snapResult.WorkspaceID, "snapshot_id", snapResult.Snapshot.ID)
+
+	var allResults []export_mermaid.Result
+
+	// Step 2: Pass A - Bootstrap
+	app.Logger.Info("Exporting 'bootstrap' flows...")
+	resBoot, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:       snapResult.WorkspaceID,
+		SnapshotID:        snapResult.Snapshot.ID,
+		RootType:          export_mermaid.RootFilterBootstrap,
+		MaxDepth:          *maxDepth,
+		MaxBranches:       *maxBranches,
+		CollapseMode:      "default",
+	}, snapResult.Inventory)
+	if err != nil {
+		app.Logger.Error("bootstrap export failed", "error", err)
+	} else {
+		allResults = append(allResults, resBoot)
+	}
+
+	// Step 3: Pass B - HTTP
+	app.Logger.Info("Exporting 'http' endpoint flows...")
+	resHTTP, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:       snapResult.WorkspaceID,
+		SnapshotID:        snapResult.Snapshot.ID,
+		RootType:          export_mermaid.RootFilterHTTP,
+		MaxDepth:          *maxDepth,
+		CollapseMode:      "default",
+	}, snapResult.Inventory)
+	if err != nil {
+		app.Logger.Error("http export failed", "error", err)
+	} else {
+		allResults = append(allResults, resHTTP)
+	}
+
+	// Step 4: Pass C - Worker
+	app.Logger.Info("Exporting 'worker' flows...")
+	resWorker, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:       snapResult.WorkspaceID,
+		SnapshotID:        snapResult.Snapshot.ID,
+		RootType:          export_mermaid.RootFilterWorker,
+		MaxDepth:          *maxDepth,
+		CollapseMode:      "aggressive",
+	}, snapResult.Inventory)
+	if err != nil {
+		app.Logger.Error("worker export failed", "error", err)
+	} else {
+		allResults = append(allResults, resWorker)
+	}
+
+	write(map[string]any{
+		"snapshot": snapResult,
+		"exports":  allResults,
+	})
 }
 
 func runGraph(app *bootstrap.Application, args []string) {

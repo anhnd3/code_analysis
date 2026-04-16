@@ -35,6 +35,13 @@ import (
 	"analysis-module/internal/workflows/review_graph_export"
 	"analysis-module/internal/workflows/review_graph_import"
 	"analysis-module/internal/workflows/review_graph_list_startpoints"
+	"analysis-module/internal/workflows/export_mermaid"
+	"analysis-module/internal/services/entrypoint_resolve"
+	"analysis-module/internal/services/flow_stitch"
+	"analysis-module/internal/services/cross_boundary_link"
+	"analysis-module/internal/services/chain_reduce"
+	"analysis-module/internal/services/sequence_model_build"
+	"analysis-module/internal/services/mermaid_emit"
 )
 
 type Application struct {
@@ -48,6 +55,7 @@ type Application struct {
 	ReviewGraphImport review_graph_import.Workflow
 	ReviewGraphListStartpoints review_graph_list_startpoints.Workflow
 	ReviewGraphExport review_graph_export.Workflow
+	ExportMermaid     export_mermaid.Workflow
 	HTTPHandler       http.Handler
 }
 
@@ -79,6 +87,15 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	reviewGraphTraverseSvc := reviewgraph_traverse.New()
 	reviewGraphSelectSvc := reviewgraph_select.New(reviewGraphPathsSvc)
 	reviewGraphExportSvc := reviewgraph_export.New(reviewGraphPathsSvc, reviewGraphTraverseSvc)
+	
+	entrypointResolveSvc := entrypoint_resolve.New()
+	flowStitchSvc := flow_stitch.New()
+	crossBoundaryLinkSvc := cross_boundary_link.New()
+	chainReduceSvc := chain_reduce.New()
+	sequenceModelSvc := sequence_model_build.New()
+	mermaidEmitSvc := mermaid_emit.New()
+	exportMermaidWorkflow := export_mermaid.New(graphStores, artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc)
+
 	return &Application{
 		Config:            cfg,
 		Logger:            logger,
@@ -90,6 +107,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 		ReviewGraphImport: review_graph_import.New(reviewGraphImportSvc),
 		ReviewGraphListStartpoints: review_graph_list_startpoints.New(reviewGraphSelectSvc),
 		ReviewGraphExport: review_graph_export.New(reviewGraphExportSvc),
+		ExportMermaid:     exportMermaidWorkflow,
 		HTTPHandler:       httpapi.New(analyzeWorkflow, buildSnapshotWorkflow, blastRadiusWorkflow, impactedTestsWorkflow),
 	}, nil
 }
