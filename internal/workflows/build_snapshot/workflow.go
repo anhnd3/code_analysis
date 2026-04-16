@@ -7,6 +7,7 @@ import (
 	"analysis-module/internal/domain/artifact"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/quality"
+	"analysis-module/internal/domain/repository"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	cacheport "analysis-module/internal/ports/cache"
 	graphstoreport "analysis-module/internal/ports/graphstore"
@@ -26,6 +27,7 @@ type Request struct {
 type Result struct {
 	WorkspaceID   string                        `json:"workspace_id"`
 	Snapshot      graph.GraphSnapshot           `json:"snapshot"`
+	Inventory     repository.Inventory          `json:"inventory"`
 	QualityReport quality.AnalysisQualityReport `json:"quality_report"`
 	ArtifactRefs  []artifact.Ref                `json:"artifact_refs"`
 }
@@ -97,6 +99,7 @@ func (w Workflow) Run(req Request) (Result, error) {
 	return Result{
 		WorkspaceID:   string(analyzeResult.WorkspaceManifest.ID),
 		Snapshot:      graphResult.Snapshot,
+		Inventory:     analyzeResult.Inventory,
 		QualityReport: report,
 		ArtifactRefs:  artifactRefs,
 	}, nil
