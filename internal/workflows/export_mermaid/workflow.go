@@ -13,7 +13,6 @@ import (
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
-	graphstoreport "analysis-module/internal/ports/graphstore"
 	"analysis-module/internal/services/boundary_detect"
 	"analysis-module/internal/services/chain_reduce"
 	"analysis-module/internal/services/cross_boundary_link"

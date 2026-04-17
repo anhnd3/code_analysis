@@ -130,7 +130,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 		role := s.classifyRole(step, targetGraphNode, snapshot)
 
 		// Collapse decision
-		if cfg.collapseMode != "none" && shouldCollapse(role, targetGraphNode, cfg) {
+		if cfg.collapseMode != "none" && s.shouldCollapse(role, targetGraphNode, cfg) {
 			// Track collapsed helpers
 			if nodeSet[step.FromNodeID] {
 				// Find existing from-node and update collapse count
@@ -329,7 +329,7 @@ func (s Service) classifyRole(step flow.Step, node graph.Node, snapshot graph.Gr
 }
 
 // shouldCollapse returns true if the node should be collapsed (hidden).
-func shouldCollapse(role reduced.NodeRole, node graph.Node, cfg reduceConfig) bool {
+func (s Service) shouldCollapse(role reduced.NodeRole, node graph.Node, cfg reduceConfig) bool {
 	if cfg.collapseMode == "none" {
 		return false
 	}

@@ -1,0 +1,522 @@
+{
+  "chains": [
+    {
+      "root_node_id": "nethttp:/healthz",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "nethttp:/healthz",
+          "to_node_id": "node_cabf7bc83f77",
+          "edge_id": "edge_9d6cecf073eb",
+          "kind": "boundary",
+          "label": "healthz"
+        },
+        {
+          "from_node_id": "node_cabf7bc83f77",
+          "to_node_id": "node_4a623d59a56e",
+          "edge_id": "edge_ca5ef855e914",
+          "kind": "call",
+          "label": "writeJSON"
+        }
+      ]
+    },
+    {
+      "root_node_id": "nethttp:/v1/queries/blast-radius",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "nethttp:/v1/queries/blast-radius",
+          "to_node_id": "node_1eab1da1dc90",
+          "edge_id": "edge_0dbc0ab7e39b",
+          "kind": "boundary",
+          "label": "blastRadius"
+        },
+        {
+          "from_node_id": "node_1eab1da1dc90",
+          "to_node_id": "node_172695d453bf",
+          "edge_id": "edge_fa5e0f5a6049",
+          "kind": "call",
+          "label": "writeError"
+        },
+        {
+          "from_node_id": "node_1eab1da1dc90",
+          "to_node_id": "node_4a623d59a56e",
+          "edge_id": "edge_b73ede2f43bb",
+          "kind": "call",
+          "label": "writeJSON"
+        },
+        {
+          "from_node_id": "node_1eab1da1dc90",
+          "to_node_id": "node_7e537ca7b339",
+          "edge_id": "edge_69debc401492",
+          "kind": "call",
+          "label": "InvalidArgument",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_1eab1da1dc90",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_12916c2807f9",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_7e537ca7b339",
+          "to_node_id": "node_cc4955b44e5d",
+          "edge_id": "edge_2cc8ff74d273",
+          "kind": "construct",
+          "label": "New"
+        },
+        {
+          "from_node_id": "node_172695d453bf",
+          "to_node_id": "node_cf66e3fe660f",
+          "edge_id": "edge_684cef5b1a83",
+          "kind": "call",
+          "label": "StatusOf",
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "root_node_id": "nethttp:/v1/queries/impacted-tests",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "nethttp:/v1/queries/impacted-tests",
+          "to_node_id": "node_3d7f35e6149d",
+          "edge_id": "edge_dac2068dff33",
+          "kind": "boundary",
+          "label": "impactedTests"
+        },
+        {
+          "from_node_id": "node_3d7f35e6149d",
+          "to_node_id": "node_172695d453bf",
+          "edge_id": "edge_510c4e8802c0",
+          "kind": "call",
+          "label": "writeError"
+        },
+        {
+          "from_node_id": "node_3d7f35e6149d",
+          "to_node_id": "node_4a623d59a56e",
+          "edge_id": "edge_7c2e2744b976",
+          "kind": "call",
+          "label": "writeJSON"
+        },
+        {
+          "from_node_id": "node_3d7f35e6149d",
+          "to_node_id": "node_7e537ca7b339",
+          "edge_id": "edge_469400368f4a",
+          "kind": "call",
+          "label": "InvalidArgument",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_3d7f35e6149d",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_2665a4af0de5",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_7e537ca7b339",
+          "to_node_id": "node_cc4955b44e5d",
+          "edge_id": "edge_2cc8ff74d273",
+          "kind": "construct",
+          "label": "New"
+        },
+        {
+          "from_node_id": "node_172695d453bf",
+          "to_node_id": "node_cf66e3fe660f",
+          "edge_id": "edge_684cef5b1a83",
+          "kind": "call",
+          "label": "StatusOf",
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "root_node_id": "nethttp:/v1/snapshots/build",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "nethttp:/v1/snapshots/build",
+          "to_node_id": "node_9a677b6aa270",
+          "edge_id": "edge_923f408e222b",
+          "kind": "boundary",
+          "label": "buildSnapshot"
+        },
+        {
+          "from_node_id": "node_9a677b6aa270",
+          "to_node_id": "node_172695d453bf",
+          "edge_id": "edge_7c0a8b22aabb",
+          "kind": "call",
+          "label": "writeError"
+        },
+        {
+          "from_node_id": "node_9a677b6aa270",
+          "to_node_id": "node_4a623d59a56e",
+          "edge_id": "edge_ab56fbed7091",
+          "kind": "call",
+          "label": "writeJSON"
+        },
+        {
+          "from_node_id": "node_9a677b6aa270",
+          "to_node_id": "node_7e537ca7b339",
+          "edge_id": "edge_3a20224053bb",
+          "kind": "call",
+          "label": "InvalidArgument",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_9a677b6aa270",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_ab4663508b8d",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_7e537ca7b339",
+          "to_node_id": "node_cc4955b44e5d",
+          "edge_id": "edge_2cc8ff74d273",
+          "kind": "construct",
+          "label": "New"
+        },
+        {
+          "from_node_id": "node_172695d453bf",
+          "to_node_id": "node_cf66e3fe660f",
+          "edge_id": "edge_684cef5b1a83",
+          "kind": "call",
+          "label": "StatusOf",
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "root_node_id": "nethttp:/v1/workspaces/analyze",
+      "repository_id": "",
+      "steps": [
+        {
+          "from_node_id": "nethttp:/v1/workspaces/analyze",
+          "to_node_id": "node_f6c0862891eb",
+          "edge_id": "edge_18b4b076d35c",
+          "kind": "boundary",
+          "label": "analyzeWorkspace"
+        },
+        {
+          "from_node_id": "node_f6c0862891eb",
+          "to_node_id": "node_172695d453bf",
+          "edge_id": "edge_92dd729c1a32",
+          "kind": "call",
+          "label": "writeError"
+        },
+        {
+          "from_node_id": "node_f6c0862891eb",
+          "to_node_id": "node_4a623d59a56e",
+          "edge_id": "edge_a20dce88228c",
+          "kind": "call",
+          "label": "writeJSON"
+        },
+        {
+          "from_node_id": "node_f6c0862891eb",
+          "to_node_id": "node_7e537ca7b339",
+          "edge_id": "edge_2d4ee6c99fed",
+          "kind": "call",
+          "label": "InvalidArgument",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_f6c0862891eb",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_449db47ea5b7",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_7e537ca7b339",
+          "to_node_id": "node_cc4955b44e5d",
+          "edge_id": "edge_2cc8ff74d273",
+          "kind": "construct",
+          "label": "New"
+        },
+        {
+          "from_node_id": "node_172695d453bf",
+          "to_node_id": "node_cf66e3fe660f",
+          "edge_id": "edge_684cef5b1a83",
+          "kind": "call",
+          "label": "StatusOf",
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "root_node_id": "node_0f21ea86e991",
+      "repository_id": "repo_f3e84b722399",
+      "steps": [
+        {
+          "from_node_id": "node_0f21ea86e991",
+          "to_node_id": "node_ea8588962870",
+          "edge_id": "edge_ee5ad5a5b94d",
+          "kind": "call",
+          "label": "Default",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_0f21ea86e991",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_e23f0cbf42ec",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "root_node_id": "node_502c576d8195",
+      "repository_id": "repo_f3e84b722399",
+      "steps": [
+        {
+          "from_node_id": "node_502c576d8195",
+          "to_node_id": "node_8d396152bc14",
+          "edge_id": "edge_eb453fdad3f3",
+          "kind": "call",
+          "label": "walk"
+        },
+        {
+          "from_node_id": "node_502c576d8195",
+          "to_node_id": "node_c50a6b42239d",
+          "edge_id": "edge_e030f37a5f0c",
+          "kind": "construct",
+          "label": "Language",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_502c576d8195",
+          "to_node_id": "node_d5a366a9b964",
+          "edge_id": "edge_2dae9b62ac0e",
+          "kind": "call",
+          "label": "Parse",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_d5a366a9b964",
+          "to_node_id": "node_a7cdd1c4bc6e",
+          "edge_id": "edge_3f6743f8e21f",
+          "kind": "call",
+          "label": "Close",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_d5a366a9b964",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_8a66660dcb6b",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_d5a366a9b964",
+          "to_node_id": "node_a7cdd1c4bc6e",
+          "edge_id": "edge_a7138097923b",
+          "kind": "defer",
+          "label": "defer selector",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_a7cdd1c4bc6e",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_3098504a389e",
+          "kind": "branch",
+          "label": "if s == nil || s.db == nil",
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "root_node_id": "node_568fc30ca197",
+      "repository_id": "repo_f3e84b722399",
+      "steps": [
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_4f23e987d61f",
+          "edge_id": "edge_2b1f5d2fe434",
+          "kind": "call",
+          "label": "runBuildAllMermaid"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_83b75e648383",
+          "edge_id": "edge_ac3cfa9cd7a0",
+          "kind": "call",
+          "label": "runImpactedTests"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_878f71bfdebe",
+          "edge_id": "edge_a5c641de182e",
+          "kind": "call",
+          "label": "runExportMermaid"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_8943c3b58101",
+          "edge_id": "edge_d3ac34eb83de",
+          "kind": "call",
+          "label": "runBuildReviewBundle"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_8b7b61202393",
+          "edge_id": "edge_cdb96ac61b9d",
+          "kind": "call",
+          "label": "runGraph"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_9394223fdd7e",
+          "edge_id": "edge_d8a9b40e6b9a",
+          "kind": "call",
+          "label": "runBuildSnapshot"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_c45cc237e5dd",
+          "edge_id": "edge_6827ca0ccde2",
+          "kind": "call",
+          "label": "fatal"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_ea2fe34afd9f",
+          "edge_id": "edge_6d457bb391a5",
+          "kind": "call",
+          "label": "runAnalyzeWorkspace"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_ea8588962870",
+          "edge_id": "edge_6f7f55470ca9",
+          "kind": "call",
+          "label": "Default",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "node_f61520536b60",
+          "edge_id": "edge_981688ce693d",
+          "kind": "call",
+          "label": "runBlastRadius"
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_85a3c90f55dd",
+          "kind": "branch",
+          "label": "if len(os.Args) \u003c 2",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_7c36aae9b0cc",
+          "kind": "branch",
+          "label": "if err != nil",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_568fc30ca197",
+          "to_node_id": "unresolved_",
+          "edge_id": "edge_5d7634a8c4b5",
+          "kind": "branch",
+          "label": "switch os.Args[1]",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_f61520536b60",
+          "to_node_id": "node_c45cc237e5dd",
+          "edge_id": "edge_d8d16c1af255",
+          "kind": "call",
+          "label": "fatal"
+        },
+        {
+          "from_node_id": "node_f61520536b60",
+          "to_node_id": "node_d5a366a9b964",
+          "edge_id": "edge_8209667299ae",
+          "kind": "call",
+          "label": "Parse",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_f61520536b60",
+          "to_node_id": "node_f1fb67883286",
+          "edge_id": "edge_93ab2f0de676",
+          "kind": "call",
+          "label": "write"
+        },
+        {
+          "from_node_id": "node_d5a366a9b964",
+          "to_node_id": "node_a7cdd1c4bc6e",
+          "edge_id": "edge_3f6743f8e21f",
+          "kind": "call",
+          "label": "Close",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_d5a366a9b964",
+          "to_node_id": "node_a7cdd1c4bc6e",
+          "edge_id": "edge_a7138097923b",
+          "kind": "defer",
+          "label": "defer selector",
+          "inferred": true
+        },
+        {
+          "from_node_id": "node_ea2fe34afd9f",
+          "to_node_id": "node_1d69d1dbf8b5",
+          "edge_id": "edge_91f88c62b9cb",
+          "kind": "call",
+          "label": "rebuildApp"
+        },
+        {
+          "from_node_id": "node_ea2fe34afd9f",
+          "to_node_id": "node_29079ce92fbf",
+          "edge_id": "edge_90b1d56d7f8f",
+          "kind": "call",
+          "label": "splitCSV"
+        },
+        {
+          "from_node_id": "node_8b7b61202393",
+          "to_node_id": "node_0aed9c3448a0",
+          "edge_id": "edge_1e38da775eb2",
+          "kind": "call",
+          "label": "runGraphImportSQLite"
+        },
+        {
+          "from_node_id": "node_8b7b61202393",
+          "to_node_id": "node_0e56837a207d",
+          "edge_id": "edge_5c46f7e52ed2",
+          "kind": "call",
+          "label": "runGraphExportMarkdownReview"
+        },
+        {
+          "from_node_id": "node_8b7b61202393",
+          "to_node_id": "node_97de056c51a8",
+          "edge_id": "edge_9cbe7de2e45a",
+          "kind": "call",
+          "label": "runGraphListStartpoints"
+        },
+        {
+          "from_node_id": "node_878f71bfdebe",
+          "to_node_id": "node_a19a6d29c43f",
+          "edge_id": "edge_e25aad8fbcee",
+          "kind": "construct",
+          "label": "RootTypeFilter",
+          "inferred": true
+        }
+      ]
+    }
+  ],
+  "boundary_markers": null
+}

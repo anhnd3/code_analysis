@@ -1,0 +1,62 @@
+[
+  {
+    "ID": "nethttp:/healthz",
+    "Kind": "http",
+    "Framework": "net/http",
+    "Method": "ANY",
+    "Path": "/healthz",
+    "CanonicalName": "HTTP /healthz",
+    "HandlerTarget": "h.healthz",
+    "SourceFile": "internal/adapters/api/http/handler.go",
+    "SourceExpr": "mux.HandleFunc(\"/healthz\", h.healthz)",
+    "Confidence": "medium"
+  },
+  {
+    "ID": "nethttp:/v1/workspaces/analyze",
+    "Kind": "http",
+    "Framework": "net/http",
+    "Method": "ANY",
+    "Path": "/v1/workspaces/analyze",
+    "CanonicalName": "HTTP /v1/workspaces/analyze",
+    "HandlerTarget": "h.analyzeWorkspace",
+    "SourceFile": "internal/adapters/api/http/handler.go",
+    "SourceExpr": "mux.HandleFunc(\"/v1/workspaces/analyze\", h.analyzeWorkspace)",
+    "Confidence": "medium"
+  },
+  {
+    "ID": "nethttp:/v1/snapshots/build",
+    "Kind": "http",
+    "Framework": "net/http",
+    "Method": "ANY",
+    "Path": "/v1/snapshots/build",
+    "CanonicalName": "HTTP /v1/snapshots/build",
+    "HandlerTarget": "h.buildSnapshot",
+    "SourceFile": "internal/adapters/api/http/handler.go",
+    "SourceExpr": "mux.HandleFunc(\"/v1/snapshots/build\", h.buildSnapshot)",
+    "Confidence": "medium"
+  },
+  {
+    "ID": "nethttp:/v1/queries/blast-radius",
+    "Kind": "http",
+    "Framework": "net/http",
+    "Method": "ANY",
+    "Path": "/v1/queries/blast-radius",
+    "CanonicalName": "HTTP /v1/queries/blast-radius",
+    "HandlerTarget": "h.blastRadius",
+    "SourceFile": "internal/adapters/api/http/handler.go",
+    "SourceExpr": "mux.HandleFunc(\"/v1/queries/blast-radius\", h.blastRadius)",
+    "Confidence": "medium"
+  },
+  {
+    "ID": "nethttp:/v1/queries/impacted-tests",
+    "Kind": "http",
+    "Framework": "net/http",
+    "Method": "ANY",
+    "Path": "/v1/queries/impacted-tests",
+    "CanonicalName": "HTTP /v1/queries/impacted-tests",
+    "HandlerTarget": "h.impactedTests",
+    "SourceFile": "internal/adapters/api/http/handler.go",
+    "SourceExpr": "mux.HandleFunc(\"/v1/queries/impacted-tests\", h.impactedTests)",
+    "Confidence": "medium"
+  }
+]

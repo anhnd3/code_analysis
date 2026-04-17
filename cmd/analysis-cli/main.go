@@ -10,6 +10,8 @@ import (
 	"analysis-module/internal/app/bootstrap"
 	"analysis-module/internal/app/config"
 	"analysis-module/internal/app/logging"
+	"analysis-module/internal/domain/graph"
+	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/reviewgraph"
 	"analysis-module/internal/workflows/analyze_workspace"
 	"analysis-module/internal/workflows/blast_radius"
