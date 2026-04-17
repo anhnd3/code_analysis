@@ -28,14 +28,19 @@ func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inve
 
 	var roots []entrypoint.Root
 
-	// 0. explicitly detected boundary roots
+	// Track which root kinds are already covered by explicit boundary-detector output.
+	// These take precedence and suppress the coarser symbol-kind fallbacks.
+	httpCoveredByDetector := false
+	grpcCoveredByDetector := false
+
+	// 0. Explicitly detected boundary roots (highest confidence — always included).
 	for _, br := range detectedRoots {
 		target, ok := nodesByID[br.ID]
 		repoID := ""
 		if ok {
 			repoID = target.RepositoryID
 		}
-		
+
 		roots = append(roots, entrypoint.Root{
 			NodeID:        br.ID,
 			CanonicalName: br.CanonicalName,
@@ -44,16 +49,29 @@ func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inve
 			RepositoryID:  repoID,
 			Evidence:      "framework adapter: " + br.Framework,
 		})
+
+		switch br.Kind {
+		case boundaryroot.KindHTTP, boundaryroot.KindHTTPGateway:
+			httpCoveredByDetector = true
+		case boundaryroot.KindGRPC:
+			grpcCoveredByDetector = true
+		}
 	}
 
 	// 1. Bootstrap roots: main.main, cmd.Execute, Start patterns
 	roots = append(roots, s.resolveBootstrapRoots(symbolNodes)...)
 
 	// 2. HTTP route handlers: symbol kind == route_handler
-	roots = append(roots, s.resolveHTTPRoots(symbolNodes)...)
+	// Fallback: skip when a framework detector already covered HTTP boundaries.
+	if !httpCoveredByDetector {
+		roots = append(roots, s.resolveHTTPRoots(symbolNodes)...)
+	}
 
 	// 3. gRPC handlers: symbol kind == grpc_handler
-	roots = append(roots, s.resolveGRPCRoots(symbolNodes)...)
+	// Fallback: skip when a framework detector already covered gRPC boundaries.
+	if !grpcCoveredByDetector {
+		roots = append(roots, s.resolveGRPCRoots(symbolNodes)...)
+	}
 
 	// 4. CLI roots from entrypoint edges
 	roots = append(roots, s.resolveCLIRoots(entrypointEdges, nodesByID)...)

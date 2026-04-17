@@ -56,7 +56,8 @@ func buildParticipants(chain reduced.Chain, opts Options) []sequence.Participant
 	}
 
 	// Then in edge order
-	for _, e := range chain.Edges {
+	edgeOrder := collectAllEdges(chain)
+	for _, e := range edgeOrder {
 		for _, id := range []string{e.FromID, e.ToID} {
 			if seen[id] {
 				continue
@@ -120,6 +121,19 @@ func buildElements(chain reduced.Chain, participants []sequence.Participant) []s
 	// Track which notes have been emitted
 	emittedNotes := map[int]bool{}
 
+	// Track edges that are already contained in blocks to avoid duplication
+	edgesInBlocks := make(map[string]bool)
+	for _, b := range chain.Blocks {
+		for _, br := range b.Branches {
+			for _, e := range br.Edges {
+				// We use a combination of from/to/label/order to identify the edge
+				// Inside blocks, order is usually 0.
+				key := e.FromID + "|" + e.ToID + "|" + e.Label
+				edgesInBlocks[key] = true
+			}
+		}
+	}
+
 	type OrderedItem struct {
 		Index int
 		Edge  *reduced.Edge
@@ -127,7 +141,12 @@ func buildElements(chain reduced.Chain, participants []sequence.Participant) []s
 	}
 	var items []OrderedItem
 	for i := range chain.Edges {
-		items = append(items, OrderedItem{Index: chain.Edges[i].OrderIndex, Edge: &chain.Edges[i]})
+		edge := &chain.Edges[i]
+		key := edge.FromID + "|" + edge.ToID + "|" + edge.Label
+		if edgesInBlocks[key] {
+			continue
+		}
+		items = append(items, OrderedItem{Index: edge.OrderIndex, Edge: edge})
 	}
 	for i := range chain.Blocks {
 		items = append(items, OrderedItem{Index: chain.Blocks[i].OrderIndex, Block: &chain.Blocks[i]})
@@ -250,4 +269,15 @@ func remainingNotes(notes []reduced.Note, emitted map[int]bool, participantSet m
 		out = append(out, note)
 	}
 	return out
+}
+
+func collectAllEdges(chain reduced.Chain) []reduced.Edge {
+	var edges []reduced.Edge
+	edges = append(edges, chain.Edges...)
+	for _, b := range chain.Blocks {
+		for _, br := range b.Branches {
+			edges = append(edges, br.Edges...)
+		}
+	}
+	return edges
 }

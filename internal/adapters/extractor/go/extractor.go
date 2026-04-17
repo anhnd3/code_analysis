@@ -76,9 +76,9 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 			body := node.ChildByFieldName("body")
 			
 			// Extract semantic hints for the full symbol body
-			result.Hints = append(result.Hints, extractClosureHints(body, content)...)
-			result.Hints = append(result.Hints, extractAsyncHints(body, content)...)
-			result.Hints = append(result.Hints, extractControlHints(body, content)...)
+			result.Hints = append(result.Hints, extractClosureHints(body, content, sym)...)
+			result.Hints = append(result.Hints, extractAsyncHints(body, content, sym, result.PackageName, importAliases)...)
+			result.Hints = append(result.Hints, extractControlHints(body, content, sym)...)
 
 			closureCount := 0
 			inlineCount := 0

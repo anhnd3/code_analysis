@@ -125,26 +125,23 @@ func (d *GinDetector) handleCall(n *tree_sitter.Node, content []byte, groups map
 	pathArg := args.NamedChild(0)
 	handlerArg := args.NamedChild(args.NamedChildCount() - 1)
 
-	if !isStringLiteral(pathArg) {
-		return nil
+	// Accept string literals as-is; use a tagged placeholder for dynamic expressions
+	// (e.g. fmt.Sprintf("/v1/%s", id)) so routes are not silently dropped.
+	var path string
+	confidence := "high"
+	if isStringLiteral(pathArg) {
+		path = getStringValue(pathArg, content)
+	} else {
+		path = fmt.Sprintf("<dynamic:%s>", string(content[pathArg.StartByte():pathArg.EndByte()]))
+		confidence = "medium" // Lower confidence for dynamic paths
 	}
-
-	path := getStringValue(pathArg, content)
 	fullPath := cleanPath(prefix + "/" + path)
-	
-	// Resolve handler target
-	handlerName := string(content[handlerArg.StartByte():handlerArg.EndByte()])
-	handlerTarget := handlerName
 
-	// If handler is an anonymous function (closure), find the matching symbol
-	for _, sym := range symbols {
-		if sym.Location.StartLine == uint32(handlerArg.StartPosition().Row+1) && 
-		   sym.Location.StartCol == uint32(handlerArg.StartPosition().Column+1) {
-			handlerTarget = string(sym.ID)
-			break
-		}
-	}
-
+	// Resolve handler target.
+	// Priority 1: anonymous function / closure matched by symbol location.
+	// Priority 2: wrapper/factory call_expression — use the outermost callee name.
+	// Priority 3: raw source text.
+	handlerTarget := resolveHandlerTarget(handlerArg, content, symbols)
 
 	return &boundaryroot.Root{
 		ID:            fmt.Sprintf("gin:%s:%s", method, fullPath),
@@ -155,8 +152,46 @@ func (d *GinDetector) handleCall(n *tree_sitter.Node, content []byte, groups map
 		CanonicalName: fmt.Sprintf("%s %s", method, fullPath),
 		HandlerTarget: handlerTarget,
 		SourceExpr:    string(content[n.StartByte():n.EndByte()]),
-		Confidence:    "high",
+		Confidence:    confidence,
 	}
+}
+
+// resolveHandlerTarget extracts the most meaningful identifier from a handler argument node.
+//
+//   - Closure literal → look up by symbol location, fall back to raw text.
+//   - Wrapper / factory call (e.g. auth.Required(h)) → use the callee function name so
+//     the graph can trace execution into the wrapper.
+//   - Bare identifier / selector → return raw text.
+func resolveHandlerTarget(handlerArg *tree_sitter.Node, content []byte, symbols []symbol.Symbol) string {
+	if handlerArg == nil {
+		return ""
+	}
+
+	// Priority 1: symbol table lookup for closures.
+	for _, sym := range symbols {
+		if sym.Location.StartLine == uint32(handlerArg.StartPosition().Row+1) &&
+			sym.Location.StartCol == uint32(handlerArg.StartPosition().Column+1) {
+			return string(sym.ID)
+		}
+	}
+
+	// Priority 2: if the argument is itself a call expression, use its callee name.
+	// This handles middleware wrappers like auth.Required(myHandler) or MakeHandler().
+	if handlerArg.Kind() == "call_expression" {
+		fn := handlerArg.ChildByFieldName("function")
+		if fn != nil {
+			switch fn.Kind() {
+			case "selector_expression":
+				// e.g. auth.Required → use fully-qualified name
+				return string(content[fn.StartByte():fn.EndByte()])
+			case "identifier":
+				return string(content[fn.StartByte():fn.EndByte()])
+			}
+		}
+	}
+
+	// Priority 3: raw text.
+	return string(content[handlerArg.StartByte():handlerArg.EndByte()])
 }
 
 

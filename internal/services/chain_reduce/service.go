@@ -8,6 +8,7 @@ import (
 	"analysis-module/internal/domain/flow"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/reduced"
+	"analysis-module/internal/services/participant_classify"
 )
 
 // Request configures the reduction pass.
@@ -18,11 +19,15 @@ type Request struct {
 }
 
 // Service reduces stitched flows + linked boundaries into readable chart chains.
-type Service struct{}
+type Service struct {
+	classifier participant_classify.Service
+}
 
 // New creates a chain reducer.
 func New() Service {
-	return Service{}
+	return Service{
+		classifier: participant_classify.New(),
+	}
 }
 
 // Reduce takes stitched flows and boundary links, then produces a reduced chain
@@ -45,7 +50,7 @@ func (s Service) Reduce(snapshot graph.GraphSnapshot, flows flow.Bundle, links b
 	primary := flows.Chains[0]
 
 	// Build reduced nodes and edges
-	nodes, edges, blocks, notes := s.walkAndReduce(primary, idx, cfg)
+	nodes, edges, blocks, notes := s.walkAndReduce(primary, idx, cfg, snapshot)
 
 	// Sort for deterministic output
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
@@ -90,7 +95,7 @@ func normalizeConfig(req Request) reduceConfig {
 	return cfg
 }
 
-func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceConfig) ([]reduced.Node, []reduced.Edge, []reduced.Block, []reduced.Note) {
+func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceConfig, snapshot graph.GraphSnapshot) ([]reduced.Node, []reduced.Edge, []reduced.Block, []reduced.Note) {
 	var nodes []reduced.Node
 	var edges []reduced.Edge
 	var blocks []reduced.Block
@@ -104,7 +109,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 
 	// Always keep the root
 	rootNode := idx.nodeByID[chain.RootNodeID]
-	rn := toReducedNode(rootNode, reduced.RoleRoot, idx)
+	rn := s.toReducedNode(rootNode, reduced.RoleRoot, snapshot)
 	nodes = append(nodes, rn)
 	nodeSet[rn.ID] = true
 
@@ -122,7 +127,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 		visited[step.ToNodeID] = true
 
 		targetGraphNode := idx.nodeByID[step.ToNodeID]
-		role := classifyRole(step, targetGraphNode, idx)
+		role := s.classifyRole(step, targetGraphNode, snapshot)
 
 		// Collapse decision
 		if cfg.collapseMode != "none" && shouldCollapse(role, targetGraphNode, cfg) {
@@ -140,7 +145,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 		}
 
 		// Keep this node
-		rn := toReducedNode(targetGraphNode, role, idx)
+		rn := s.toReducedNode(targetGraphNode, role, snapshot)
 
 		// Determine cross-repo status for the edge
 		crossRepo := false
@@ -217,7 +222,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 
 		// Ensure from-node exists
 		if !nodeSet[step.FromNodeID] {
-			fn := toReducedNode(fromGraphNode, classifyRole(flow.Step{}, fromGraphNode, idx), idx)
+			fn := s.toReducedNode(fromGraphNode, s.classifyRole(flow.Step{}, fromGraphNode, snapshot), snapshot)
 			nodes = append(nodes, fn)
 			nodeSet[fn.ID] = true
 		}
@@ -233,13 +238,39 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 
 		if step.Kind == flow.StepDefer {
 			deferredEdges = append(deferredEdges, edge)
-		} else if role == reduced.RoleAsync || step.Kind == flow.StepAsync {
+		} else if step.Kind == flow.StepAsync {
 			blocks = append(blocks, reduced.Block{
 				Kind:       reduced.BlockPar,
 				Label:      "goroutine",
 				OrderIndex: orderCounter,
 				Branches: []reduced.Branch{
 					{Edges: []reduced.Edge{edge}},
+				},
+			})
+			orderCounter++
+		} else if step.Kind == flow.StepBranch {
+			isLoop := strings.HasPrefix(step.Label, "for ") || strings.HasPrefix(step.Label, "range ")
+			kind := reduced.BlockAlt
+			label := "branch"
+			condition := step.Label
+			if isLoop {
+				kind = reduced.BlockLoop
+				label = "for each"
+				if strings.Contains(step.Label, "range ") {
+					label = "for each " + strings.TrimPrefix(step.Label, "range ")
+				}
+				condition = ""
+			}
+
+			blocks = append(blocks, reduced.Block{
+				Kind:       kind,
+				Label:      label,
+				OrderIndex: orderCounter,
+				Branches: []reduced.Branch{
+					{
+						Condition: condition,
+						Edges:     []reduced.Edge{edge},
+					},
 				},
 			})
 			orderCounter++
@@ -282,9 +313,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 }
 
 // classifyRole determines what role a node plays in the reduced chain.
-func classifyRole(step flow.Step, node graph.Node, idx *reduceIndex) reduced.NodeRole {
-	kind := nodeKindProp(node)
-
+func (s Service) classifyRole(step flow.Step, node graph.Node, snapshot graph.GraphSnapshot) reduced.NodeRole {
 	// Check step kind first
 	switch step.Kind {
 	case flow.StepConstruct:
@@ -295,28 +324,8 @@ func classifyRole(step flow.Step, node graph.Node, idx *reduceIndex) reduced.Nod
 		return reduced.RoleBoundary
 	}
 
-	// Check node properties
-	switch kind {
-	case "route_handler", "grpc_handler":
-		return reduced.RoleHandler
-	case "consumer", "producer":
-		return reduced.RoleProcessor
-	case "struct", "interface":
-		return reduced.RoleService
-	}
-
-	// Check if it's a boundary marker
-	if idx.isBoundaryNode(node.ID) {
-		return reduced.RoleBoundary
-	}
-
-	// Check for constructor by name
-	name := nodeShortName(node)
-	if isConstructorName(name) {
-		return reduced.RoleConstructor
-	}
-
-	return reduced.RoleHelper
+	class := s.classifier.Classify(node, snapshot)
+	return class.Role
 }
 
 // shouldCollapse returns true if the node should be collapsed (hidden).
@@ -333,8 +342,16 @@ func shouldCollapse(role reduced.NodeRole, node graph.Node, cfg reduceConfig) bo
 		return false
 	}
 
+	// Never collapse industry-standard remote/unresolved nodes
+	if role == reduced.RoleRemote || strings.HasPrefix(node.ID, "unresolved_") {
+		return false
+	}
+
 	// Default: collapse helpers
-	name := nodeShortName(node)
+	name := node.Properties["name"]
+	if name == "" {
+		name = s.deriveShortName(node.CanonicalName)
+	}
 	if isTinyHelper(name) || isTrivialValidator(name) || isStdlibWrapper(name) {
 		return true
 	}
@@ -368,38 +385,24 @@ func isStdlibWrapper(name string) bool {
 		strings.HasPrefix(lower, "strings.") || strings.HasPrefix(lower, "strconv.")
 }
 
-func isConstructorName(name string) bool {
-	return strings.HasPrefix(name, "New") || strings.HasPrefix(name, "Create") || strings.HasPrefix(name, "Init")
-}
-
-func toReducedNode(gn graph.Node, role reduced.NodeRole, idx *reduceIndex) reduced.Node {
+func (s Service) toReducedNode(gn graph.Node, role reduced.NodeRole, snapshot graph.GraphSnapshot) reduced.Node {
+	class := s.classifier.Classify(gn, snapshot)
+	
 	return reduced.Node{
 		ID:            gn.ID,
 		CanonicalName: gn.CanonicalName,
-		ShortName:     nodeShortName(gn),
+		ShortName:     class.ShortName,
 		Role:          role,
 		RepositoryID:  gn.RepositoryID,
 	}
 }
 
-func nodeKindProp(n graph.Node) string {
-	if n.Properties == nil {
-		return ""
-	}
-	return n.Properties["kind"]
-}
-
-func nodeShortName(n graph.Node) string {
-	if n.Properties != nil {
-		if name := n.Properties["name"]; name != "" {
-			return name
-		}
-	}
-	idx := strings.LastIndex(n.CanonicalName, ".")
+func (s Service) deriveShortName(canonical string) string {
+	idx := strings.LastIndex(canonical, ".")
 	if idx >= 0 {
-		return n.CanonicalName[idx+1:]
+		return canonical[idx+1:]
 	}
-	return n.CanonicalName
+	return canonical
 }
 
 // --- reduce index ---

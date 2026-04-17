@@ -68,8 +68,13 @@ func (s Service) walkChain(root entrypoint.Root, idx *snapshotIndex) (flow.Chain
 		visited[current] = true
 
 		outgoing := idx.outgoingCalls(current)
-		// Sort for deterministic traversal
+		// Sort by execution-inspired weight then by ID for determinism
 		sort.Slice(outgoing, func(i, j int) bool {
+			wi := edgeOrderWeight(outgoing[i].Kind)
+			wj := edgeOrderWeight(outgoing[j].Kind)
+			if wi != wj {
+				return wi < wj
+			}
 			return outgoing[i].To < outgoing[j].To
 		})
 
@@ -179,6 +184,8 @@ func classifyStep(edge graph.Edge, idx *snapshotIndex) flow.StepKind {
 		return flow.StepDefer
 	case graph.EdgeWaitsOn:
 		return flow.StepWait
+	case graph.EdgeBranches:
+		return flow.StepBranch
 	case graph.EdgeCalls:
 		targetNode, ok := idx.nodeByID[edge.To]
 		if ok {
@@ -195,11 +202,32 @@ func classifyStep(edge graph.Edge, idx *snapshotIndex) flow.StepKind {
 }
 
 func stepLabel(edge graph.Edge, idx *snapshotIndex) string {
+	if edge.Kind == graph.EdgeBranches || edge.Evidence.Type == "semantic" {
+		if edge.Evidence.Source != "" {
+			return edge.Evidence.Source
+		}
+	}
 	target, ok := idx.nodeByID[edge.To]
 	if !ok {
 		return ""
 	}
 	return nodeShortName(target)
+}
+
+func edgeOrderWeight(kind graph.EdgeKind) int {
+	switch kind {
+	case graph.EdgeCalls, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic, graph.EdgeReturnsHandler:
+		return 0
+	case graph.EdgeBranches:
+		return 1
+	case graph.EdgeSpawns:
+		return 2
+	case graph.EdgeWaitsOn:
+		return 3
+	case graph.EdgeDefers:
+		return 4
+	}
+	return 10
 }
 
 func isConstructorName(name string) bool {
@@ -280,7 +308,7 @@ func (idx *snapshotIndex) outgoingCalls(nodeID string) []graph.Edge {
 	var calls []graph.Edge
 	for _, e := range idx.outgoing[nodeID] {
 		switch e.Kind {
-		case graph.EdgeCalls, graph.EdgeSpawns, graph.EdgeDefers, graph.EdgeWaitsOn, graph.EdgeReturnsHandler, graph.EdgeRegistersBoundary, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic:
+		case graph.EdgeCalls, graph.EdgeSpawns, graph.EdgeDefers, graph.EdgeWaitsOn, graph.EdgeReturnsHandler, graph.EdgeRegistersBoundary, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic, graph.EdgeBranches:
 			calls = append(calls, e)
 		}
 	}

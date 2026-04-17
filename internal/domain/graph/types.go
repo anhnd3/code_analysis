@@ -41,6 +41,7 @@ const (
 	EdgeProducesTopic    EdgeKind = "PRODUCES_TOPIC"
 	EdgeSubscribesTopic  EdgeKind = "SUBSCRIBES_TOPIC"
 	EdgeEntrypointTo     EdgeKind = "ENTRYPOINT_TO"
+	EdgeBranches         EdgeKind = "BRANCHES"
 
 	ConfidenceConfirmed ConfidenceTier = "confirmed"
 	ConfidenceInferred  ConfidenceTier = "inferred"

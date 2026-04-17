@@ -27,6 +27,36 @@ Expected commands:
 - `analysis-cli build-snapshot`
 - `analysis-cli blast-radius`
 - `analysis-cli impacted-tests`
+- `analysis-cli export-mermaid`
+- `analysis-cli build-all-mermaid`
+
+### Mermaid Flow Export
+
+Generate Mermaid sequence diagrams from your Go codebase.
+
+```bash
+# Analyze current workspace and export bootstrap flows
+analysis-cli export-mermaid --workspace . --root-type bootstrap
+
+# Export from a previously generated snapshot JSON
+analysis-cli export-mermaid --snapshot ./artifacts/snapshot.json --root-type http
+
+# Generate a debug bundle for flow analysis
+analysis-cli export-mermaid --workspace . --emit-debug-bundle --debug-out ./debug-flow/
+```
+
+#### Debug Bundles
+When `--emit-debug-bundle` is used, the following files are produced in the output directory:
+- `boundary_roots.json`: Discovered framework entrypoints (Gin, net/http, etc.)
+- `flow_bundle.json`: Raw stitched call chains
+- `reduced_chain.json`: Chains after control-flow reduction and helper collapsing
+- `sequence_model.json`: The final ordered participant/message model
+- `diagram.mmd`: The Mermaid source code
+
+#### Tips for Multi-Framework Services
+- Use `--service-name <name>` to label the main participant in the diagram.
+- If the diagram is too complex, try `--collapse-mode aggressive`.
+- Use `--root-selector <canonical_name>` to focus on a specific endpoint or function.
 
 The parser layer now uses the official Tree-Sitter Go bindings from `github.com/tree-sitter/go-tree-sitter` plus the official Go grammar package from `github.com/tree-sitter/tree-sitter-go/bindings/go`.
 

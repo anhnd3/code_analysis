@@ -218,3 +218,49 @@ func TestBuild_BlockStructure(t *testing.T) {
 		t.Errorf("expected alt block element")
 	}
 }
+
+func TestBuild_AvoidDuplicateEdges(t *testing.T) {
+	chain := reduced.Chain{
+		RootNodeID: "n1",
+		Nodes: []reduced.Node{
+			{ID: "n1", ShortName: "A"},
+			{ID: "n2", ShortName: "B"},
+		},
+		Edges: []reduced.Edge{
+			{FromID: "n1", ToID: "n2", Label: "call", OrderIndex: 0},
+		},
+		Blocks: []reduced.Block{
+			{
+				Kind:       reduced.BlockAlt,
+				Label:      "condition",
+				OrderIndex: 0,
+				Branches: []reduced.Branch{
+					{Condition: "true", Edges: []reduced.Edge{{FromID: "n1", ToID: "n2", Label: "call"}}},
+				},
+			},
+		},
+	}
+
+	diagram, err := New().Build(chain, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	edgeCount := 0
+	for _, elem := range diagram.Elements {
+		if elem.Message != nil {
+			edgeCount++
+		}
+		if elem.Block != nil {
+			for _, sec := range elem.Block.Sections {
+				edgeCount += len(sec.Messages)
+			}
+		}
+	}
+
+	// Should be 1 because the top-level edge is the same as the block edge (in this test case's logic)
+	// and our logic should have skipped the duplicate.
+	if edgeCount != 1 {
+		t.Errorf("expected 1 edge total (de-duplicated), got %d", edgeCount)
+	}
+}

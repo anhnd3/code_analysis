@@ -21,6 +21,9 @@ import (
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/mermaid_emit"
 	"analysis-module/internal/services/sequence_model_build"
+	"encoding/json"
+	"os"
+	"path/filepath"
 )
 
 // RootTypeFilter selects which entrypoint types to include.
@@ -45,6 +48,7 @@ type Request struct {
 	CollapseMode      string         `json:"collapse_mode,omitempty"`
 	ServiceShortName  string         `json:"service_short_name,omitempty"`
 	IncludeCandidates bool           `json:"include_candidates,omitempty"`
+	DebugBundleDir    string         `json:"debug_bundle_dir,omitempty"`
 }
 
 // Result holds the workflow output.
@@ -58,7 +62,6 @@ type Result struct {
 
 // Workflow orchestrates the full Mermaid export pipeline.
 type Workflow struct {
-	graphStores       graphstoreport.Provider
 	artifactStore     artifactstoreport.Store
 	entrypointResolve entrypoint_resolve.Service
 	flowStitch        flow_stitch.Service
@@ -71,7 +74,6 @@ type Workflow struct {
 
 // New creates the export_mermaid workflow.
 func New(
-	graphStores graphstoreport.Provider,
 	artifactStore artifactstoreport.Store,
 	entrypointResolve entrypoint_resolve.Service,
 	flowStitch flow_stitch.Service,
@@ -82,7 +84,6 @@ func New(
 	boundaryDetect boundary_detect.Service,
 ) Workflow {
 	return Workflow{
-		graphStores:       graphStores,
 		artifactStore:     artifactStore,
 		entrypointResolve: entrypointResolve,
 		flowStitch:        flowStitch,
@@ -96,19 +97,9 @@ func New(
 
 // Run executes the complete Mermaid export pipeline:
 //
-//	load snapshot → resolve entrypoints → stitch flows → link boundaries
+//	resolve entrypoints → stitch flows → link boundaries
 //	→ reduce chain → build sequence model → emit mermaid → save artifacts → metrics
-func (w Workflow) Run(req Request, inventory repository.Inventory) (Result, error) {
-	// 1. Load snapshot
-	store, err := w.graphStores.ForWorkspace(req.WorkspaceID)
-	if err != nil {
-		return Result{}, fmt.Errorf("export_mermaid: open graph store: %w", err)
-	}
-	snapshot, err := store.GetSnapshot(req.SnapshotID)
-	if err != nil {
-		return Result{}, fmt.Errorf("export_mermaid: load snapshot %s: %w", req.SnapshotID, err)
-	}
-
+func (w Workflow) Run(req Request, inventory repository.Inventory, snapshot graph.GraphSnapshot) (Result, error) {
 	// 2. Resolve entrypoints
 	var symbols []symbol.Symbol
 	for _, node := range snapshot.Nodes {
@@ -187,6 +178,17 @@ func (w Workflow) Run(req Request, inventory repository.Inventory) (Result, erro
 		}
 	}
 
+	// 8.5. Emit debug bundle if requested
+	if req.DebugBundleDir != "" {
+		if err := os.MkdirAll(req.DebugBundleDir, 0755); err == nil {
+			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "boundary_roots.json"), detectedRoots)
+			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "flow_bundle.json"), bundle)
+			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "reduced_chain.json"), reducedChain)
+			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "sequence_model.json"), diagram)
+			_ = os.WriteFile(filepath.Join(req.DebugBundleDir, "diagram.mmd"), []byte(mermaidCode), 0644)
+		}
+	}
+
 	// 9. Build metrics
 	metrics := buildFlowMetrics(filtered, bundle, links, reducedChain, mermaidCode)
 
@@ -246,6 +248,14 @@ func filterRoots(full entrypoint.Result, req Request) entrypoint.Result {
 	}
 
 	return entrypoint.Result{Roots: filtered}
+}
+
+func saveDebugJSON(path string, data any) error {
+	bytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, bytes, 0644)
 }
 
 func buildFlowMetrics(roots entrypoint.Result, bundle flow.Bundle, links boundary.Bundle, chain reduced.Chain, mermaidCode string) quality.FlowQualityMetrics {

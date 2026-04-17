@@ -619,7 +619,7 @@ func mapHintToEdgeKind(kind executionhint.HintKind) graph.EdgeKind {
 	case executionhint.HintWait:
 		return graph.EdgeWaitsOn
 	case executionhint.HintBranch:
-		return graph.EdgeCalls // Branches can map to explicit flow objects later
+		return graph.EdgeBranches
 	default:
 		return graph.EdgeCalls
 	}

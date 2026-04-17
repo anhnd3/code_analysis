@@ -3,6 +3,7 @@ package entrypoint_resolve
 import (
 	"testing"
 
+	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/entrypoint"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
@@ -149,6 +150,77 @@ func TestResolve_NoRoots(t *testing.T) {
 	}
 }
 
+
+// --- fallback suppression tests ---
+
+// TestResolve_FallbackHTTPSkippedWhenDetectorRootPresent ensures that when an HTTP
+// boundary root is supplied via detectedRoots, the legacy route_handler symbol-kind
+// fallback is NOT invoked. The route_handler node must NOT appear in the output.
+func TestResolve_FallbackHTTPSkippedWhenDetectorRootPresent(t *testing.T) {
+	detectedRoot := makeBoundaryRoot("gin", "GET", "/users", boundaryroot.KindHTTP)
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			// A route_handler node that would be picked up by the fallback if active.
+			symbolNode("fallback-node", "api/handler.ListUsers", string(symbol.KindRouteHandler), "repo1"),
+		},
+	}
+	result, err := New().Resolve(snapshot, repository.Inventory{}, []boundaryroot.Root{detectedRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range result.Roots {
+		if r.NodeID == "fallback-node" {
+			t.Errorf("expected fallback route_handler node to be suppressed when a detector root covers HTTP, but it appeared in output")
+		}
+	}
+	// The detector root itself should appear.
+	found := false
+	for _, r := range result.Roots {
+		if r.Evidence == "framework adapter: gin" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected detected Gin root to appear in output but it was missing")
+	}
+}
+
+// TestResolve_FallbackGRPCSkippedWhenDetectorRootPresent mirrors the HTTP test for gRPC.
+func TestResolve_FallbackGRPCSkippedWhenDetectorRootPresent(t *testing.T) {
+	detectedRoot := makeBoundaryRoot("grpc-gateway", "PROXY", "mapped-from-proto", boundaryroot.KindGRPC)
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			symbolNode("fallback-grpc", "internal/grpc.CreateOrder", string(symbol.KindGRPCHandler), "repo1"),
+		},
+	}
+	result, err := New().Resolve(snapshot, repository.Inventory{}, []boundaryroot.Root{detectedRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range result.Roots {
+		if r.NodeID == "fallback-grpc" {
+			t.Errorf("expected fallback grpc_handler node to be suppressed when a detector root covers gRPC")
+		}
+	}
+}
+
+// TestResolve_FallbackInvokedWhenNoDetectorRoots verifies that when no detected boundary
+// roots are provided, the legacy symbol-kind fallbacks DO run (regression guard).
+func TestResolve_FallbackInvokedWhenNoDetectorRoots(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			symbolNode("http-node", "api/handler.GetUser", string(symbol.KindRouteHandler), "repo1"),
+			symbolNode("grpc-node", "internal/grpc.CreateOrder", string(symbol.KindGRPCHandler), "repo1"),
+		},
+	}
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRootFound(t, result, "http-node", entrypoint.RootHTTP, entrypoint.ConfidenceHigh)
+	assertRootFound(t, result, "grpc-node", entrypoint.RootGRPC, entrypoint.ConfidenceHigh)
+}
+
 // --- test helpers ---
 
 func symbolNode(id, canonical, kind, repoID string) graph.Node {
@@ -178,4 +250,19 @@ func assertRootFound(t *testing.T, result entrypoint.Result, nodeID string, root
 		}
 	}
 	t.Errorf("root %s not found in results (have %d roots)", nodeID, len(result.Roots))
+}
+
+// makeBoundaryRoot builds a minimal boundaryroot.Root for use in tests.
+func makeBoundaryRoot(framework, method, path string, kind boundaryroot.Kind) boundaryroot.Root {
+	return boundaryroot.Root{
+		ID:            framework + ":" + method + ":" + path,
+		Kind:          kind,
+		Framework:     framework,
+		Method:        method,
+		Path:          path,
+		CanonicalName: method + " " + path,
+		HandlerTarget: "handler",
+		SourceFile:    "testfile.go",
+		Confidence:    "high",
+	}
 }

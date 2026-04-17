@@ -45,7 +45,7 @@ func (s Service) Emit(diagram sequence.Diagram) (string, error) {
 	for _, elem := range diagram.Elements {
 		switch {
 		case elem.Message != nil:
-			writeMessage(&b, *elem.Message)
+			writeMessage(&b, *elem.Message, 4)
 		case elem.Note != nil:
 			writeNote(&b, *elem.Note)
 		case elem.Block != nil:
@@ -56,18 +56,19 @@ func (s Service) Emit(diagram sequence.Diagram) (string, error) {
 	return b.String(), nil
 }
 
-func writeMessage(b *strings.Builder, msg sequence.Message) {
+func writeMessage(b *strings.Builder, msg sequence.Message, indent int) {
+	padding := strings.Repeat(" ", indent)
 	from := sanitizeID(msg.FromID)
 	to := sanitizeID(msg.ToID)
 	label := sanitize(msg.Label)
 
 	switch msg.Kind {
 	case sequence.MessageAsync:
-		b.WriteString(fmt.Sprintf("    %s->>+%s: %s\n", from, to, label))
+		b.WriteString(fmt.Sprintf("%s%s->>+%s: %s\n", padding, from, to, label))
 	case sequence.MessageReturn:
-		b.WriteString(fmt.Sprintf("    %s-->>-%s: %s\n", from, to, label))
+		b.WriteString(fmt.Sprintf("%s%s-->>-%s: %s\n", padding, from, to, label))
 	default: // sync
-		b.WriteString(fmt.Sprintf("    %s->>%s: %s\n", from, to, label))
+		b.WriteString(fmt.Sprintf("%s%s->>%s: %s\n", padding, from, to, label))
 	}
 }
 
@@ -91,7 +92,7 @@ func writeBlock(b *strings.Builder, block sequence.Block) {
 			b.WriteString(fmt.Sprintf("    else %s\n", sectionLabel))
 		}
 		for _, msg := range section.Messages {
-			writeMessage(b, msg)
+			writeMessage(b, msg, 8)
 		}
 	}
 	b.WriteString("    end\n")

@@ -104,7 +104,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	chainReduceSvc := chain_reduce.New()
 	sequenceModelSvc := sequence_model_build.New()
 	mermaidEmitSvc := mermaid_emit.New()
-	exportMermaidWorkflow := export_mermaid.New(graphStores, artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc, boundaryDetectSvc)
+	exportMermaidWorkflow := export_mermaid.New(artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc, boundaryDetectSvc)
 
 	return &Application{
 		Config:            cfg,

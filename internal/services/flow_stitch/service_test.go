@@ -206,6 +206,59 @@ func TestBuild_EmptySnapshot(t *testing.T) {
 	}
 }
 
+func TestBuild_ExecutionOrder(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			testSymbolNode("n1", "main.main", "function"),
+			testSymbolNode("call_target", "app.Call", "function"),
+			testSymbolNode("branch_target", "app.Branch", "function"),
+			testSymbolNode("spawn_target", "app.Spawn", "function"),
+			testSymbolNode("wait_target", "app.Wait", "function"),
+			testSymbolNode("defer_target", "app.Defer", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_defer", Kind: graph.EdgeDefers, From: "n1", To: "defer_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed}},
+			{ID: "e_wait", Kind: graph.EdgeWaitsOn, From: "n1", To: "wait_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed}},
+			{ID: "e_spawn", Kind: graph.EdgeSpawns, From: "n1", To: "spawn_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed}},
+			{ID: "e_branch", Kind: graph.EdgeBranches, From: "n1", To: "branch_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed}},
+			{ID: "e_call", Kind: graph.EdgeCalls, From: "n1", To: "call_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{
+			{NodeID: "n1", RootType: entrypoint.RootBootstrap, RepositoryID: "repo1"},
+		},
+	}
+
+	bundle, err := New().Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bundle.Chains) != 1 {
+		t.Fatalf("expected 1 chain")
+	}
+	steps := bundle.Chains[0].Steps
+	if len(steps) != 5 {
+		t.Fatalf("expected 5 steps, got %d", len(steps))
+	}
+
+	// Order: Call (0), Branch (1), Spawn (2), Wait (3), Defer (4)
+	expectedOrders := []flow.StepKind{
+		flow.StepCall,
+		flow.StepBranch,
+		flow.StepAsync,
+		flow.StepWait,
+		flow.StepDefer,
+	}
+
+	for i, expectedKind := range expectedOrders {
+		if steps[i].Kind != expectedKind {
+			t.Errorf("step %d: expected kind %s, got %s", i, expectedKind, steps[i].Kind)
+		}
+	}
+}
+
 // --- test helpers ---
 
 func testSymbolNode(id, canonical, kind string) graph.Node {

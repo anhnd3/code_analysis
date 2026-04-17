@@ -146,8 +146,8 @@ func runImpactedTests(app *bootstrap.Application, args []string) {
 
 func runExportMermaid(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("export-mermaid", flag.ExitOnError)
-	workspaceID := fs.String("workspace-id", "", "workspace id")
-	snapshotID := fs.String("snapshot-id", "", "snapshot id")
+	workspacePath := fs.String("workspace", "", "workspace path to analyze and export")
+	snapshotFile := fs.String("snapshot", "", "JSON snapshot path to load and export")
 	rootType := fs.String("root-type", "master", "root type: bootstrap|http|worker|symbol|master")
 	rootSelector := fs.String("root-selector", "", "target canonical name or node id")
 	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
@@ -155,23 +155,55 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	collapseMode := fs.String("collapse-mode", "default", "collapse mode: default|none|aggressive")
 	serviceName := fs.String("service-name", "", "service short name")
 	incCandidates := fs.Bool("include-candidates", false, "include candidate boundary links")
+	emitDebug := fs.Bool("emit-debug-bundle", false, "emit debug bundle files")
+	debugOut := fs.String("debug-out", "./analysis-debug/", "debug bundle output directory")
 	_ = fs.Parse(args)
 
-	// Need inventory for ExportMermaid. We can get it via AnalyzeWorkspace.
-	wsPath := "." 
-	if len(args) > 0 {
-		// Just guess path or use "." to get basic inventory
+	if *workspacePath == "" && *snapshotFile == "" {
+		fatal(fmt.Errorf("either --workspace or --snapshot must be provided"))
 	}
-	analyzeResult, err := app.AnalyzeWorkspace.Run(analyze_workspace.Request{
-		WorkspacePath: wsPath,
-	})
-	if err != nil {
-		fatal(fmt.Errorf("failed to analyze workspace for inventory: %w", err))
+	if *workspacePath != "" && *snapshotFile != "" {
+		fatal(fmt.Errorf("only one of --workspace or --snapshot can be provided"))
+	}
+
+	var inventory repository.Inventory
+	var snapshot graph.GraphSnapshot
+	var workspaceID string
+
+	if *workspacePath != "" {
+		app.Logger.Info("Analyzing workspace...", "path", *workspacePath)
+		snapResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
+			WorkspacePath: *workspacePath,
+		})
+		if err != nil {
+			fatal(fmt.Errorf("failed to build snapshot: %w", err))
+		}
+		inventory = snapResult.Inventory
+		snapshot = snapResult.Snapshot
+		workspaceID = snapResult.WorkspaceID
+	} else {
+		app.Logger.Info("Loading snapshot file...", "path", *snapshotFile)
+		data, err := os.ReadFile(*snapshotFile)
+		if err != nil {
+			fatal(fmt.Errorf("failed to read snapshot file: %w", err))
+		}
+		var snapResult build_snapshot.Result
+		if err := json.Unmarshal(data, &snapResult); err != nil {
+			fatal(fmt.Errorf("failed to unmarshal snapshot: %w", err))
+		}
+		inventory = snapResult.Inventory
+		snapshot = snapResult.Snapshot
+		workspaceID = snapResult.WorkspaceID
+	}
+
+	debugDir := ""
+	if *emitDebug {
+		debugDir = *debugOut
 	}
 
 	result, err := app.ExportMermaid.Run(export_mermaid.Request{
-		WorkspaceID:       *workspaceID,
-		SnapshotID:        *snapshotID,
+		WorkspaceID:       workspaceID,
+		SnapshotID:        snapshot.ID,
 		RootType:          export_mermaid.RootTypeFilter(*rootType),
 		RootSelector:      *rootSelector,
 		MaxDepth:          *maxDepth,
@@ -179,7 +211,8 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 		CollapseMode:      *collapseMode,
 		ServiceShortName:  *serviceName,
 		IncludeCandidates: *incCandidates,
-	}, analyzeResult.Inventory) 
+		DebugBundleDir:    debugDir,
+	}, inventory, snapshot)
 	if err != nil {
 		fatal(err)
 	}
@@ -219,7 +252,7 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 		MaxDepth:          *maxDepth,
 		MaxBranches:       *maxBranches,
 		CollapseMode:      "default",
-	}, snapResult.Inventory)
+	}, snapResult.Inventory, snapResult.Snapshot)
 	if err != nil {
 		app.Logger.Error("bootstrap export failed", "error", err)
 	} else {
@@ -234,7 +267,7 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 		RootType:          export_mermaid.RootFilterHTTP,
 		MaxDepth:          *maxDepth,
 		CollapseMode:      "default",
-	}, snapResult.Inventory)
+	}, snapResult.Inventory, snapResult.Snapshot)
 	if err != nil {
 		app.Logger.Error("http export failed", "error", err)
 	} else {
@@ -249,7 +282,7 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 		RootType:          export_mermaid.RootFilterWorker,
 		MaxDepth:          *maxDepth,
 		CollapseMode:      "aggressive",
-	}, snapResult.Inventory)
+	}, snapResult.Inventory, snapResult.Snapshot)
 	if err != nil {
 		app.Logger.Error("worker export failed", "error", err)
 	} else {

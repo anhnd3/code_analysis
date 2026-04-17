@@ -365,6 +365,104 @@ func TestReduce_DeterministicOutput(t *testing.T) {
 	}
 }
 
+func TestReduce_ControlBlocks(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			symNode("root", "main.Execute", "function"),
+			symNode("n_async", "bg.Work", "function"),
+			symNode("n_loop", "proc.Item", "function"),
+			symNode("n_alt", "logic.Special", "function"),
+		},
+	}
+	flows := flow.Bundle{
+		Chains: []flow.Chain{
+			{
+				RootNodeID: "root",
+				Steps: []flow.Step{
+					{FromNodeID: "root", ToNodeID: "n_async", Kind: flow.StepAsync, Label: "Work"},
+					{FromNodeID: "root", ToNodeID: "n_loop", Kind: flow.StepBranch, Label: "range items"},
+					{FromNodeID: "root", ToNodeID: "n_alt", Kind: flow.StepBranch, Label: "if urgent == true"},
+				},
+			},
+		},
+	}
+
+	chain, err := New().Reduce(snapshot, flows, boundary.Bundle{}, Request{CollapseMode: "none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(chain.Blocks) != 3 {
+		t.Errorf("expected 3 blocks, got %d", len(chain.Blocks))
+	}
+
+	foundPar := false
+	foundLoop := false
+	foundAlt := false
+
+	for _, b := range chain.Blocks {
+		switch b.Kind {
+		case reduced.BlockPar:
+			foundPar = true
+		case reduced.BlockLoop:
+			foundLoop = true
+			if b.Label != "for each items" {
+				t.Errorf("expected loop label 'for each items', got %s", b.Label)
+			}
+		case reduced.BlockAlt:
+			foundAlt = true
+			if b.Branches[0].Condition != "if urgent == true" {
+				t.Errorf("expected condition 'if urgent == true', got %s", b.Branches[0].Condition)
+			}
+		}
+	}
+
+	if !foundPar || !foundLoop || !foundAlt {
+		t.Errorf("did not find all expected block kinds: par=%v, loop=%v, alt=%v", foundPar, foundLoop, foundAlt)
+	}
+}
+
+func TestReduce_CollapsePolicy_Boundaries(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			symNode("root", "main.Execute", "function"),
+			symNode("n_remote", "ext.API", "function"),
+		},
+	}
+	// Manually set n_remote to unresolved_
+	snapshot.Nodes[1].ID = "unresolved_ext.API"
+
+	flows := flow.Bundle{
+		Chains: []flow.Chain{
+			{
+				RootNodeID: "root",
+				Steps: []flow.Step{
+					{FromNodeID: "root", ToNodeID: "unresolved_ext.API", Kind: flow.StepBoundary, Label: "API"},
+				},
+			},
+		},
+		BoundaryMarkers: []flow.BoundaryMarker{
+			{NodeID: "unresolved_ext.API", Protocol: "http", Role: "client"},
+		},
+	}
+
+	chain, err := New().Reduce(snapshot, flows, boundary.Bundle{}, Request{CollapseMode: "default"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Even if unresolved_ node name looks like a helper (e.g. getAPI), it should be kept
+	found := false
+	for _, n := range chain.Nodes {
+		if n.ID == "unresolved_ext.API" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("unresolved remote node should not be collapsed")
+	}
+}
+
 // --- helpers ---
 
 func symNode(id, canonical, kind string) graph.Node {
