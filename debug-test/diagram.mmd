@@ -1,8 +1,0 @@
-sequenceDiagram
-    title master flow
-    participant nethttp_healthz as HTTP /healthz
-    participant node_cabf7bc83f77 as healthz
-    participant node_4a623d59a56e as writeJSON
-
-    nethttp_healthz->>node_cabf7bc83f77: healthz
-    node_cabf7bc83f77->>node_4a623d59a56e: writeJSON
