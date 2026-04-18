@@ -2,12 +2,12 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "gin:POST:/process",
+      "id": "boundary_1928d477d1bb",
       "label": "POST /process",
       "short_name": "POST /process"
     },
     {
-      "id": "node_0f1af429ee86",
+      "id": "node_a86e18cf2c18",
       "label": "$inline_handler_0",
       "short_name": "$inline_handler_0"
     }
@@ -15,8 +15,8 @@
   "elements": [
     {
       "message": {
-        "from_id": "gin:POST:/process",
-        "to_id": "node_0f1af429ee86",
+        "from_id": "boundary_1928d477d1bb",
+        "to_id": "node_a86e18cf2c18",
         "label": "$inline_handler_0",
         "kind": "sync"
       }

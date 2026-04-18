@@ -2,7 +2,7 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "gin:GET:/ping",
+      "id": "boundary_0d91223701f8",
       "label": "GET /ping",
       "short_name": "GET /ping"
     },

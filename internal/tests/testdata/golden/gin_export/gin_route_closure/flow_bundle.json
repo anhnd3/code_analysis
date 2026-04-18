@@ -1,13 +1,13 @@
 {
   "chains": [
     {
-      "root_node_id": "gin:GET:/closure",
-      "repository_id": "",
+      "root_node_id": "boundary_717f7eb5ed69",
+      "repository_id": "repo_a361c1ee56cf",
       "steps": [
         {
-          "from_node_id": "gin:GET:/closure",
-          "to_node_id": "node_0984c79eb26a",
-          "edge_id": "edge_36b2f9cf1f0e",
+          "from_node_id": "boundary_717f7eb5ed69",
+          "to_node_id": "node_42adcc816ccf",
+          "edge_id": "edge_04665894cf22",
           "kind": "boundary",
           "label": "$inline_handler_0"
         }

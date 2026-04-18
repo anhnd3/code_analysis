@@ -2,6 +2,7 @@ package boundary
 
 import (
 	"fmt"
+	"sort"
 
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/symbol"
@@ -31,9 +32,23 @@ type Result struct {
 	Detector    string
 }
 
-// dedupKey builds a composite key from the four dimensions that uniquely identify a boundary root.
+type registryEntry struct {
+	Result
+	key string
+}
+
+// dedupKey builds the normalized identity used to collapse duplicate detector output.
 func dedupKey(root boundaryroot.Root) string {
-	return fmt.Sprintf("%s|%s|%s|%s", root.SourceFile, root.Method, root.Path, root.HandlerTarget)
+	return fmt.Sprintf(
+		"%s|%s|%d|%d|%s|%s|%s",
+		root.RepositoryID,
+		root.SourceFile,
+		root.SourceStartByte,
+		root.SourceEndByte,
+		root.Method,
+		root.Path,
+		root.HandlerTarget,
+	)
 }
 
 // confidenceRank maps a confidence string to a numeric rank (higher = better).
@@ -48,22 +63,50 @@ func confidenceRank(c string) int {
 	}
 }
 
-// DetectAll runs all registered detectors on the given file and returns de-duplicated results.
-// Deduplication uses (SourceFile, Method, Path, HandlerTarget) as a composite key.
-// For collisions, the root with the highest Confidence is kept. When confidence is equal,
-// the first-seen root is kept and an ambiguity diagnostic is emitted.
-func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Result {
-	type entry struct {
-		Result
-		key string
+func resultOrderKey(result Result) string {
+	root := result.Root
+	return fmt.Sprintf(
+		"%s|%s|%012d|%s|%s|%s|%s",
+		root.RepositoryID,
+		root.SourceFile,
+		root.SourceStartByte,
+		root.Method,
+		root.Path,
+		root.HandlerTarget,
+		root.ID,
+	)
+}
+
+func resultWins(candidate, existing registryEntry) bool {
+	candidateRank := confidenceRank(candidate.Root.Confidence)
+	existingRank := confidenceRank(existing.Root.Confidence)
+	if candidateRank != existingRank {
+		return candidateRank > existingRank
 	}
 
+	candidateHasTarget := candidate.Root.HandlerTarget != ""
+	existingHasTarget := existing.Root.HandlerTarget != ""
+	if candidateHasTarget != existingHasTarget {
+		return candidateHasTarget
+	}
+
+	if candidate.Detector != existing.Detector {
+		return candidate.Detector < existing.Detector
+	}
+
+	return candidate.Root.ID < existing.Root.ID
+}
+
+// DetectAll runs all registered detectors on the given file and returns de-duplicated results.
+// Collisions are resolved deterministically so output ordering does not depend on detector
+// registration order or map iteration order.
+func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Result {
 	// Collect raw results from all detectors.
-	var raw []entry
+	var raw []registryEntry
 	for _, d := range r.detectors {
 		roots, diags := d.DetectBoundaries(file, symbols)
 		for _, root := range roots {
-			raw = append(raw, entry{
+			raw = append(raw, registryEntry{
 				Result: Result{
 					Root:        root,
 					Diagnostics: diags,
@@ -74,49 +117,61 @@ func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Resul
 		}
 	}
 
+	sort.Slice(raw, func(i, j int) bool {
+		if raw[i].key != raw[j].key {
+			return raw[i].key < raw[j].key
+		}
+		if raw[i].Detector != raw[j].Detector {
+			return raw[i].Detector < raw[j].Detector
+		}
+		return raw[i].Root.ID < raw[j].Root.ID
+	})
+
 	// Dedup: keep one winner per key.
-	wInnersByKey := make(map[string]entry, len(raw))
-	var diagsByKey []symbol.Diagnostic
+	winnersByKey := make(map[string]registryEntry, len(raw))
+	diagsByKey := make(map[string][]symbol.Diagnostic, len(raw))
 
 	for _, e := range raw {
-		existing, seen := wInnersByKey[e.key]
+		existing, seen := winnersByKey[e.key]
 		if !seen {
-			wInnersByKey[e.key] = e
+			winnersByKey[e.key] = e
 			continue
 		}
 
-		currentRank := confidenceRank(e.Root.Confidence)
-		existingRank := confidenceRank(existing.Root.Confidence)
-
-		if currentRank > existingRank {
+		if resultWins(e, existing) {
 			// New entry wins on confidence — replace.
-			wInnersByKey[e.key] = e
-		} else if currentRank == existingRank {
-			// Tie — emit ambiguity diagnostic, keep the first-seen.
-			diagsByKey = append(diagsByKey, symbol.Diagnostic{
+			winnersByKey[e.key] = e
+		} else if !resultWins(existing, e) {
+			// Deterministic tie — emit ambiguity diagnostic for visibility.
+			diagsByKey[e.key] = append(diagsByKey[e.key], symbol.Diagnostic{
 				Category: "boundary_ambiguity",
 				Message: fmt.Sprintf(
 					"ambiguous boundary root for key %q: detectors %q and %q both reported it with confidence %q; keeping %q",
-					e.key, existing.Detector, e.Detector, e.Root.Confidence, existing.Detector,
+					e.key, existing.Detector, e.Detector, e.Root.Confidence, winnersByKey[e.key].Detector,
 				),
 				FilePath: e.Root.SourceFile,
 			})
 		}
-		// If current rank is lower, silently discard.
+		// If current entry loses deterministically, silently discard.
 	}
 
-	// Reconstruct ordered output (preserve insertion order via raw iteration).
 	var out []Result
-	seenKeys := make(map[string]bool, len(wInnersByKey))
-	for _, e := range raw {
-		if seenKeys[e.key] {
-			continue
-		}
-		win := wInnersByKey[e.key]
-		win.Diagnostics = append(win.Diagnostics, diagsByKey...)
+	for key, win := range winnersByKey {
+		win.Diagnostics = append(win.Diagnostics, diagsByKey[key]...)
 		out = append(out, win.Result)
-		seenKeys[e.key] = true
 	}
+
+	sort.Slice(out, func(i, j int) bool {
+		left := out[i]
+		right := out[j]
+		if resultOrderKey(left) != resultOrderKey(right) {
+			return resultOrderKey(left) < resultOrderKey(right)
+		}
+		if left.Detector != right.Detector {
+			return left.Detector < right.Detector
+		}
+		return left.Root.ID < right.Root.ID
+	})
 
 	return out
 }

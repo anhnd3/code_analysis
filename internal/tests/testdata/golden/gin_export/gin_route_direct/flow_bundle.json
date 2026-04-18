@@ -1,13 +1,13 @@
 {
   "chains": [
     {
-      "root_node_id": "gin:GET:/ping",
-      "repository_id": "",
+      "root_node_id": "boundary_0d91223701f8",
+      "repository_id": "repo_dee2c77c1496",
       "steps": [
         {
-          "from_node_id": "gin:GET:/ping",
+          "from_node_id": "boundary_0d91223701f8",
           "to_node_id": "unresolved_directHandler",
-          "edge_id": "edge_129c7fffafca",
+          "edge_id": "edge_025061c43ba5",
           "kind": "boundary"
         }
       ]

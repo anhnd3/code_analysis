@@ -1,11 +1,11 @@
 {
   "links": [
     {
-      "outbound_node_id": "gin:GET:/ping",
+      "outbound_node_id": "boundary_0d91223701f8",
       "inbound_node_id": "unresolved_directHandler",
       "protocol": "rest",
       "status": "external_only",
-      "outbound_repo_id": "",
+      "outbound_repo_id": "repo_dee2c77c1496",
       "inbound_repo_id": "",
       "evidence": "unresolved boundary handler target"
     }

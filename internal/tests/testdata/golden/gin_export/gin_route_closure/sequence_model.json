@@ -2,12 +2,12 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "gin:GET:/closure",
+      "id": "boundary_717f7eb5ed69",
       "label": "GET /closure",
       "short_name": "GET /closure"
     },
     {
-      "id": "node_0984c79eb26a",
+      "id": "node_42adcc816ccf",
       "label": "$inline_handler_0",
       "short_name": "$inline_handler_0"
     }
@@ -15,8 +15,8 @@
   "elements": [
     {
       "message": {
-        "from_id": "gin:GET:/closure",
-        "to_id": "node_0984c79eb26a",
+        "from_id": "boundary_717f7eb5ed69",
+        "to_id": "node_42adcc816ccf",
         "label": "$inline_handler_0",
         "kind": "sync"
       }

@@ -2,12 +2,12 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "gin:GET:/async",
+      "id": "boundary_3cb27b71785d",
       "label": "GET /async",
       "short_name": "GET /async"
     },
     {
-      "id": "node_5a739b3f57a3",
+      "id": "node_383193589a5e",
       "label": "$inline_handler_0",
       "short_name": "$inline_handler_0"
     }
@@ -15,8 +15,8 @@
   "elements": [
     {
       "message": {
-        "from_id": "gin:GET:/async",
-        "to_id": "node_5a739b3f57a3",
+        "from_id": "boundary_3cb27b71785d",
+        "to_id": "node_383193589a5e",
         "label": "$inline_handler_0",
         "kind": "sync"
       }

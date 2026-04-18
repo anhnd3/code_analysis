@@ -1,18 +1,4 @@
 {
-  "chains": [
-    {
-      "root_node_id": "gin:GET:/camera/config",
-      "repository_id": "",
-      "steps": [
-        {
-          "from_node_id": "gin:GET:/camera/config",
-          "to_node_id": "node_598a2299e8f9",
-          "edge_id": "edge_e84da43cc694",
-          "kind": "boundary",
-          "label": "GetConfig"
-        }
-      ]
-    }
-  ],
+  "chains": null,
   "boundary_markers": null
 }

@@ -1,25 +1,4 @@
 {
-  "title": "http flow",
-  "participants": [
-    {
-      "id": "gin:GET:/camera/config",
-      "label": "GET /camera/config",
-      "short_name": "GET /camera/config"
-    },
-    {
-      "id": "node_598a2299e8f9",
-      "label": "GetConfig",
-      "short_name": "GetConfig"
-    }
-  ],
-  "elements": [
-    {
-      "message": {
-        "from_id": "gin:GET:/camera/config",
-        "to_id": "node_598a2299e8f9",
-        "label": "GetConfig",
-        "kind": "sync"
-      }
-    }
-  ]
+  "participants": null,
+  "elements": null
 }

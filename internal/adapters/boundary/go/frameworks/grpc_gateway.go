@@ -28,7 +28,11 @@ func (d *GRPCGatewayDetector) DetectBoundaries(file boundary.ParsedGoFile, symbo
 		if n.Kind() == "call_expression" {
 			root := d.handleCall(n, file.Content)
 			if root != nil {
+				root.RepositoryID = file.RepositoryID
 				root.SourceFile = file.Path
+				root.SourceStartByte = uint32(n.StartByte())
+				root.SourceEndByte = uint32(n.EndByte())
+				root.ID = boundaryroot.StableID(*root)
 				roots = append(roots, *root)
 			}
 		}
@@ -67,7 +71,7 @@ func (d *GRPCGatewayDetector) handleCall(n *tree_sitter.Node, content []byte) *b
 	// For grpc-gateway, the "handler" is effectively the gRPC service being proxied.
 	// The actual HTTP paths are defined in the .proto file, which we don't see here.
 	// But we can mark this as a gateway entrypoint.
-	
+
 	return &boundaryroot.Root{
 		ID:            fmt.Sprintf("grpc-gateway:%s", name),
 		Kind:          boundaryroot.KindHTTPGateway,

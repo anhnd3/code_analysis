@@ -1,24 +1,25 @@
 {
-  "root_node_id": "gin:GET:/async",
+  "root_node_id": "boundary_3cb27b71785d",
   "nodes": [
     {
-      "id": "gin:GET:/async",
+      "id": "boundary_3cb27b71785d",
       "canonical_name": "GET /async",
       "short_name": "GET /async",
-      "role": "root"
+      "role": "root",
+      "repository_id": "repo_9c01ab7b1fd0"
     },
     {
-      "id": "node_5a739b3f57a3",
+      "id": "node_383193589a5e",
       "canonical_name": "main.main.$inline_handler_0",
       "short_name": "$inline_handler_0",
       "role": "boundary",
-      "repository_id": "repo_a430fd2561cf"
+      "repository_id": "repo_9c01ab7b1fd0"
     }
   ],
   "edges": [
     {
-      "from_id": "gin:GET:/async",
-      "to_id": "node_5a739b3f57a3",
+      "from_id": "boundary_3cb27b71785d",
+      "to_id": "node_383193589a5e",
       "label": "$inline_handler_0"
     }
   ],

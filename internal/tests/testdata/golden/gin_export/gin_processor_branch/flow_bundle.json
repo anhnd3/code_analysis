@@ -1,13 +1,13 @@
 {
   "chains": [
     {
-      "root_node_id": "gin:POST:/process",
-      "repository_id": "",
+      "root_node_id": "boundary_1928d477d1bb",
+      "repository_id": "repo_06aa865e067c",
       "steps": [
         {
-          "from_node_id": "gin:POST:/process",
-          "to_node_id": "node_0f1af429ee86",
-          "edge_id": "edge_c7d2e51edde7",
+          "from_node_id": "boundary_1928d477d1bb",
+          "to_node_id": "node_a86e18cf2c18",
+          "edge_id": "edge_6ed3490036d0",
           "kind": "boundary",
           "label": "$inline_handler_0"
         }

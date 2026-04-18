@@ -1,24 +1,25 @@
 {
-  "root_node_id": "gin:POST:/process",
+  "root_node_id": "boundary_1928d477d1bb",
   "nodes": [
     {
-      "id": "gin:POST:/process",
+      "id": "boundary_1928d477d1bb",
       "canonical_name": "POST /process",
       "short_name": "POST /process",
-      "role": "root"
+      "role": "root",
+      "repository_id": "repo_06aa865e067c"
     },
     {
-      "id": "node_0f1af429ee86",
+      "id": "node_a86e18cf2c18",
       "canonical_name": "main.main.$inline_handler_0",
       "short_name": "$inline_handler_0",
       "role": "boundary",
-      "repository_id": "repo_e6879466a39f"
+      "repository_id": "repo_06aa865e067c"
     }
   ],
   "edges": [
     {
-      "from_id": "gin:POST:/process",
-      "to_id": "node_0f1af429ee86",
+      "from_id": "boundary_1928d477d1bb",
+      "to_id": "node_a86e18cf2c18",
       "label": "$inline_handler_0"
     }
   ],

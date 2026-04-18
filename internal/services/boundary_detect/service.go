@@ -8,6 +8,7 @@ import (
 	"analysis-module/internal/domain/symbol"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -50,6 +51,8 @@ func (s Service) DetectAll(inventory repository.Inventory, symbols []symbol.Symb
 		allRoots = append(allRoots, roots...)
 	}
 
+	sortBoundaryRoots(allRoots)
+
 	return allRoots, nil
 }
 
@@ -58,7 +61,7 @@ func (s Service) detectGoRepo(repo repository.Manifest, allSymbols []symbol.Symb
 
 	for _, fileRelPath := range repo.GoFiles {
 		absPath := filepath.Join(repo.RootPath, filepath.FromSlash(fileRelPath))
-		
+
 		// Optimization: only parse files that likely contain registrations
 		// This can be refined, but for now we look for common framework keywords
 		content, err := os.ReadFile(absPath)
@@ -77,9 +80,10 @@ func (s Service) detectGoRepo(repo repository.Manifest, allSymbols []symbol.Symb
 		defer tree.Close()
 
 		file := boundary.ParsedGoFile{
-			Path:    fileRelPath,
-			Content: content,
-			Root:    tree.RootNode(),
+			RepositoryID: string(repo.ID),
+			Path:         fileRelPath,
+			Content:      content,
+			Root:         tree.RootNode(),
 		}
 
 		// Filter symbols for this file to be efficient
@@ -92,9 +96,18 @@ func (s Service) detectGoRepo(repo repository.Manifest, allSymbols []symbol.Symb
 
 		results := s.goRegistry.DetectAll(file, fileSymbols)
 		for _, res := range results {
-			roots = append(roots, res.Root)
+			root := res.Root
+			if root.RepositoryID == "" {
+				root.RepositoryID = string(repo.ID)
+			}
+			if root.ID == "" {
+				root.ID = boundaryroot.StableID(root)
+			}
+			roots = append(roots, root)
 		}
 	}
+
+	sortBoundaryRoots(roots)
 
 	return roots, nil
 }
@@ -109,4 +122,27 @@ func isCandidateFile(content []byte) bool {
 		}
 	}
 	return false
+}
+
+func sortBoundaryRoots(roots []boundaryroot.Root) {
+	sort.Slice(roots, func(i, j int) bool {
+		a := roots[i]
+		b := roots[j]
+		switch {
+		case a.RepositoryID != b.RepositoryID:
+			return a.RepositoryID < b.RepositoryID
+		case a.SourceFile != b.SourceFile:
+			return a.SourceFile < b.SourceFile
+		case a.SourceStartByte != b.SourceStartByte:
+			return a.SourceStartByte < b.SourceStartByte
+		case a.Method != b.Method:
+			return a.Method < b.Method
+		case a.Path != b.Path:
+			return a.Path < b.Path
+		case a.HandlerTarget != b.HandlerTarget:
+			return a.HandlerTarget < b.HandlerTarget
+		default:
+			return a.ID < b.ID
+		}
+	})
 }

@@ -27,7 +27,11 @@ func (d *NetHTTPDetector) DetectBoundaries(file boundary.ParsedGoFile, symbols [
 		if n.Kind() == "call_expression" {
 			root := d.handleCall(n, file.Content)
 			if root != nil {
+				root.RepositoryID = file.RepositoryID
 				root.SourceFile = file.Path
+				root.SourceStartByte = uint32(n.StartByte())
+				root.SourceEndByte = uint32(n.EndByte())
+				root.ID = boundaryroot.StableID(*root)
 				roots = append(roots, *root)
 			}
 		}

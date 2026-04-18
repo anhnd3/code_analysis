@@ -1,5 +1,5 @@
 {
-  "root_node_id": "gin:GET:/ping",
+  "root_node_id": "boundary_0d91223701f8",
   "nodes": [
     {
       "id": "",
@@ -8,15 +8,16 @@
       "role": "remote"
     },
     {
-      "id": "gin:GET:/ping",
+      "id": "boundary_0d91223701f8",
       "canonical_name": "GET /ping",
       "short_name": "GET /ping",
-      "role": "root"
+      "role": "root",
+      "repository_id": "repo_dee2c77c1496"
     }
   ],
   "edges": [
     {
-      "from_id": "gin:GET:/ping",
+      "from_id": "boundary_0d91223701f8",
       "to_id": "unresolved_directHandler",
       "cross_repo": true,
       "link_status": "external_only"

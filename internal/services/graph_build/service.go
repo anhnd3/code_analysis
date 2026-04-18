@@ -315,16 +315,24 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 
 	// Persist upstream framework boundary roots
 	for _, br := range detectedRoots {
+		rootID := br.ID
+		if rootID == "" {
+			rootID = boundaryroot.StableID(br)
+		}
 		rootNode := graph.Node{
-			ID:            br.ID,
+			ID:            rootID,
 			Kind:          graph.NodeEndpoint, // or custom NodeBoundary
 			CanonicalName: br.CanonicalName,
+			RepositoryID:  br.RepositoryID,
+			FilePath:      br.SourceFile,
 			Properties: map[string]string{
-				"framework":      br.Framework,
-				"boundary_kind":  string(br.Kind),
-				"method":         br.Method,
-				"path":           br.Path,
-				"handler_target": br.HandlerTarget,
+				"framework":         br.Framework,
+				"boundary_kind":     string(br.Kind),
+				"method":            br.Method,
+				"path":              br.Path,
+				"handler_target":    br.HandlerTarget,
+				"source_start_byte": strconv.FormatUint(uint64(br.SourceStartByte), 10),
+				"source_end_byte":   strconv.FormatUint(uint64(br.SourceEndByte), 10),
 			},
 			SnapshotID: snapshotID,
 		}
@@ -338,7 +346,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				targetNodeID = symbolNodeByID[targetSym.ID].ID
 			}
 			edge := graph.Edge{
-				ID:   ids.Stable("edge", snapshotID, rootNode.ID, targetNodeID, string(graph.EdgeRegistersBoundary)),
+				ID:   ids.Stable("edge", rootNode.ID, targetNodeID, string(graph.EdgeRegistersBoundary)),
 				Kind: graph.EdgeRegistersBoundary,
 				From: rootNode.ID,
 				To:   targetNodeID,

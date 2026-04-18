@@ -11,9 +11,10 @@ import (
 // Since the exact extractor AST type isn't globally exposed cleanly yet, we define a lightweight contract or use the raw file path.
 // For now, we'll pass the file path, content, and the AST root node.
 type ParsedGoFile struct {
-	Path    string
-	Content []byte
-	Root    *tree_sitter.Node
+	RepositoryID string
+	Path         string
+	Content      []byte
+	Root         *tree_sitter.Node
 }
 
 // BoundaryDetector is the generic adapter interface for finding framework-specific boundary registrations.

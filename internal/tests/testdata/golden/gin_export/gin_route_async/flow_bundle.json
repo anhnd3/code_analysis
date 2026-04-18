@@ -1,13 +1,13 @@
 {
   "chains": [
     {
-      "root_node_id": "gin:GET:/async",
-      "repository_id": "",
+      "root_node_id": "boundary_3cb27b71785d",
+      "repository_id": "repo_9c01ab7b1fd0",
       "steps": [
         {
-          "from_node_id": "gin:GET:/async",
-          "to_node_id": "node_5a739b3f57a3",
-          "edge_id": "edge_876704761870",
+          "from_node_id": "boundary_3cb27b71785d",
+          "to_node_id": "node_383193589a5e",
+          "edge_id": "edge_0a7a76727a24",
           "kind": "boundary",
           "label": "$inline_handler_0"
         }

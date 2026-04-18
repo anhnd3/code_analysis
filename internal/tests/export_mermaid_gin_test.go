@@ -59,7 +59,7 @@ func runGinExportTest(t *testing.T, fixtureName string) {
 
 	inventory := snapshotResult.Inventory
 
-	result, err := app.ExportMermaid.Run(req, inventory)
+	result, err := app.ExportMermaid.Run(req, inventory, snapshotResult.Snapshot)
 	if err != nil {
 		t.Fatalf("export mermaid for %s: %v", fixtureName, err)
 	}
@@ -82,7 +82,7 @@ func runGinExportTest(t *testing.T, fixtureName string) {
 func assertGoldenContent(t *testing.T, path string, actual []byte) {
 	t.Helper()
 	update := *updateGoldens || os.Getenv("UPDATE_GOLDEN") == "1"
-	
+
 	if update {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir golden dir: %v", err)
