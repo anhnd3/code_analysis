@@ -3,6 +3,7 @@ package integration
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"analysis-module/internal/app/bootstrap"
 	"analysis-module/internal/app/config"
@@ -116,6 +117,73 @@ func TestMultiServiceSharedCodeGetsSharedOwnership(t *testing.T) {
 	}
 }
 
+func TestBuildSnapshotPersistsGoSemanticEdgesDeterministically(t *testing.T) {
+	app := newGraphTestApplication(t)
+	workspace := fixtures.WorkspacePath(t, "semantic_hints")
+
+	first, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath: workspace,
+	})
+	if err != nil {
+		t.Fatalf("first build snapshot: %v", err)
+	}
+
+	waitForNextSnapshotIDTick()
+
+	second, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath: workspace,
+	})
+	if err != nil {
+		t.Fatalf("second build snapshot: %v", err)
+	}
+	if first.Snapshot.ID == second.Snapshot.ID {
+		t.Fatalf("expected distinct snapshot IDs across builds, got %s", first.Snapshot.ID)
+	}
+
+	firstEdges := semanticPREdges(first.Snapshot.Edges)
+	secondEdges := semanticPREdges(second.Snapshot.Edges)
+	if len(firstEdges) == 0 {
+		t.Fatal("expected persisted PR1 semantic edges in first snapshot")
+	}
+
+	expectedKinds := []graph.EdgeKind{
+		graph.EdgeReturnsHandler,
+		graph.EdgeSpawns,
+		graph.EdgeDefers,
+		graph.EdgeWaitsOn,
+	}
+	for _, kind := range expectedKinds {
+		if !hasEdgeKind(firstEdges, kind) {
+			t.Fatalf("expected semantic edge kind %s in first snapshot; got %+v", kind, firstEdges)
+		}
+	}
+
+	firstNodeExists := nodeExistsByID(first.Snapshot.Nodes)
+	secondNodeExists := nodeExistsByID(second.Snapshot.Nodes)
+	for _, edge := range firstEdges {
+		if edge.Evidence.Source == "" {
+			t.Fatalf("expected non-empty evidence for edge %+v", edge)
+		}
+		if !firstNodeExists[edge.To] {
+			t.Fatalf("expected target node %s to exist in first snapshot", edge.To)
+		}
+	}
+	for _, edge := range secondEdges {
+		if edge.Evidence.Source == "" {
+			t.Fatalf("expected non-empty evidence for edge %+v", edge)
+		}
+		if !secondNodeExists[edge.To] {
+			t.Fatalf("expected target node %s to exist in second snapshot", edge.To)
+		}
+	}
+
+	firstSignatures := semanticEdgeSignatures(firstEdges)
+	secondSignatures := semanticEdgeSignatures(secondEdges)
+	if !slices.Equal(firstSignatures, secondSignatures) {
+		t.Fatalf("expected identical semantic edge set across builds:\nfirst=%v\nsecond=%v", firstSignatures, secondSignatures)
+	}
+}
+
 func newGraphTestApplication(t *testing.T) *bootstrap.Application {
 	t.Helper()
 	cfg := config.Default()
@@ -207,4 +275,55 @@ func belongsToServiceEdges(edges []graph.Edge, nodes []graph.Node, canonical str
 		}
 	}
 	return result
+}
+
+func semanticPREdges(edges []graph.Edge) []graph.Edge {
+	result := []graph.Edge{}
+	for _, edge := range edges {
+		switch edge.Kind {
+		case graph.EdgeReturnsHandler, graph.EdgeSpawns, graph.EdgeDefers, graph.EdgeWaitsOn:
+			result = append(result, edge)
+		}
+	}
+	slices.SortFunc(result, func(a, b graph.Edge) int {
+		switch {
+		case a.ID < b.ID:
+			return -1
+		case a.ID > b.ID:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return result
+}
+
+func semanticEdgeSignatures(edges []graph.Edge) []string {
+	signatures := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		signatures = append(signatures, edge.ID+"|"+string(edge.Kind)+"|"+edge.From+"|"+edge.To+"|"+edge.Evidence.Source)
+	}
+	return signatures
+}
+
+func nodeExistsByID(nodes []graph.Node) map[string]bool {
+	ids := map[string]bool{}
+	for _, node := range nodes {
+		ids[node.ID] = true
+	}
+	return ids
+}
+
+func hasEdgeKind(edges []graph.Edge, kind graph.EdgeKind) bool {
+	for _, edge := range edges {
+		if edge.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func waitForNextSnapshotIDTick() {
+	nextSecond := time.Now().UTC().Truncate(time.Second).Add(time.Second)
+	time.Sleep(time.Until(nextSecond) + 10*time.Millisecond)
 }

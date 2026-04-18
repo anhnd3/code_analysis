@@ -21,6 +21,23 @@ Deferred behind stable package boundaries:
 - semantic LLM harness
 - advanced cache and enrichment layers
 
+### Current Go Semantic Support
+
+Phase 1 / PR1 currently supports bounded Go semantic extraction for:
+- `RETURNS_HANDLER` from direct returned function literals
+- `SPAWNS` from direct goroutine calls and inline goroutine closures
+- `DEFERS` from direct deferred calls and inline deferred closures
+- `WAITS_ON` from zero-argument `wg.Wait()`
+
+Current intentional deferrals:
+- alias-chain resolution
+- wrapper unrolling
+- channel topology inference
+- branch/control shaping beyond the existing compile-safe path
+- reducer shaping and final flow generation
+
+The operating policy for this work is documented in [AGENTS.md](AGENTS.md) and the PR1 scope doc at [docs/master_plan/phase1_pr1_semantic_core.md](docs/master_plan/phase1_pr1_semantic_core.md).
+
 Expected commands:
 
 - `analysis-cli analyze-workspace`

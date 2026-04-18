@@ -12,8 +12,10 @@ const (
 
 // Hint captures Go semantics discovered during AST extraction.
 type Hint struct {
-	SourceSymbolID string
-	TargetSymbol   string // optionally canonical name or synthetic symbol ID
-	Kind           HintKind
-	Evidence       string
+	SourceSymbolID string   `json:"source_symbol_id"`
+	TargetSymbolID string   `json:"target_symbol_id,omitempty"`
+	TargetSymbol   string   `json:"target_symbol,omitempty"`
+	Kind           HintKind `json:"kind"`
+	Evidence       string   `json:"evidence,omitempty"`
+	OrderIndex     int      `json:"order_index,omitempty"`
 }

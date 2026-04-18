@@ -10,46 +10,62 @@ import (
 
 // extractControlHints detects if/else, switch, and for/range constructs,
 // emitting HintBranch with the condition text as the label.
-func extractControlHints(node *tree_sitter.Node, content []byte, src symbol.Symbol) []executionhint.Hint {
-	var hints []executionhint.Hint
+func extractControlHints(node *tree_sitter.Node, content []byte, src symbol.Symbol) []semanticHintMatch {
+	var hints []semanticHintMatch
 	walk(node, func(inner *tree_sitter.Node) {
-		if inner == nil {
+		if inner == nil || isInNestedFuncLiteral(node, inner) {
 			return
 		}
 		switch inner.Kind() {
 		case "if_statement":
 			label := branchLabel(inner, content, "condition")
-			hints = append(hints, executionhint.Hint{
-				SourceSymbolID: string(src.ID),
-				TargetSymbol:   "",
-				Kind:           executionhint.HintBranch,
-				Evidence:       "if " + label,
+			hints = append(hints, semanticHintMatch{
+				startByte: uint32(inner.StartByte()),
+				hint: executionhint.Hint{
+					SourceSymbolID: string(src.ID),
+					TargetSymbolID: string(src.ID),
+					TargetSymbol:   src.CanonicalName,
+					Kind:           executionhint.HintBranch,
+					Evidence:       "if " + label,
+				},
 			})
 
 		case "switch_statement", "expression_switch_statement", "type_switch_statement":
 			label := branchLabel(inner, content, "value")
-			hints = append(hints, executionhint.Hint{
-				SourceSymbolID: string(src.ID),
-				TargetSymbol:   "",
-				Kind:           executionhint.HintBranch,
-				Evidence:       "switch " + label,
+			hints = append(hints, semanticHintMatch{
+				startByte: uint32(inner.StartByte()),
+				hint: executionhint.Hint{
+					SourceSymbolID: string(src.ID),
+					TargetSymbolID: string(src.ID),
+					TargetSymbol:   src.CanonicalName,
+					Kind:           executionhint.HintBranch,
+					Evidence:       "switch " + label,
+				},
 			})
 
 		case "for_statement":
-			hints = append(hints, executionhint.Hint{
-				SourceSymbolID: string(src.ID),
-				TargetSymbol:   "",
-				Kind:           executionhint.HintBranch,
-				Evidence:       "for loop at line " + lineOf(inner),
+			hints = append(hints, semanticHintMatch{
+				startByte: uint32(inner.StartByte()),
+				hint: executionhint.Hint{
+					SourceSymbolID: string(src.ID),
+					TargetSymbolID: string(src.ID),
+					TargetSymbol:   src.CanonicalName,
+					Kind:           executionhint.HintBranch,
+					Evidence:       "for loop at line " + lineOf(inner),
+				},
 			})
 
 		case "range_statement", "for_range_statement":
 			label := branchLabel(inner, content, "right")
-			hints = append(hints, executionhint.Hint{
-				SourceSymbolID: string(src.ID),
-				TargetSymbol:   "",
-				Kind:           executionhint.HintBranch,
-				Evidence:       "range " + label,
+			hints = append(hints, semanticHintMatch{
+				startByte: uint32(inner.StartByte()),
+				hint: executionhint.Hint{
+					SourceSymbolID: string(src.ID),
+					TargetSymbolID: string(src.ID),
+					TargetSymbol:   src.CanonicalName,
+					Kind:           executionhint.HintBranch,
+					Evidence:       "range " + label,
+				},
 			})
 		}
 	})

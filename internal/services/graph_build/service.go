@@ -177,7 +177,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 					nodeKind = graph.NodeTest
 				}
 				symbolNode := graph.Node{
-					ID:            ids.Stable("node", snapshotID, "symbol", string(sym.ID)),
+					ID:            ids.Stable("node", "symbol", string(sym.ID)),
 					Kind:          nodeKind,
 					CanonicalName: sym.CanonicalName,
 					RepositoryID:  sym.RepositoryID,
@@ -269,20 +269,32 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				if !ok {
 					continue
 				}
-
-				targetNodeID := "unresolved_" + hint.TargetSymbol
-				if hint.TargetSymbol != "" {
-					targetSym, _, resolved := resolveTarget(symbol.RelationCandidate{TargetCanonicalName: hint.TargetSymbol}, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
-					if resolved {
-						targetNodeID = symbolNodeByID[targetSym.ID].ID
-					}
+				fromNode, ok := symbolNodeByID[source.ID]
+				if !ok {
+					continue
 				}
 
-				fromNode := symbolNodeByID[source.ID]
+				targetSym, targetNodeID, resolved := resolveHintTarget(hint, symbolByCanonical, symbolByID, symbolNodeByID)
+				if !resolved {
+					continue
+				}
 
 				edgeKind := mapHintToEdgeKind(hint.Kind)
+				properties := map[string]string{
+					"order_index":   strconv.Itoa(hint.OrderIndex),
+					"semantic_kind": string(hint.Kind),
+				}
+				if targetSym.Properties != nil && targetSym.Properties["synthetic"] == "true" {
+					properties["synthetic_target"] = "true"
+				} else {
+					properties["synthetic_target"] = "false"
+				}
+				confidence := graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1.0}
+				if hint.TargetSymbolID == "" && hint.TargetSymbol != "" {
+					confidence = graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.85}
+				}
 				edge := graph.Edge{
-					ID:   ids.Stable("edge", snapshotID, fromNode.ID, targetNodeID, string(edgeKind), hint.Evidence),
+					ID:   ids.Stable("edge", "semantic", fromNode.ID, targetNodeID, string(edgeKind), strconv.Itoa(hint.OrderIndex), hint.Evidence),
 					Kind: edgeKind,
 					From: fromNode.ID,
 					To:   targetNodeID,
@@ -292,7 +304,8 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 						ExtractionMethod: extractionMethod(fileResult.Language),
 						Details:          string(hint.Kind),
 					},
-					Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.8},
+					Confidence: confidence,
+					Properties: properties,
 					SnapshotID: snapshotID,
 				}
 				edges = append(edges, edge)
@@ -307,16 +320,16 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 			Kind:          graph.NodeEndpoint, // or custom NodeBoundary
 			CanonicalName: br.CanonicalName,
 			Properties: map[string]string{
-				"framework":       br.Framework,
-				"boundary_kind":   string(br.Kind),
-				"method":          br.Method,
-				"path":            br.Path,
-				"handler_target":  br.HandlerTarget,
+				"framework":      br.Framework,
+				"boundary_kind":  string(br.Kind),
+				"method":         br.Method,
+				"path":           br.Path,
+				"handler_target": br.HandlerTarget,
 			},
 			SnapshotID: snapshotID,
 		}
 		nodes = append(nodes, rootNode)
-		
+
 		// If handler target is resolved to a symbol:
 		if br.HandlerTarget != "" {
 			targetSym, _, resolved := resolveTarget(symbol.RelationCandidate{TargetCanonicalName: br.HandlerTarget}, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
@@ -403,6 +416,32 @@ func resolveTarget(relation symbol.RelationCandidate, symbolByCanonical map[stri
 		}
 	}
 	return symbol.Symbol{}, graph.Confidence{}, false
+}
+
+func resolveHintTarget(hint executionhint.Hint, symbolByCanonical map[string]symbol.Symbol, symbolByID map[symbol.ID]symbol.Symbol, symbolNodeByID map[symbol.ID]graph.Node) (symbol.Symbol, string, bool) {
+	if hint.TargetSymbolID != "" {
+		targetSym, ok := symbolByID[symbol.ID(hint.TargetSymbolID)]
+		if !ok {
+			return symbol.Symbol{}, "", false
+		}
+		targetNode, ok := symbolNodeByID[targetSym.ID]
+		if !ok {
+			return symbol.Symbol{}, "", false
+		}
+		return targetSym, targetNode.ID, true
+	}
+	if hint.TargetSymbol == "" {
+		return symbol.Symbol{}, "", false
+	}
+	targetSym, ok := symbolByCanonical[hint.TargetSymbol]
+	if !ok {
+		return symbol.Symbol{}, "", false
+	}
+	targetNode, ok := symbolNodeByID[targetSym.ID]
+	if !ok {
+		return symbol.Symbol{}, "", false
+	}
+	return targetSym, targetNode.ID, true
 }
 
 func determineFileOwners(repo repository.Manifest, files []symbol.FileExtractionResult) (map[string]map[string]struct{}, int) {

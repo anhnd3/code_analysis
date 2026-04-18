@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"analysis-module/internal/adapters/extractor/treesitter"
+	"analysis-module/internal/domain/executionhint"
 	"analysis-module/internal/domain/symbol"
 	extractorport "analysis-module/internal/ports/extractor"
 	"analysis-module/pkg/ids"
@@ -16,6 +18,95 @@ import (
 
 type Extractor struct {
 	parser *treesitter.GoParser
+}
+
+type scope struct {
+	start, end uint32
+	sym        symbol.Symbol
+}
+
+type syntheticSpanIndex struct {
+	bySpan map[string]symbol.Symbol
+}
+
+type semanticHintMatch struct {
+	startByte uint32
+	hint      executionhint.Hint
+}
+
+func newSyntheticSpanIndex() syntheticSpanIndex {
+	return syntheticSpanIndex{bySpan: map[string]symbol.Symbol{}}
+}
+
+func (i *syntheticSpanIndex) Add(node *tree_sitter.Node, sym symbol.Symbol) {
+	if node == nil {
+		return
+	}
+	i.bySpan[spanKey(node)] = sym
+}
+
+func (i syntheticSpanIndex) Find(node *tree_sitter.Node) (symbol.Symbol, bool) {
+	if node == nil {
+		return symbol.Symbol{}, false
+	}
+	sym, ok := i.bySpan[spanKey(node)]
+	return sym, ok
+}
+
+func spanKey(node *tree_sitter.Node) string {
+	return fmt.Sprintf("%d:%d", node.StartByte(), node.EndByte())
+}
+
+func orderedHints(matches ...[]semanticHintMatch) []executionhint.Hint {
+	var combined []semanticHintMatch
+	for _, matchSet := range matches {
+		combined = append(combined, matchSet...)
+	}
+	sort.SliceStable(combined, func(i, j int) bool {
+		if combined[i].startByte != combined[j].startByte {
+			return combined[i].startByte < combined[j].startByte
+		}
+		if combined[i].hint.Kind != combined[j].hint.Kind {
+			return combined[i].hint.Kind < combined[j].hint.Kind
+		}
+		return combined[i].hint.Evidence < combined[j].hint.Evidence
+	})
+	ordered := make([]executionhint.Hint, 0, len(combined))
+	for idx, match := range combined {
+		match.hint.OrderIndex = idx
+		ordered = append(ordered, match.hint)
+	}
+	return ordered
+}
+
+func isReturnedFuncLiteral(node *tree_sitter.Node) bool {
+	if node == nil || node.Kind() != "func_literal" {
+		return false
+	}
+	parent := node.Parent()
+	if parent == nil {
+		return false
+	}
+	if parent.Kind() == "return_statement" {
+		return true
+	}
+	if parent.Kind() == "expression_list" {
+		grandparent := parent.Parent()
+		return grandparent != nil && grandparent.Kind() == "return_statement" && parent.NamedChildCount() == 1
+	}
+	return false
+}
+
+func isInNestedFuncLiteral(root, node *tree_sitter.Node) bool {
+	if root == nil || node == nil || node == root {
+		return false
+	}
+	for parent := node.Parent(); parent != nil && parent != root; parent = parent.Parent() {
+		if parent.Kind() == "func_literal" {
+			return true
+		}
+	}
+	return false
 }
 
 func New() extractorport.SymbolExtractor {
@@ -74,35 +165,20 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 			sym := buildSymbol(file, result.PackageName, node, content)
 			result.Symbols = append(result.Symbols, sym)
 			body := node.ChildByFieldName("body")
-			
-			// Extract semantic hints for the full symbol body
-			result.Hints = append(result.Hints, extractClosureHints(body, content, sym)...)
-			result.Hints = append(result.Hints, extractAsyncHints(body, content, sym, result.PackageName, importAliases)...)
-			result.Hints = append(result.Hints, extractControlHints(body, content, sym)...)
 
 			closureCount := 0
 			inlineCount := 0
-
-			// Store bounds of functional scopes we create so we can attribute calls dynamically.
-			type scope struct {
-				start, end uint32
-				sym        symbol.Symbol
-			}
 			var scopes []scope
+			syntheticIndex := newSyntheticSpanIndex()
 
 			// First pass: identify closures and inline handlers inside this function body
 			walk(body, func(inner *tree_sitter.Node) {
 				if inner == nil || inner.Kind() != "func_literal" {
 					return
 				}
-				parent := inner.Parent()
-				isReturn := false
-				if parent != nil && (parent.Kind() == "return_statement" || parent.Kind() == "expression_list") {
-					isReturn = true
-				}
 
 				var synth symbol.Symbol
-				if isReturn {
+				if isReturnedFuncLiteral(inner) {
 					synth = GenerateClosureSymbol(file, result.PackageName, sym.CanonicalName, closureCount, inner)
 					closureCount++
 				} else {
@@ -115,7 +191,15 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 					end:   uint32(inner.EndByte()),
 					sym:   synth,
 				})
+				syntheticIndex.Add(inner, synth)
 			})
+
+			// Semantic extraction runs after synthetic symbol creation so hints can bind to exact IDs.
+			result.Hints = append(result.Hints, orderedHints(
+				extractClosureHints(body, content, sym, syntheticIndex),
+				extractAsyncHints(body, content, sym, result.PackageName, importAliases, syntheticIndex),
+				extractControlHints(body, content, sym),
+			)...)
 
 			// Second pass: extract calls with nearest scope affiliation
 			walk(body, func(inner *tree_sitter.Node) {
