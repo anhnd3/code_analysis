@@ -112,8 +112,12 @@ type semanticBeam struct {
 type semanticSearchResult struct {
 	path           []graph.Edge
 	blockedByNoise bool
+	anchorNodeID   string
 }
 
+// walkSemanticSpine keeps deterministic entry handling for boundary registration
+// and returned handler peeling. Only post-body CALLS are recovered via bounded
+// beam search; side edges remain structural annotations.
 func (s Service) walkSemanticSpine(root entrypoint.Root, idx *snapshotIndex) (flow.Chain, map[string]bool, bool) {
 	chain := newChain(root)
 	visited := map[string]bool{root.NodeID: true}
@@ -271,7 +275,10 @@ func (idx *snapshotIndex) firstBusinessCalls(handlerNodeID, startNodeID string) 
 	calls := []SemanticAuditEdgeRef{}
 	warnings := []SemanticAuditWarning{}
 	search := idx.refinedAuditBusinessSearch(handlerNodeID, startNodeID)
-	anchorNodeID := startNodeID
+	anchorNodeID := search.anchorNodeID
+	if anchorNodeID == "" {
+		anchorNodeID = startNodeID
+	}
 	if anchorNodeID == "" {
 		anchorNodeID = handlerNodeID
 	}
@@ -399,19 +406,24 @@ func (idx *snapshotIndex) bestEdgeByKind(nodeID string, kind graph.EdgeKind) (gr
 }
 
 func (idx *snapshotIndex) refinedAuditBusinessSearch(handlerNodeID, bodyNodeID string) semanticSearchResult {
-	primary := idx.searchCallBeam(bodyNodeID)
+	anchorNodeID := bodyNodeID
+	if anchorNodeID == "" {
+		anchorNodeID = handlerNodeID
+	}
+
+	primary := idx.searchCallBeam(anchorNodeID)
+	primary.anchorNodeID = anchorNodeID
 	if idx.pathHasBusiness(primary.path) {
 		return primary
 	}
-	if handlerNodeID == "" || handlerNodeID == bodyNodeID {
+	if handlerNodeID == "" || handlerNodeID == anchorNodeID {
 		return primary
 	}
 
-	anchor := handlerNodeID
-	if edge, ok := idx.bestEdgeByKind(handlerNodeID, graph.EdgeReturnsHandler); ok {
-		anchor = edge.To
-	}
-	fallback := idx.searchCallBeam(anchor)
+	// Handler-anchor refinement stays audit-only so it can improve the audit
+	// summary without changing the semantic chain selected by walkSemanticSpine.
+	fallback := idx.searchCallBeam(handlerNodeID)
+	fallback.anchorNodeID = handlerNodeID
 	if idx.pathHasBusiness(fallback.path) && !idx.pathHasBusiness(primary.path) {
 		return fallback
 	}
@@ -421,6 +433,9 @@ func (idx *snapshotIndex) refinedAuditBusinessSearch(handlerNodeID, bodyNodeID s
 	return primary
 }
 
+// searchCallBeam explores only CALLS edges after deterministic entry peeling.
+// Side edges are excluded from beam expansion and stay in the audit/chain as
+// annotations attached to visited nodes.
 func (idx *snapshotIndex) searchCallBeam(startNodeID string) semanticSearchResult {
 	if startNodeID == "" {
 		return semanticSearchResult{}
@@ -609,25 +624,6 @@ func (idx *snapshotIndex) pathBlockedByNoise(path []graph.Edge) bool {
 
 func (idx *snapshotIndex) sideEdges(nodeID string) []graph.Edge {
 	return idx.sortSemanticEdges(filterSideEdges(idx.outgoingSemantic(nodeID)))
-}
-
-func (idx *snapshotIndex) selectSemanticNext(nodeID string) (*graph.Edge, []graph.Edge) {
-	outgoing := idx.outgoingSemantic(nodeID)
-	if len(outgoing) == 0 {
-		return nil, nil
-	}
-
-	returnsHandler := filterEdgesByKind(outgoing, graph.EdgeReturnsHandler)
-	sideEdges := filterSideEdges(outgoing)
-	if selected, ok := idx.bestSemanticEdge(nodeID, returnsHandler); ok {
-		return &selected, idx.sortSemanticEdges(sideEdges)
-	}
-
-	if selected, ok := idx.bestSemanticEdge(nodeID, filterEdgesByKind(outgoing, graph.EdgeCalls)); ok {
-		return &selected, idx.sortSemanticEdges(sideEdges)
-	}
-
-	return nil, idx.sortSemanticEdges(sideEdges)
 }
 
 func filterEdgesByKind(edges []graph.Edge, kind graph.EdgeKind) []graph.Edge {

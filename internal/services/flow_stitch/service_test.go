@@ -405,6 +405,49 @@ func TestBuild_HTTPRootBeamSearchUsesDeterministicTieBreaks(t *testing.T) {
 	}
 }
 
+func TestBuild_HTTPRootBeamSearchStopsAtMaxDepth(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			testSymbolNode("handler_root", "api.HandleOrders", string(symbol.KindRouteHandler)),
+			testSymbolNode("service_one", "svc.OrderServiceOne", "function"),
+			testSymbolNode("service_two", "svc.OrderServiceTwo", "function"),
+			testSymbolNode("service_three", "svc.OrderServiceThree", "function"),
+			testSymbolNode("service_four", "svc.OrderServiceFour", "function"),
+			testSymbolNode("service_five", "svc.OrderServiceFive", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e1", Kind: graph.EdgeCalls, From: "handler_root", To: "service_one", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e2", Kind: graph.EdgeCalls, From: "service_one", To: "service_two", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e3", Kind: graph.EdgeCalls, From: "service_two", To: "service_three", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e4", Kind: graph.EdgeCalls, From: "service_three", To: "service_four", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e5", Kind: graph.EdgeCalls, From: "service_four", To: "service_five", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "handler_root",
+			CanonicalName: "api.HandleOrders",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := New().Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Chains) != 1 {
+		t.Fatalf("expected 1 chain, got %+v", bundle.Chains)
+	}
+	steps := bundle.Chains[0].Steps
+	if len(steps) != semanticMaxDepth {
+		t.Fatalf("expected semantic search to stop at max depth %d, got %+v", semanticMaxDepth, steps)
+	}
+	if got := steps[len(steps)-1].ToNodeID; got != "service_four" {
+		t.Fatalf("expected bounded search to stop before service_five, got %s", got)
+	}
+}
+
 func TestBuild_HTTPFallbackRootAllowsInferredEligibleBusinessCall(t *testing.T) {
 	snapshot := graph.GraphSnapshot{
 		Nodes: []graph.Node{
@@ -565,6 +608,61 @@ func TestBuildAudit_CollectsSiblingBusinessCallsBeforeDeeperPath(t *testing.T) {
 	}
 	if got[2].ToNodeID != "helper_target" {
 		t.Fatalf("expected deeper business call after sibling calls, got %+v", got)
+	}
+}
+
+func TestBuildAudit_FunctionAnchorRefinementDoesNotChangeMainline(t *testing.T) {
+	service := New()
+	snapshot := graph.GraphSnapshot{
+		WorkspaceID: "ws_anchor_refine",
+		ID:          "snap_anchor_refine",
+		Nodes: []graph.Node{
+			endpointNode("endpoint_anchor", "GET /anchor"),
+			testSymbolNode("handler_factory", "api.MakeOrdersHandler", "function"),
+			testSymbolNode("handler_closure", "api.MakeOrdersHandler.$closure_return_0", "function"),
+			testSymbolNode("service_target", "svc.OrderService", "function"),
+			testSymbolNode("log_target", "obs.LogRequest", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_anchor", To: "handler_factory", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_return", Kind: graph.EdgeReturnsHandler, From: "handler_factory", To: "handler_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_factory_service", Kind: graph.EdgeCalls, From: "handler_factory", To: "service_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_closure_log", Kind: graph.EdgeCalls, From: "handler_closure", To: "log_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_anchor",
+			CanonicalName: "GET /anchor",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Chains) != 1 {
+		t.Fatalf("expected 1 chain, got %+v", bundle.Chains)
+	}
+	steps := bundle.Chains[0].Steps
+	if len(steps) != 3 {
+		t.Fatalf("expected boundary, handler peel, and closure call, got %+v", steps)
+	}
+	if got := steps[2].ToNodeID; got != "log_target" {
+		t.Fatalf("expected mainline chain to remain rooted in the closure body, got %s", got)
+	}
+
+	audit := service.BuildAudit(snapshot, roots, bundle)
+	if len(audit.Roots) != 1 {
+		t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+	}
+	if len(audit.Roots[0].FirstBusinessCalls) != 1 {
+		t.Fatalf("expected audit refinement to recover one handler-anchor business call, got %+v", audit.Roots[0].FirstBusinessCalls)
+	}
+	if got := audit.Roots[0].FirstBusinessCalls[0].ToNodeID; got != "service_target" {
+		t.Fatalf("expected audit-only handler anchor refinement to recover service_target, got %+v", audit.Roots[0].FirstBusinessCalls)
 	}
 }
 

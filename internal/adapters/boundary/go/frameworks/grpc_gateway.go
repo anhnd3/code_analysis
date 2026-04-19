@@ -219,14 +219,13 @@ func gatewayCallsFromStatement(stmt *tree_sitter.Node) []*tree_sitter.Node {
 	if call := callExpressionFromStatement(stmt); call != nil {
 		return []*tree_sitter.Node{call}
 	}
+	if calls := gatewayWrappedCallsFromStatement(stmt); len(calls) > 0 {
+		return calls
+	}
 
 	var calls []*tree_sitter.Node
-	appendCalls := func(list *tree_sitter.Node) {
-		for _, item := range expressionItems(list) {
-			if item != nil && item.Kind() == "call_expression" {
-				calls = append(calls, item)
-			}
-		}
+	appendCalls := func(node *tree_sitter.Node) {
+		calls = append(calls, gatewayCallExpressions(node)...)
 	}
 
 	switch stmt.Kind() {
@@ -252,6 +251,37 @@ func gatewayCallsFromStatement(stmt *tree_sitter.Node) []*tree_sitter.Node {
 					calls = append(calls, call)
 				}
 			}
+		}
+	}
+	return calls
+}
+
+func gatewayWrappedCallsFromStatement(stmt *tree_sitter.Node) []*tree_sitter.Node {
+	switch stmt.Kind() {
+	case "return_statement":
+		if stmt.NamedChildCount() == 0 {
+			return nil
+		}
+		return gatewayCallExpressions(stmt.NamedChild(0))
+	case "go_statement", "defer_statement":
+		if call := stmt.ChildByFieldName("call"); call != nil && call.Kind() == "call_expression" {
+			return []*tree_sitter.Node{call}
+		}
+		if stmt.NamedChildCount() > 0 {
+			if call := unwrapParens(stmt.NamedChild(0)); call != nil && call.Kind() == "call_expression" {
+				return []*tree_sitter.Node{call}
+			}
+		}
+	}
+	return nil
+}
+
+func gatewayCallExpressions(node *tree_sitter.Node) []*tree_sitter.Node {
+	var calls []*tree_sitter.Node
+	for _, item := range expressionItems(node) {
+		item = unwrapParens(item)
+		if item != nil && item.Kind() == "call_expression" {
+			calls = append(calls, item)
 		}
 	}
 	return calls
