@@ -10,6 +10,7 @@ import (
 	"analysis-module/internal/adapters/extractor/treesitter"
 	"analysis-module/internal/domain/executionhint"
 	"analysis-module/internal/domain/symbol"
+	"analysis-module/internal/domain/targetref"
 	extractorport "analysis-module/internal/ports/extractor"
 	"analysis-module/pkg/ids"
 
@@ -32,6 +33,24 @@ type syntheticSpanIndex struct {
 type semanticHintMatch struct {
 	startByte uint32
 	hint      executionhint.Hint
+}
+
+type goFieldRef struct {
+	DeclaredType string
+	PackageToken string
+}
+
+type goFileTypeEnv struct {
+	structFields map[string]map[string]goFieldRef
+}
+
+type goCallEnv struct {
+	packageName           string
+	receiverType          string
+	receiverAliases       map[string]string
+	importAliases         map[string]string
+	importBindingsByAlias map[string]symbol.ImportBinding
+	typeEnv               goFileTypeEnv
 }
 
 func newSyntheticSpanIndex() syntheticSpanIndex {
@@ -135,6 +154,8 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 		Warnings: []string{},
 	}
 	importAliases := map[string]string{}
+	importBindingsByAlias := map[string]symbol.ImportBinding{}
+	typeEnv := goFileTypeEnv{structFields: map[string]map[string]goFieldRef{}}
 	modulePath := readGoModulePath(file.RepositoryRoot)
 	walk(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
@@ -153,18 +174,34 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 				}
 				importAliases[alias] = importPath
 				resolvedPath, local := resolveGoImportPath(file.RepositoryRoot, modulePath, importPath)
-				result.ImportBindings = append(result.ImportBindings, symbol.ImportBinding{
+				binding := symbol.ImportBinding{
 					Source:       importPath,
 					Alias:        alias,
 					ResolvedPath: resolvedPath,
 					IsNamespace:  true,
 					IsLocal:      local,
-				})
+				}
+				importBindingsByAlias[alias] = binding
+				result.ImportBindings = append(result.ImportBindings, binding)
 			}
+		case "type_spec":
+			collectGoStructFields(node, content, result.PackageName, &typeEnv)
+		}
+	})
+	walk(root, func(node *tree_sitter.Node) {
+		switch node.Kind() {
 		case "function_declaration", "method_declaration":
 			sym := buildSymbol(file, result.PackageName, node, content)
 			result.Symbols = append(result.Symbols, sym)
 			body := node.ChildByFieldName("body")
+			callEnv := goCallEnv{
+				packageName:           result.PackageName,
+				receiverType:          sym.Receiver,
+				receiverAliases:       declarationReceiverAliases(node, content),
+				importAliases:         importAliases,
+				importBindingsByAlias: importBindingsByAlias,
+				typeEnv:               typeEnv,
+			}
 
 			closureCount := 0
 			inlineCount := 0
@@ -194,12 +231,12 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 				syntheticIndex.Add(inner, synth)
 			})
 
-			// Semantic extraction runs after synthetic symbol creation so hints can bind to exact IDs.
-			result.Hints = append(result.Hints, orderedHints(
-				extractClosureHints(body, content, sym, syntheticIndex),
-				extractAsyncHints(body, content, sym, result.PackageName, importAliases, syntheticIndex),
-				extractControlHints(body, content, sym),
-			)...)
+				// Semantic extraction runs after synthetic symbol creation so hints can bind to exact IDs.
+				result.Hints = append(result.Hints, orderedHints(
+					extractClosureHints(body, content, sym, syntheticIndex),
+					extractAsyncHints(body, content, sym, callEnv, syntheticIndex),
+					extractControlHints(body, content, sym),
+				)...)
 
 			// Second pass: extract calls with nearest scope affiliation
 			walk(body, func(inner *tree_sitter.Node) {
@@ -223,7 +260,7 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 					activeSym = tightest.sym
 				}
 
-				candidate := buildCallCandidate(activeSym.ID, inner, content, result.PackageName, importAliases)
+				candidate := buildCallCandidate(activeSym.ID, inner, content, callEnv)
 				if candidate.TargetCanonicalName != "" {
 					result.Relations = append(result.Relations, candidate)
 				}
@@ -298,45 +335,72 @@ func buildSymbol(file symbol.FileRef, pkg string, node *tree_sitter.Node, conten
 	}
 }
 
-func buildCallCandidate(source symbol.ID, node *tree_sitter.Node, content []byte, pkg string, importAliases map[string]string) symbol.RelationCandidate {
+func buildCallCandidate(source symbol.ID, node *tree_sitter.Node, content []byte, env goCallEnv) symbol.RelationCandidate {
 	fnNode := node.ChildByFieldName("function")
 	if fnNode == nil {
 		return symbol.RelationCandidate{}
 	}
-	target, confidence, evidence := resolveCallTarget(fnNode, content, pkg, importAliases)
-	return symbol.RelationCandidate{
-		SourceSymbolID:      source,
-		TargetCanonicalName: target,
-		Relationship:        "calls",
-		EvidenceType:        evidence,
-		EvidenceSource:      strings.TrimSpace(fnNode.Utf8Text(content)),
-		ExtractionMethod:    "tree-sitter-go",
-		ConfidenceScore:     confidence,
-	}
+	candidate := resolveCallTarget(fnNode, content, env)
+	candidate.SourceSymbolID = source
+	candidate.Relationship = "calls"
+	candidate.EvidenceSource = strings.TrimSpace(fnNode.Utf8Text(content))
+	candidate.ExtractionMethod = "tree-sitter-go"
+	return candidate
 }
 
-func resolveCallTarget(node *tree_sitter.Node, content []byte, pkg string, importAliases map[string]string) (string, float64, string) {
+func resolveCallTarget(node *tree_sitter.Node, content []byte, env goCallEnv) symbol.RelationCandidate {
+	node = unwrapGoParens(node)
+	if node == nil {
+		return symbol.RelationCandidate{}
+	}
 	switch node.Kind() {
 	case "identifier":
-		return canonicalName(pkg, "", node.Utf8Text(content)), 0.95, "identifier"
+		return symbol.RelationCandidate{
+			TargetCanonicalName: canonicalName(env.packageName, "", node.Utf8Text(content)),
+			TargetKind:          targetref.KindExactCanonical,
+			EvidenceType:        "identifier",
+			ConfidenceScore:     0.95,
+		}
 	case "selector_expression":
 		operand := node.ChildByFieldName("operand")
 		field := node.ChildByFieldName("field")
 		if operand == nil || field == nil {
-			return "", 0, ""
+			return symbol.RelationCandidate{}
 		}
 		left := operand.Utf8Text(content)
 		right := field.Utf8Text(content)
-		if importPath, ok := importAliases[left]; ok {
-			return importPath + "." + right, 0.75, "import_selector"
+		if importPath, ok := env.importAliases[left]; ok {
+			candidate := symbol.RelationCandidate{
+				TargetCanonicalName: importPath + "." + right,
+				TargetKind:          targetref.KindExactCanonical,
+				EvidenceType:        "import_selector",
+				ConfidenceScore:     0.75,
+			}
+			if binding, ok := env.importBindingsByAlias[left]; ok && binding.ResolvedPath != "" {
+				candidate.TargetFilePath = binding.ResolvedPath
+				candidate.TargetExportName = right
+			}
+			return candidate
 		}
-		return pkg + "." + right, 0.55, "selector"
+		if receiverType, ok := env.receiverAliases[left]; ok {
+			return symbol.RelationCandidate{
+				TargetCanonicalName: canonicalName(env.packageName, receiverType, right),
+				TargetKind:          targetref.KindExactCanonical,
+				EvidenceType:        "receiver_selector",
+				ConfidenceScore:     0.9,
+			}
+		}
+		if packageToken, ok := env.receiverFieldPackageToken(operand, content); ok {
+			return symbol.RelationCandidate{
+				TargetCanonicalName: canonicalName(packageToken, "", right),
+				TargetKind:          targetref.KindPackageMethodHint,
+				EvidenceType:        "receiver_field_selector",
+				ConfidenceScore:     0.7,
+			}
+		}
+		return symbol.RelationCandidate{}
 	default:
-		raw := strings.TrimSpace(node.Utf8Text(content))
-		if raw == "" {
-			return "", 0, ""
-		}
-		return pkg + "." + raw, 0.3, "expression"
+		return symbol.RelationCandidate{}
 	}
 }
 
@@ -357,6 +421,205 @@ func normalizeReceiver(raw string) string {
 		return ""
 	}
 	return parts[len(parts)-1]
+}
+
+func declarationReceiverAliases(node *tree_sitter.Node, content []byte) map[string]string {
+	aliases := map[string]string{}
+	if node == nil || node.Kind() != "method_declaration" {
+		return aliases
+	}
+	receiver := node.ChildByFieldName("receiver")
+	if receiver == nil {
+		return aliases
+	}
+	for i := 0; i < int(receiver.NamedChildCount()); i++ {
+		param := receiver.NamedChild(uint(i))
+		if param == nil || param.Kind() != "parameter_declaration" {
+			continue
+		}
+		typeNode := param.ChildByFieldName("type")
+		if typeNode == nil && param.NamedChildCount() > 0 {
+			typeNode = param.NamedChild(uint(param.NamedChildCount() - 1))
+		}
+		if typeNode == nil {
+			continue
+		}
+		receiverType := normalizeReceiver(typeNode.Utf8Text(content))
+		if receiverType == "" {
+			continue
+		}
+		if nameNode := param.ChildByFieldName("name"); nameNode != nil {
+			aliases[nameNode.Utf8Text(content)] = receiverType
+			continue
+		}
+		if param.NamedChildCount() > 0 {
+			name := param.NamedChild(0).Utf8Text(content)
+			if name != receiverType {
+				aliases[name] = receiverType
+			}
+		}
+	}
+	return aliases
+}
+
+func collectGoStructFields(typeSpec *tree_sitter.Node, content []byte, packageName string, env *goFileTypeEnv) {
+	if typeSpec == nil || env == nil {
+		return
+	}
+	typeNode := typeSpec.ChildByFieldName("type")
+	nameNode := typeSpec.ChildByFieldName("name")
+	if typeNode == nil || nameNode == nil || typeNode.Kind() != "struct_type" {
+		return
+	}
+	structName := nameNode.Utf8Text(content)
+	if structName == "" {
+		return
+	}
+	if env.structFields[structName] == nil {
+		env.structFields[structName] = map[string]goFieldRef{}
+	}
+	walk(typeNode, func(node *tree_sitter.Node) {
+		if node == nil || node.Kind() != "field_declaration" {
+			return
+		}
+		fieldType := node.ChildByFieldName("type")
+		if fieldType == nil && node.NamedChildCount() > 0 {
+			fieldType = node.NamedChild(uint(node.NamedChildCount() - 1))
+		}
+		if fieldType == nil {
+			return
+		}
+		fieldRef := goFieldRef{
+			DeclaredType: strings.TrimSpace(fieldType.Utf8Text(content)),
+			PackageToken: goTypePackageToken(fieldType, content, packageName),
+		}
+		for _, fieldName := range goFieldDeclarationNames(node, fieldType, content) {
+			env.structFields[structName][fieldName] = fieldRef
+		}
+	})
+}
+
+func goFieldDeclarationNames(fieldDecl, typeNode *tree_sitter.Node, content []byte) []string {
+	if fieldDecl == nil {
+		return nil
+	}
+	if nameNode := fieldDecl.ChildByFieldName("name"); nameNode != nil {
+		return goNamedFieldNames(nameNode, content)
+	}
+	names := []string{}
+	for i := 0; i < int(fieldDecl.NamedChildCount()); i++ {
+		child := fieldDecl.NamedChild(uint(i))
+		if child == nil || child == typeNode {
+			continue
+		}
+		switch child.Kind() {
+		case "identifier", "field_identifier", "type_identifier":
+			names = append(names, child.Utf8Text(content))
+		case "identifier_list", "expression_list", "parameter_list":
+			names = append(names, goNamedFieldNames(child, content)...)
+		}
+	}
+	return names
+}
+
+func goNamedFieldNames(node *tree_sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	if node.Kind() == "identifier" || node.Kind() == "field_identifier" || node.Kind() == "type_identifier" {
+		return []string{node.Utf8Text(content)}
+	}
+	names := []string{}
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		child := node.NamedChild(uint(i))
+		if child == nil {
+			continue
+		}
+		switch child.Kind() {
+		case "identifier", "field_identifier", "type_identifier":
+			names = append(names, child.Utf8Text(content))
+		}
+	}
+	return names
+}
+
+func goTypePackageToken(node *tree_sitter.Node, content []byte, currentPkg string) string {
+	node = unwrapGoParens(node)
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "pointer_type", "slice_type", "array_type", "variadic_type", "channel_type":
+		if child := node.ChildByFieldName("type"); child != nil {
+			return goTypePackageToken(child, content, currentPkg)
+		}
+		if node.NamedChildCount() > 0 {
+			return goTypePackageToken(node.NamedChild(uint(node.NamedChildCount()-1)), content, currentPkg)
+		}
+	case "map_type":
+		if value := node.ChildByFieldName("value"); value != nil {
+			return goTypePackageToken(value, content, currentPkg)
+		}
+		if node.NamedChildCount() > 1 {
+			return goTypePackageToken(node.NamedChild(1), content, currentPkg)
+		}
+	case "generic_type":
+		if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+			return goTypePackageToken(typeNode, content, currentPkg)
+		}
+		if node.NamedChildCount() > 0 {
+			return goTypePackageToken(node.NamedChild(0), content, currentPkg)
+		}
+	case "selector_expression":
+		if operand := node.ChildByFieldName("operand"); operand != nil {
+			return operand.Utf8Text(content)
+		}
+	case "type_identifier", "identifier":
+		return currentPkg
+	}
+	return currentPkg
+}
+
+func (e goCallEnv) receiverFieldPackageToken(expr *tree_sitter.Node, content []byte) (string, bool) {
+	expr = unwrapGoParens(expr)
+	if expr == nil || expr.Kind() != "selector_expression" {
+		return "", false
+	}
+	operand := expr.ChildByFieldName("operand")
+	field := expr.ChildByFieldName("field")
+	if operand == nil || field == nil {
+		return "", false
+	}
+	receiverType, ok := e.receiverAliases[operand.Utf8Text(content)]
+	if !ok {
+		return "", false
+	}
+	fields := e.typeEnv.structFields[receiverType]
+	if fields == nil {
+		return "", false
+	}
+	fieldRef, ok := fields[field.Utf8Text(content)]
+	if !ok {
+		return "", false
+	}
+	if fieldRef.PackageToken != "" {
+		return fieldRef.PackageToken, true
+	}
+	return e.packageName, true
+}
+
+func unwrapGoParens(node *tree_sitter.Node) *tree_sitter.Node {
+	for node != nil {
+		switch {
+		case node.Kind() == "parenthesized_expression" && node.NamedChildCount() == 1:
+			node = node.NamedChild(0)
+		case node.Kind() == "expression_list" && node.NamedChildCount() == 1:
+			node = node.NamedChild(0)
+		default:
+			return node
+		}
+	}
+	return nil
 }
 
 func readGoModulePath(repoRoot string) string {

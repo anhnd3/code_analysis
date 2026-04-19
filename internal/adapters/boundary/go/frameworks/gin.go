@@ -21,10 +21,20 @@ type ginContext struct {
 	aliasDepth int
 }
 
+type handlerBinding struct {
+	packageToken string
+	receiverType string
+	aliasDepth   int
+}
+
 type ginPackageState struct {
-	fieldContexts   map[string]map[string]ginContext
-	methodProviders map[string]map[string]ginContext
-	functions       map[string]ginContext
+	fieldContexts          map[string]map[string]ginContext
+	methodProviders        map[string]map[string]ginContext
+	functions              map[string]ginContext
+	handlerFunctions       map[string]handlerBinding
+	handlerMethodProviders map[string]map[string]handlerBinding
+	packageFunctions       map[string][]symbol.Symbol
+	packageMethods         map[string]map[string][]symbol.Symbol
 }
 
 var ginRouteMethods = map[string]bool{
@@ -48,12 +58,13 @@ func (d *GinDetector) Name() string {
 	return "gin"
 }
 
-func (d *GinDetector) PreparePackage(files []boundary.ParsedGoFile, _ []symbol.Symbol) []symbol.Diagnostic {
+func (d *GinDetector) PreparePackage(files []boundary.ParsedGoFile, symbols []symbol.Symbol) []symbol.Diagnostic {
 	if len(files) == 0 {
 		return nil
 	}
 
 	state := newGinPackageState()
+	indexGinPackageSymbols(state, symbols)
 	for iteration := 0; iteration < 3; iteration++ {
 		changed := false
 		for _, file := range files {
@@ -73,6 +84,7 @@ func (d *GinDetector) DetectBoundaries(file boundary.ParsedGoFile, symbols []sym
 	var diags []symbol.Diagnostic
 
 	state := d.packageStates[d.packageKey(file)]
+	imports := fileImportAliases(file)
 
 	walk(file.Root, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
@@ -82,7 +94,7 @@ func (d *GinDetector) DetectBoundaries(file boundary.ParsedGoFile, symbols []sym
 				return false
 			}
 			receiverEnv := receiverAliasesForDeclaration(n, file.Content)
-			foundRoots, foundDiags := d.processBlock(body, file, symbols, map[string]ginContext{}, receiverEnv, state)
+			foundRoots, foundDiags := d.processBlock(body, file, symbols, imports, map[string]ginContext{}, map[string]handlerBinding{}, receiverEnv, state)
 			roots = append(roots, foundRoots...)
 			diags = append(diags, foundDiags...)
 			return false
@@ -96,6 +108,7 @@ func (d *GinDetector) DetectBoundaries(file boundary.ParsedGoFile, symbols []sym
 
 func (d *GinDetector) prepareFile(file boundary.ParsedGoFile, state *ginPackageState) bool {
 	changed := false
+	imports := fileImportAliases(file)
 	walk(file.Root, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
 		case "function_declaration", "method_declaration":
@@ -105,7 +118,7 @@ func (d *GinDetector) prepareFile(file boundary.ParsedGoFile, state *ginPackageS
 			}
 			receiverEnv := receiverAliasesForDeclaration(n, file.Content)
 			receiverType := declarationReceiverType(n, file.Content)
-			changed = d.prepareBlock(body, file, map[string]ginContext{}, receiverEnv, receiverType, state) || changed
+			changed = d.prepareBlock(body, file, imports, map[string]ginContext{}, map[string]handlerBinding{}, receiverEnv, receiverType, state) || changed
 			return false
 		default:
 			return true
@@ -114,8 +127,9 @@ func (d *GinDetector) prepareFile(file boundary.ParsedGoFile, state *ginPackageS
 	return changed
 }
 
-func (d *GinDetector) prepareBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, inheritedScope map[string]ginContext, inheritedReceivers map[string]string, receiverType string, state *ginPackageState) bool {
+func (d *GinDetector) prepareBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, imports map[string]string, inheritedScope map[string]ginContext, inheritedHandlers map[string]handlerBinding, inheritedReceivers map[string]string, receiverType string, state *ginPackageState) bool {
 	scope := cloneGinScope(inheritedScope)
+	handlerEnv := cloneHandlerBindings(inheritedHandlers)
 	receiverEnv := cloneReceiverAliases(inheritedReceivers)
 	changed := false
 
@@ -127,25 +141,28 @@ func (d *GinDetector) prepareBlock(block *tree_sitter.Node, file boundary.Parsed
 		}
 
 		if stmt.Kind() == "block" {
-			changed = d.prepareBlock(stmt, file, scope, receiverEnv, receiverType, state) || changed
+			changed = d.prepareBlock(stmt, file, imports, scope, handlerEnv, receiverEnv, receiverType, state) || changed
 			continue
 		}
 
 		d.bindReceiverAliases(stmt, file.Content, receiverEnv)
 		changed = d.bindGinContext(stmt, file.Content, scope, receiverEnv, state) || changed
+		changed = d.bindHandlerBindings(stmt, file, imports, handlerEnv, receiverEnv, state) || changed
 		changed = d.captureCompositeLiteralContexts(stmt, file.Content, scope, receiverEnv, state) || changed
 		changed = d.captureProviderReturn(stmt, file.Content, scope, receiverEnv, receiverType, state) || changed
+		changed = d.captureHandlerProviderReturn(stmt, file, imports, handlerEnv, receiverEnv, receiverType, state) || changed
 
 		for _, child := range nestedBlocks(stmt) {
-			changed = d.prepareBlock(child, file, scope, receiverEnv, receiverType, state) || changed
+			changed = d.prepareBlock(child, file, imports, scope, handlerEnv, receiverEnv, receiverType, state) || changed
 		}
 	}
 
 	return changed
 }
 
-func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, symbols []symbol.Symbol, inheritedScope map[string]ginContext, inheritedReceivers map[string]string, state *ginPackageState) ([]boundaryroot.Root, []symbol.Diagnostic) {
+func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, symbols []symbol.Symbol, imports map[string]string, inheritedScope map[string]ginContext, inheritedHandlers map[string]handlerBinding, inheritedReceivers map[string]string, state *ginPackageState) ([]boundaryroot.Root, []symbol.Diagnostic) {
 	scope := cloneGinScope(inheritedScope)
+	handlerEnv := cloneHandlerBindings(inheritedHandlers)
 	receiverEnv := cloneReceiverAliases(inheritedReceivers)
 	var roots []boundaryroot.Root
 	var diags []symbol.Diagnostic
@@ -158,7 +175,7 @@ func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.Parsed
 		}
 
 		if stmt.Kind() == "block" {
-			nestedRoots, nestedDiags := d.processBlock(stmt, file, symbols, scope, receiverEnv, state)
+			nestedRoots, nestedDiags := d.processBlock(stmt, file, symbols, imports, scope, handlerEnv, receiverEnv, state)
 			roots = append(roots, nestedRoots...)
 			diags = append(diags, nestedDiags...)
 			continue
@@ -166,9 +183,10 @@ func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.Parsed
 
 		d.bindReceiverAliases(stmt, file.Content, receiverEnv)
 		d.bindGinContext(stmt, file.Content, scope, receiverEnv, state)
+		d.bindHandlerBindings(stmt, file, imports, handlerEnv, receiverEnv, state)
 
 		if call := callExpressionFromStatement(stmt); call != nil {
-			root, diag := d.handleRouteCall(call, file, scope, receiverEnv, state, symbols)
+			root, diag := d.handleRouteCall(call, file, scope, handlerEnv, receiverEnv, state, symbols)
 			if root != nil {
 				roots = append(roots, *root)
 			}
@@ -178,7 +196,7 @@ func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.Parsed
 		}
 
 		for _, child := range nestedBlocks(stmt) {
-			nestedRoots, nestedDiags := d.processBlock(child, file, symbols, scope, receiverEnv, state)
+			nestedRoots, nestedDiags := d.processBlock(child, file, symbols, imports, scope, handlerEnv, receiverEnv, state)
 			roots = append(roots, nestedRoots...)
 			diags = append(diags, nestedDiags...)
 		}
@@ -521,7 +539,7 @@ func (d *GinDetector) resolvePreparedContextExpression(expr *tree_sitter.Node, c
 	}
 }
 
-func (d *GinDetector) handleRouteCall(call *tree_sitter.Node, file boundary.ParsedGoFile, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState, symbols []symbol.Symbol) (*boundaryroot.Root, symbol.Diagnostic) {
+func (d *GinDetector) handleRouteCall(call *tree_sitter.Node, file boundary.ParsedGoFile, scope map[string]ginContext, handlerEnv map[string]handlerBinding, receiverEnv map[string]string, state *ginPackageState, symbols []symbol.Symbol) (*boundaryroot.Root, symbol.Diagnostic) {
 	fn := call.ChildByFieldName("function")
 	if fn == nil || fn.Kind() != "selector_expression" {
 		return nil, symbol.Diagnostic{}
@@ -559,21 +577,22 @@ func (d *GinDetector) handleRouteCall(call *tree_sitter.Node, file boundary.Pars
 
 	fullPath := cleanPath(ctx.prefix + "/" + getStringValue(pathArg, file.Content))
 	handlerArg := args.NamedChild(args.NamedChildCount() - 1)
-	handlerTarget := resolveHandlerTarget(handlerArg, file.Content, symbols)
+	handlerTarget, handlerTargetKind := d.resolveGinHandlerTarget(handlerArg, file, symbols, handlerEnv, receiverEnv, state)
 
 	root := boundaryroot.Root{
-		Kind:            boundaryroot.KindHTTP,
-		Framework:       "gin",
-		Method:          method,
-		Path:            fullPath,
-		CanonicalName:   fmt.Sprintf("%s %s", method, fullPath),
-		HandlerTarget:   handlerTarget,
-		RepositoryID:    file.RepositoryID,
-		SourceFile:      file.Path,
-		SourceStartByte: uint32(call.StartByte()),
-		SourceEndByte:   uint32(call.EndByte()),
-		SourceExpr:      nodeText(call, file.Content),
-		Confidence:      "high",
+		Kind:              boundaryroot.KindHTTP,
+		Framework:         "gin",
+		Method:            method,
+		Path:              fullPath,
+		CanonicalName:     fmt.Sprintf("%s %s", method, fullPath),
+		HandlerTarget:     handlerTarget,
+		HandlerTargetKind: handlerTargetKind,
+		RepositoryID:      file.RepositoryID,
+		SourceFile:        file.Path,
+		SourceStartByte:   uint32(call.StartByte()),
+		SourceEndByte:     uint32(call.EndByte()),
+		SourceExpr:        nodeText(call, file.Content),
+		Confidence:        "high",
 	}
 	root.ID = boundaryroot.StableID(root)
 
@@ -628,9 +647,13 @@ func (d *GinDetector) packageKey(file boundary.ParsedGoFile) string {
 
 func newGinPackageState() *ginPackageState {
 	return &ginPackageState{
-		fieldContexts:   map[string]map[string]ginContext{},
-		methodProviders: map[string]map[string]ginContext{},
-		functions:       map[string]ginContext{},
+		fieldContexts:          map[string]map[string]ginContext{},
+		methodProviders:        map[string]map[string]ginContext{},
+		functions:              map[string]ginContext{},
+		handlerFunctions:       map[string]handlerBinding{},
+		handlerMethodProviders: map[string]map[string]handlerBinding{},
+		packageFunctions:       map[string][]symbol.Symbol{},
+		packageMethods:         map[string]map[string][]symbol.Symbol{},
 	}
 }
 
@@ -732,6 +755,14 @@ func cloneGinScope(scope map[string]ginContext) map[string]ginContext {
 
 func cloneReceiverAliases(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneHandlerBindings(in map[string]handlerBinding) map[string]handlerBinding {
+	out := make(map[string]handlerBinding, len(in))
 	for key, value := range in {
 		out[key] = value
 	}

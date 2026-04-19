@@ -43,30 +43,48 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 	symbolByCanonical := map[string]symbol.Symbol{}
 	symbolByID := map[symbol.ID]symbol.Symbol{}
 	symbolNodeByID := map[symbol.ID]graph.Node{}
-	symbolsByFileAndName := map[string]map[string][]symbol.Symbol{}
-	symbolsByPackageAndName := map[string]map[string][]symbol.Symbol{}
+	executableByFileAndName := map[string]map[string][]symbol.Symbol{}
+	executableByPackageAndName := map[string]map[string][]symbol.Symbol{}
+	executableByRepoAndName := map[string]map[string][]symbol.Symbol{}
+	executableMethodsByPackageAndName := map[string]map[string][]symbol.Symbol{}
+	allMethodsByPackageAndName := map[string]map[string][]symbol.Symbol{}
 	exportCanonicalByFile := map[string]map[string]string{}
 	packageByFile := map[string]string{}
-	methodsBySuffix := map[string][]symbol.Symbol{}
 	serviceNodeIDs := map[string]map[string]string{}
 
 	for _, repoExt := range extraction.Repositories {
+		if _, ok := executableByRepoAndName[string(repoExt.Repository.ID)]; !ok {
+			executableByRepoAndName[string(repoExt.Repository.ID)] = map[string][]symbol.Symbol{}
+		}
 		for _, fileResult := range repoExt.Files {
-			if _, ok := symbolsByFileAndName[fileResult.FilePath]; !ok {
-				symbolsByFileAndName[fileResult.FilePath] = map[string][]symbol.Symbol{}
+			if _, ok := executableByFileAndName[fileResult.FilePath]; !ok {
+				executableByFileAndName[fileResult.FilePath] = map[string][]symbol.Symbol{}
 			}
 			packageByFile[fileResult.FilePath] = fileResult.PackageName
 			packageKey := packageSymbolsKey(string(repoExt.Repository.ID), fileResult.PackageName)
-			if _, ok := symbolsByPackageAndName[packageKey]; !ok {
-				symbolsByPackageAndName[packageKey] = map[string][]symbol.Symbol{}
+			if _, ok := executableByPackageAndName[packageKey]; !ok {
+				executableByPackageAndName[packageKey] = map[string][]symbol.Symbol{}
+			}
+			if _, ok := executableMethodsByPackageAndName[packageKey]; !ok {
+				executableMethodsByPackageAndName[packageKey] = map[string][]symbol.Symbol{}
+			}
+			if _, ok := allMethodsByPackageAndName[packageKey]; !ok {
+				allMethodsByPackageAndName[packageKey] = map[string][]symbol.Symbol{}
 			}
 			for _, sym := range fileResult.Symbols {
 				symbolByCanonical[sym.CanonicalName] = sym
 				symbolByID[sym.ID] = sym
-				suffix := "." + sym.Name
-				methodsBySuffix[suffix] = append(methodsBySuffix[suffix], sym)
-				symbolsByFileAndName[fileResult.FilePath][sym.Name] = append(symbolsByFileAndName[fileResult.FilePath][sym.Name], sym)
-				symbolsByPackageAndName[packageKey][sym.Name] = append(symbolsByPackageAndName[packageKey][sym.Name], sym)
+				if isExecutableSymbol(sym) {
+					executableByFileAndName[fileResult.FilePath][sym.Name] = append(executableByFileAndName[fileResult.FilePath][sym.Name], sym)
+					executableByPackageAndName[packageKey][sym.Name] = append(executableByPackageAndName[packageKey][sym.Name], sym)
+					executableByRepoAndName[string(repoExt.Repository.ID)][sym.Name] = append(executableByRepoAndName[string(repoExt.Repository.ID)][sym.Name], sym)
+				}
+				if sym.Kind == symbol.KindMethod {
+					allMethodsByPackageAndName[packageKey][sym.Name] = append(allMethodsByPackageAndName[packageKey][sym.Name], sym)
+					if isExecutableSymbol(sym) {
+						executableMethodsByPackageAndName[packageKey][sym.Name] = append(executableMethodsByPackageAndName[packageKey][sym.Name], sym)
+					}
+				}
 			}
 			exportCanonicalByFile[fileResult.FilePath] = map[string]string{}
 			for _, exportBinding := range fileResult.Exports {
@@ -233,6 +251,18 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 		}
 	}
 
+	resolver := newTargetResolver(
+		symbolByCanonical,
+		symbolByID,
+		executableByFileAndName,
+		executableByPackageAndName,
+		executableByRepoAndName,
+		executableMethodsByPackageAndName,
+		allMethodsByPackageAndName,
+		exportCanonicalByFile,
+		packageByFile,
+	)
+
 	for _, repoExtraction := range extraction.Repositories {
 		for _, fileResult := range repoExtraction.Files {
 			sourceByID := map[symbol.ID]symbol.Symbol{}
@@ -244,13 +274,17 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				if !ok {
 					continue
 				}
-				resolved, confidence, ok := resolveTarget(relation, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
+				resolved, confidence, basis, ok := resolver.ResolveRelation(string(repoExtraction.Repository.ID), fileResult.FilePath, relation)
 				if !ok {
 					issueCounts.UnresolvedImports++
 					continue
 				}
 				fromNode := symbolNodeByID[source.ID]
 				toNode := symbolNodeByID[resolved.ID]
+				properties := map[string]string{}
+				if basis != "" {
+					properties["resolution_basis"] = string(basis)
+				}
 				edge := graph.Edge{
 					ID:   ids.Stable("edge", snapshotID, fromNode.ID, toNode.ID, string(graph.EdgeCalls), relation.EvidenceSource),
 					Kind: graph.EdgeCalls,
@@ -263,6 +297,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 						Details:          relation.TargetCanonicalName,
 					},
 					Confidence: confidence,
+					Properties: properties,
 					SnapshotID: snapshotID,
 				}
 				edges = append(edges, edge)
@@ -348,12 +383,16 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 
 		// If handler target is resolved to a symbol:
 		if br.HandlerTarget != "" {
-			targetSym, targetConfidence, resolved := resolveBoundaryTarget(br, symbolByCanonical, symbolByID, symbolsByFileAndName, symbolsByPackageAndName, exportCanonicalByFile, packageByFile, methodsBySuffix)
+			targetSym, targetConfidence, basis, resolved := resolver.ResolveBoundary(br)
 			targetNodeID := "unresolved_" + br.HandlerTarget
 			edgeConfidence := graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.5}
+			properties := map[string]string{}
 			if resolved {
 				targetNodeID = symbolNodeByID[targetSym.ID].ID
 				edgeConfidence = targetConfidence
+				if basis != "" {
+					properties["resolution_basis"] = string(basis)
+				}
 			}
 			edge := graph.Edge{
 				ID:   ids.Stable("edge", rootNode.ID, targetNodeID, string(graph.EdgeRegistersBoundary)),
@@ -367,6 +406,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 					Details:          "boundary_detector",
 				},
 				Confidence: edgeConfidence,
+				Properties: properties,
 				SnapshotID: snapshotID,
 			}
 			edges = append(edges, edge)
@@ -395,67 +435,6 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 		},
 		IssueCounts: issueCounts,
 	}
-}
-
-func resolveTarget(relation symbol.RelationCandidate, symbolByCanonical map[string]symbol.Symbol, symbolByID map[symbol.ID]symbol.Symbol, symbolsByFileAndName map[string]map[string][]symbol.Symbol, exportCanonicalByFile map[string]map[string]string, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
-	if relation.TargetCanonicalName != "" {
-		// First try exact ID matching (e.g. for already resolved closure IDs)
-		if resolved, ok := symbolByID[symbol.ID(relation.TargetCanonicalName)]; ok {
-			return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.99}, true
-		}
-		// Then try canonical matching
-		if resolved, ok := symbolByCanonical[relation.TargetCanonicalName]; ok {
-			return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.95}, true
-		}
-	}
-	if relation.TargetFilePath != "" && relation.TargetExportName != "" {
-		if exports := exportCanonicalByFile[relation.TargetFilePath]; exports != nil {
-			if canonical := exports[relation.TargetExportName]; canonical != "" {
-				if resolved, ok := symbolByCanonical[canonical]; ok {
-					return resolved, graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.93}, true
-				}
-			}
-		}
-		if fileSymbols := symbolsByFileAndName[relation.TargetFilePath]; fileSymbols != nil {
-			candidates := fileSymbols[relation.TargetExportName]
-			if len(candidates) == 1 {
-				return candidates[0], graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.9}, true
-			}
-		}
-	}
-	if relation.TargetCanonicalName != "" {
-		idx := strings.LastIndex(relation.TargetCanonicalName, ".")
-		if idx >= 0 {
-			suffix := relation.TargetCanonicalName[idx:]
-			candidates := methodsBySuffix[suffix]
-			if len(candidates) == 1 {
-				return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.6}, true
-			}
-		}
-	}
-	return symbol.Symbol{}, graph.Confidence{}, false
-}
-
-func resolveBoundaryTarget(br boundaryroot.Root, symbolByCanonical map[string]symbol.Symbol, symbolByID map[symbol.ID]symbol.Symbol, symbolsByFileAndName map[string]map[string][]symbol.Symbol, symbolsByPackageAndName map[string]map[string][]symbol.Symbol, exportCanonicalByFile map[string]map[string]string, packageByFile map[string]string, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
-	relation := symbol.RelationCandidate{TargetCanonicalName: br.HandlerTarget}
-	if targetName := boundaryTargetName(br.HandlerTarget); targetName != "" {
-		relation.TargetFilePath = br.SourceFile
-		relation.TargetExportName = targetName
-	}
-	if targetSym, confidence, resolved := resolveTarget(relation, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix); resolved {
-		return targetSym, confidence, true
-	}
-
-	targetName := boundaryTargetName(br.HandlerTarget)
-	packageName := packageByFile[br.SourceFile]
-	if targetName == "" || packageName == "" {
-		return symbol.Symbol{}, graph.Confidence{}, false
-	}
-	candidates := symbolsByPackageAndName[packageSymbolsKey(br.RepositoryID, packageName)][targetName]
-	if len(candidates) == 1 {
-		return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.8}, true
-	}
-	return symbol.Symbol{}, graph.Confidence{}, false
 }
 
 func boundaryTargetName(target string) string {

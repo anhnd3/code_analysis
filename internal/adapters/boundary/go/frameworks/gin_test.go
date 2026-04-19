@@ -56,13 +56,21 @@ func main() {
 
 	files := parseGinFiles(t, map[string][]byte{"main.go": source})
 	detector := NewGinDetector()
+	packageSymbols := []symbol.Symbol{
+		{ID: "sym_health", RepositoryID: "repo1", FilePath: "main.go", PackageName: "main", Name: "Health", Receiver: "handlers", CanonicalName: "main.handlers.Health", Kind: symbol.KindMethod},
+		{ID: "sym_detect_v1", RepositoryID: "repo1", FilePath: "main.go", PackageName: "main", Name: "DetectQR", Receiver: "handlers", CanonicalName: "main.handlers.DetectQR", Kind: symbol.KindMethod},
+		{ID: "sym_detect_v2", RepositoryID: "repo1", FilePath: "main.go", PackageName: "main", Name: "DetectQRV2", Receiver: "handlers", CanonicalName: "main.handlers.DetectQRV2", Kind: symbol.KindMethod},
+	}
+	if diags := detector.PreparePackage(files, packageSymbols); len(diags) != 0 {
+		t.Fatalf("expected package prep diagnostics to stay empty, got %+v", diags)
+	}
 	roots, diags := detector.DetectBoundaries(files[0], nil)
 	if len(roots) != 4 {
 		t.Fatalf("expected 4 Gin boundaries, got %d: %+v", len(roots), roots)
 	}
 
 	health := rootByCanonicalName(t, roots, "GET /health")
-	if health.HandlerTarget != "handlers{}.Health" {
+	if health.HandlerTarget != "main.handlers.Health" {
 		t.Fatalf("expected exact health handler target, got %q", health.HandlerTarget)
 	}
 
@@ -71,16 +79,16 @@ func main() {
 	if v1Detect.ID == v2Detect.ID {
 		t.Fatalf("expected distinct stable IDs for v1/v2 detect-qr routes, got %q", v1Detect.ID)
 	}
-	if v1Detect.HandlerTarget != "handlers{}.DetectQR" {
+	if v1Detect.HandlerTarget != "main.handlers.DetectQR" {
 		t.Fatalf("expected v1 handler target to preserve exact registration target, got %q", v1Detect.HandlerTarget)
 	}
-	if v2Detect.HandlerTarget != "handlers{}.DetectQRV2" {
+	if v2Detect.HandlerTarget != "main.handlers.DetectQRV2" {
 		t.Fatalf("expected v2 handler target to preserve exact registration target, got %q", v2Detect.HandlerTarget)
 	}
 
 	metrics := rootByCanonicalName(t, roots, "GET /metrics/prom")
-	if metrics.HandlerTarget != "gin.WrapH" {
-		t.Fatalf("expected wrapper target to remain exact outer registration target, got %q", metrics.HandlerTarget)
+	if metrics.HandlerTarget != "" {
+		t.Fatalf("expected support wrapper target to remain unresolved, got %q", metrics.HandlerTarget)
 	}
 
 	for _, root := range roots {
@@ -109,6 +117,9 @@ func main() {
 	diagCategories := collectDiagnosticCategories(diags)
 	if !slices.Contains(diagCategories, "boundary_unproven_receiver") {
 		t.Fatalf("expected unproven receiver diagnostics for rejected route-like calls, got %v", diagCategories)
+	}
+	if !slices.Contains(diagCategories, "boundary_unresolved_handler_target") {
+		t.Fatalf("expected unresolved handler diagnostic for unsupported wrapper target, got %v", diagCategories)
 	}
 }
 
@@ -168,20 +179,6 @@ func (s *service) withRouter() {
 	})
 
 	detector := NewGinDetector()
-	if diags := detector.PreparePackage(files, nil); len(diags) != 0 {
-		t.Fatalf("expected package prep diagnostics to stay empty for bounded supported patterns, got %+v", diags)
-	}
-	state := detector.packageStates[detector.packageKey(files[0])]
-	if state == nil {
-		t.Fatal("expected prepared package state for cross-file accessor recovery")
-	}
-	if _, ok := state.fieldContext("service", "engine"); !ok {
-		t.Fatalf("expected prepared state to recover service.engine as a Gin context, got %+v; server debug=%s", state.fieldContexts, describeFunctionBodies(files))
-	}
-	if _, ok := state.methodProvider("service", "Engine"); !ok {
-		t.Fatalf("expected prepared state to recover service.Engine as a Gin provider, got %+v", state.methodProviders)
-	}
-
 	var router boundary.ParsedGoFile
 	for _, file := range files {
 		if file.Path == "router.go" {
@@ -196,6 +193,36 @@ func (s *service) withRouter() {
 
 	symbols := []symbol.Symbol{
 		{
+			ID:            "sym_config",
+			RepositoryID:  "repo1",
+			FilePath:      "router.go",
+			PackageName:   "cmd",
+			Name:          "GetConfigCameraZPA",
+			Receiver:      "handlers",
+			CanonicalName: "cmd.handlers.GetConfigCameraZPA",
+			Kind:          symbol.KindMethod,
+		},
+		{
+			ID:            "sym_detect_handler",
+			RepositoryID:  "repo1",
+			FilePath:      "router.go",
+			PackageName:   "cmd",
+			Name:          "DetectQRHandler",
+			Receiver:      "handlers",
+			CanonicalName: "cmd.handlers.DetectQRHandler",
+			Kind:          symbol.KindMethod,
+		},
+		{
+			ID:            "sym_detect_v2",
+			RepositoryID:  "repo1",
+			FilePath:      "router.go",
+			PackageName:   "cmd",
+			Name:          "DetectQR",
+			Receiver:      "handlers",
+			CanonicalName: "cmd.handlers.DetectQR",
+			Kind:          symbol.KindMethod,
+		},
+		{
 			ID:           "synthetic_health_handler",
 			RepositoryID: "repo1",
 			FilePath:     "router.go",
@@ -204,6 +231,19 @@ func (s *service) withRouter() {
 				StartCol:  uint32(healthClosure.StartPosition().Column + 1),
 			},
 		},
+	}
+	if diags := detector.PreparePackage(files, symbols); len(diags) != 0 {
+		t.Fatalf("expected package prep diagnostics to stay empty for bounded supported patterns, got %+v", diags)
+	}
+	state := detector.packageStates[detector.packageKey(files[0])]
+	if state == nil {
+		t.Fatal("expected prepared package state for cross-file accessor recovery")
+	}
+	if _, ok := state.fieldContext("service", "engine"); !ok {
+		t.Fatalf("expected prepared state to recover service.engine as a Gin context, got %+v; server debug=%s", state.fieldContexts, describeFunctionBodies(files))
+	}
+	if _, ok := state.methodProvider("service", "Engine"); !ok {
+		t.Fatalf("expected prepared state to recover service.Engine as a Gin provider, got %+v", state.methodProviders)
 	}
 
 	roots, diags := detector.DetectBoundaries(router, symbols)
@@ -228,18 +268,81 @@ func (s *service) withRouter() {
 	if actual := rootByCanonicalName(t, roots, "GET /health").HandlerTarget; actual != "synthetic_health_handler" {
 		t.Fatalf("expected inline closure to preserve exact synthetic handler target, got %q", actual)
 	}
-	if rootByCanonicalName(t, roots, "GET /v1/camera/config/all").HandlerTarget != "h.GetConfigCameraZPA" {
+	if rootByCanonicalName(t, roots, "GET /v1/camera/config/all").HandlerTarget != "cmd.handlers.GetConfigCameraZPA" {
 		t.Fatalf("expected factory route target to preserve exact outer callee")
 	}
-	if rootByCanonicalName(t, roots, "POST /v1/camera/detect-qr").HandlerTarget != "h.DetectQRHandler" {
+	if rootByCanonicalName(t, roots, "POST /v1/camera/detect-qr").HandlerTarget != "cmd.handlers.DetectQRHandler" {
 		t.Fatalf("expected factory route target to preserve exact outer callee")
 	}
-	if rootByCanonicalName(t, roots, "POST /v2/camera/detect-qr").HandlerTarget != "h.DetectQR" {
+	if rootByCanonicalName(t, roots, "POST /v2/camera/detect-qr").HandlerTarget != "cmd.handlers.DetectQR" {
 		t.Fatalf("expected direct method route target to preserve exact selector target")
 	}
+	if rootByCanonicalName(t, roots, "GET /metrics/prom").HandlerTarget != "" {
+		t.Fatalf("expected unsupported wrapper target to remain unresolved")
+	}
 
-	if len(diags) != 0 {
-		t.Fatalf("expected no diagnostics for supported accessor recovery, got %+v", diags)
+	if !slices.Equal(collectDiagnosticCategories(diags), []string{"boundary_unresolved_handler_target"}) {
+		t.Fatalf("expected only unresolved-wrapper diagnostics, got %+v", diags)
+	}
+}
+
+func TestGinDetectorCanonicalizesConstructorBackedSelectorsAndRejectsDeepFactoryChains(t *testing.T) {
+	files := parseGinFiles(t, map[string][]byte{
+		"router.go": []byte(`package cmd
+
+import (
+	"github.com/gin-gonic/gin"
+
+	"example.com/demo/camerahandler"
+)
+
+type cameraHandler interface {
+	GetABTestingInfo() gin.HandlerFunc
+}
+
+func makeHandler() cameraHandler {
+	return camerahandler.NewCameraHandler()
+}
+
+func makeDeepHandler() cameraHandler {
+	return makeHandler()
+}
+
+func register(engine *gin.Engine) {
+	handlers := camerahandler.NewCameraHandler()
+	alias := handlers
+	fromFactory := makeHandler()
+	fromDeepFactory := makeDeepHandler()
+
+	engine.GET("/abtest", handlers.GetABTestingInfo())
+	engine.GET("/alias", alias.GetABTestingInfo())
+	engine.GET("/factory", fromFactory.GetABTestingInfo())
+	engine.GET("/deep", fromDeepFactory.GetABTestingInfo())
+}`),
+	})
+
+	detector := NewGinDetector()
+	if diags := detector.PreparePackage(files, nil); len(diags) != 0 {
+		t.Fatalf("expected package prep diagnostics for bounded constructor recovery to stay empty, got %+v", diags)
+	}
+	roots, diags := detector.DetectBoundaries(files[0], nil)
+	if len(roots) != 4 {
+		t.Fatalf("expected 4 constructor-backed routes, got %d: %+v", len(roots), roots)
+	}
+
+	for _, canonical := range []string{"GET /abtest", "GET /alias", "GET /factory"} {
+		root := rootByCanonicalName(t, roots, canonical)
+		if root.HandlerTarget != "camerahandler.GetABTestingInfo" {
+			t.Fatalf("expected package-qualified handler hint for %s, got %+v", canonical, root)
+		}
+	}
+
+	if rootByCanonicalName(t, roots, "GET /deep").HandlerTarget != "" {
+		t.Fatalf("expected deeper factory chain to remain unresolved")
+	}
+
+	if !slices.Contains(collectDiagnosticCategories(diags), "boundary_unresolved_handler_target") {
+		t.Fatalf("expected unresolved diagnostic for deeper factory chain, got %+v", diags)
 	}
 }
 

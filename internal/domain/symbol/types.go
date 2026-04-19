@@ -1,6 +1,9 @@
 package symbol
 
-import "analysis-module/internal/domain/executionhint"
+import (
+	"analysis-module/internal/domain/executionhint"
+	"analysis-module/internal/domain/targetref"
+)
 
 type ID string
 type Kind string
@@ -63,42 +66,43 @@ type Diagnostic struct {
 }
 
 type Symbol struct {
-	ID            ID           `json:"id"`
-	RepositoryID  string       `json:"repository_id"`
-	ServiceID     string       `json:"service_id,omitempty"`
-	FilePath      string       `json:"file_path"`
-	PackageName   string       `json:"package_name"`
-	Name          string       `json:"name"`
-	Receiver      string       `json:"receiver,omitempty"`
-	CanonicalName string       `json:"canonical_name"`
-	Kind          Kind         `json:"kind"`
+	ID            ID                `json:"id"`
+	RepositoryID  string            `json:"repository_id"`
+	ServiceID     string            `json:"service_id,omitempty"`
+	FilePath      string            `json:"file_path"`
+	PackageName   string            `json:"package_name"`
+	Name          string            `json:"name"`
+	Receiver      string            `json:"receiver,omitempty"`
+	CanonicalName string            `json:"canonical_name"`
+	Kind          Kind              `json:"kind"`
 	Signature     string            `json:"signature"`
 	Location      CodeLocation      `json:"location"`
 	Properties    map[string]string `json:"properties,omitempty"`
 }
 
 type RelationCandidate struct {
-	SourceSymbolID      ID      `json:"source_symbol_id"`
-	TargetCanonicalName string  `json:"target_canonical_name"`
-	TargetFilePath      string  `json:"target_file_path,omitempty"`
-	TargetExportName    string  `json:"target_export_name,omitempty"`
-	Relationship        string  `json:"relationship"`
-	EvidenceType        string  `json:"evidence_type"`
-	EvidenceSource      string  `json:"evidence_source"`
-	ExtractionMethod    string  `json:"extraction_method"`
-	ConfidenceScore     float64 `json:"confidence_score"`
+	SourceSymbolID      ID             `json:"source_symbol_id"`
+	TargetCanonicalName string         `json:"target_canonical_name"`
+	TargetFilePath      string         `json:"target_file_path,omitempty"`
+	TargetExportName    string         `json:"target_export_name,omitempty"`
+	TargetKind          targetref.Kind `json:"-"`
+	Relationship        string         `json:"relationship"`
+	EvidenceType        string         `json:"evidence_type"`
+	EvidenceSource      string         `json:"evidence_source"`
+	ExtractionMethod    string         `json:"extraction_method"`
+	ConfidenceScore     float64        `json:"confidence_score"`
 }
 
 type FileExtractionResult struct {
-	FilePath       string              `json:"file_path"`
-	Language       string              `json:"language,omitempty"`
-	PackageName    string              `json:"package_name"`
-	Imports        []string            `json:"imports"`
-	ImportBindings []ImportBinding     `json:"import_bindings,omitempty"`
-	Exports        []ExportBinding     `json:"exports,omitempty"`
-	Symbols        []Symbol            `json:"symbols"`
-	Relations      []RelationCandidate    `json:"relations"`
-	Hints          []executionhint.Hint   `json:"hints,omitempty"`
-	Diagnostics    []Diagnostic           `json:"diagnostics,omitempty"`
-	Warnings       []string               `json:"warnings"`
+	FilePath       string               `json:"file_path"`
+	Language       string               `json:"language,omitempty"`
+	PackageName    string               `json:"package_name"`
+	Imports        []string             `json:"imports"`
+	ImportBindings []ImportBinding      `json:"import_bindings,omitempty"`
+	Exports        []ExportBinding      `json:"exports,omitempty"`
+	Symbols        []Symbol             `json:"symbols"`
+	Relations      []RelationCandidate  `json:"relations"`
+	Hints          []executionhint.Hint `json:"hints,omitempty"`
+	Diagnostics    []Diagnostic         `json:"diagnostics,omitempty"`
+	Warnings       []string             `json:"warnings"`
 }

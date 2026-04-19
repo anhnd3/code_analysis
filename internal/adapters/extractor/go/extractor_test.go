@@ -1,10 +1,12 @@
 package goextractor
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"analysis-module/internal/domain/symbol"
+	"analysis-module/internal/domain/targetref"
 	"analysis-module/internal/tests/fixtures"
 )
 
@@ -81,5 +83,83 @@ func TestExtractorFindsTestFunctions(t *testing.T) {
 
 	if !sawTest || !sawHandleCall {
 		t.Fatalf("missing extracted test data: test=%v handleCall=%v", sawTest, sawHandleCall)
+	}
+}
+
+func TestExtractorEmitsReceiverAwareSelectorTargets(t *testing.T) {
+	extractor := New()
+	workspace := t.TempDir()
+
+	writeTestFile(t, filepath.Join(workspace, "go.mod"), []byte("module example.com/demo\n\ngo 1.22\n"))
+	writeTestFile(t, filepath.Join(workspace, "repo", "repo.go"), []byte("package repo\n\ntype CameraRepo struct{}\n"))
+	writeTestFile(t, filepath.Join(workspace, "session", "session.go"), []byte("package session\n\ntype Service interface{}\n"))
+	writeTestFile(t, filepath.Join(workspace, "handler.go"), []byte(`package handler
+
+import (
+	"fmt"
+
+	"example.com/demo/repo"
+	"example.com/demo/session"
+)
+
+type handler struct {
+	repo    *repo.CameraRepo
+	session session.Service
+}
+
+func (h *handler) helper() {}
+
+func (h *handler) Handle() {
+	h.helper()
+	h.repo.DetectQR()
+	h.session.GetSessionByZlpToken()
+	fmt.Println("ok")
+}
+`))
+
+	result, err := extractor.ExtractFile(symbol.FileRef{
+		RepositoryID:   "demo",
+		RepositoryRoot: workspace,
+		AbsolutePath:   filepath.Join(workspace, "handler.go"),
+		RelativePath:   "handler.go",
+		Language:       "go",
+	})
+	if err != nil {
+		t.Fatalf("extract file: %v", err)
+	}
+
+	assertRelationTarget(t, result.Relations, "h.helper", "handler.handler.helper", targetref.KindExactCanonical, "receiver_selector")
+	assertRelationTarget(t, result.Relations, "h.repo.DetectQR", "repo.DetectQR", targetref.KindPackageMethodHint, "receiver_field_selector")
+	assertRelationTarget(t, result.Relations, "h.session.GetSessionByZlpToken", "session.GetSessionByZlpToken", targetref.KindPackageMethodHint, "receiver_field_selector")
+	assertRelationTarget(t, result.Relations, "fmt.Println", "fmt.Println", targetref.KindExactCanonical, "import_selector")
+}
+
+func assertRelationTarget(t *testing.T, relations []symbol.RelationCandidate, evidenceSource, target string, kind targetref.Kind, evidenceType string) {
+	t.Helper()
+	for _, relation := range relations {
+		if relation.EvidenceSource != evidenceSource {
+			continue
+		}
+		if relation.TargetCanonicalName != target {
+			t.Fatalf("expected target %q for %s, got %+v", target, evidenceSource, relation)
+		}
+		if relation.TargetKind != kind {
+			t.Fatalf("expected target kind %s for %s, got %+v", kind, evidenceSource, relation)
+		}
+		if relation.EvidenceType != evidenceType {
+			t.Fatalf("expected evidence type %q for %s, got %+v", evidenceType, evidenceSource, relation)
+		}
+		return
+	}
+	t.Fatalf("missing relation for %s in %+v", evidenceSource, relations)
+}
+
+func writeTestFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }

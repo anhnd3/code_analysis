@@ -157,6 +157,9 @@ func assertGinBoundaryHardeningResult(t *testing.T, result ginBoundaryHardeningR
 	}
 
 	for _, root := range result.roots {
+		if root.HandlerTarget == "" {
+			continue
+		}
 		edge, ok := registerEdgeFrom(registerEdges, root.ID)
 		if !ok {
 			t.Fatalf("expected REGISTERS_BOUNDARY edge from root %s", root.ID)

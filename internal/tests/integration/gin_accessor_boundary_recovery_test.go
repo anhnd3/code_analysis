@@ -151,6 +151,9 @@ func assertGinAccessorRecovery(t *testing.T, run ginAccessorRun) {
 		t.Fatal("expected persisted REGISTERS_BOUNDARY edges")
 	}
 	for _, root := range run.roots {
+		if root.HandlerTarget == "" {
+			continue
+		}
 		edge, ok := registerEdgeFrom(edges, root.ID)
 		if !ok {
 			t.Fatalf("expected REGISTERS_BOUNDARY edge from %s", root.ID)

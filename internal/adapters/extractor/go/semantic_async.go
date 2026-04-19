@@ -7,13 +7,13 @@ import (
 )
 
 // extractAsyncHints detects:
-//   - go <expr>     → HintSpawn
-//   - defer <expr>  → HintDefer
-//   - wg.Wait()     → HintWait
+//   - go <expr>     -> HintSpawn
+//   - defer <expr>  -> HintDefer
+//   - wg.Wait()     -> HintWait
 //
 // TODO(phase1-pr2): model explicit join nodes if WAITS_ON later needs a
 // first-class barrier target instead of a stable self-edge.
-func extractAsyncHints(node *tree_sitter.Node, content []byte, src symbol.Symbol, pkg string, importAliases map[string]string, syntheticIndex syntheticSpanIndex) []semanticHintMatch {
+func extractAsyncHints(node *tree_sitter.Node, content []byte, src symbol.Symbol, env goCallEnv, syntheticIndex syntheticSpanIndex) []semanticHintMatch {
 	var hints []semanticHintMatch
 
 	walk(node, func(inner *tree_sitter.Node) {
@@ -21,15 +21,15 @@ func extractAsyncHints(node *tree_sitter.Node, content []byte, src symbol.Symbol
 			return
 		}
 		switch inner.Kind() {
-		case "go_statement":
-			if hint, ok := asyncHint(inner, content, src, pkg, importAliases, syntheticIndex, executionhint.HintSpawn); ok {
-				hints = append(hints, hint)
-			}
+			case "go_statement":
+				if hint, ok := asyncHint(inner, content, src, env, syntheticIndex, executionhint.HintSpawn); ok {
+					hints = append(hints, hint)
+				}
 
-		case "defer_statement":
-			if hint, ok := asyncHint(inner, content, src, pkg, importAliases, syntheticIndex, executionhint.HintDefer); ok {
-				hints = append(hints, hint)
-			}
+			case "defer_statement":
+				if hint, ok := asyncHint(inner, content, src, env, syntheticIndex, executionhint.HintDefer); ok {
+					hints = append(hints, hint)
+				}
 
 		case "call_expression":
 			if isWaitCall(inner, content) {
@@ -49,7 +49,7 @@ func extractAsyncHints(node *tree_sitter.Node, content []byte, src symbol.Symbol
 	return hints
 }
 
-func asyncHint(node *tree_sitter.Node, content []byte, src symbol.Symbol, pkg string, importAliases map[string]string, syntheticIndex syntheticSpanIndex, kind executionhint.HintKind) (semanticHintMatch, bool) {
+func asyncHint(node *tree_sitter.Node, content []byte, src symbol.Symbol, env goCallEnv, syntheticIndex syntheticSpanIndex, kind executionhint.HintKind) (semanticHintMatch, bool) {
 	call := asyncCallExpression(node)
 	if call == nil {
 		return semanticHintMatch{}, false
@@ -72,11 +72,11 @@ func asyncHint(node *tree_sitter.Node, content []byte, src symbol.Symbol, pkg st
 		hint.TargetSymbol = target.CanonicalName
 		return semanticHintMatch{startByte: uint32(node.StartByte()), hint: hint}, true
 	}
-	target, _, _ := resolveCallTarget(fnNode, content, pkg, importAliases)
-	if target == "" {
+	target := resolveCallTarget(fnNode, content, env)
+	if target.TargetCanonicalName == "" {
 		return semanticHintMatch{}, false
 	}
-	hint.TargetSymbol = target
+	hint.TargetSymbol = target.TargetCanonicalName
 	return semanticHintMatch{startByte: uint32(node.StartByte()), hint: hint}, true
 }
 

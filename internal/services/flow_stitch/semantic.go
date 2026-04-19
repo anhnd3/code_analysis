@@ -38,12 +38,13 @@ type SemanticAuditRoot struct {
 }
 
 type SemanticAuditEdgeRef struct {
-	EdgeID     string `json:"edge_id"`
-	Kind       string `json:"kind"`
-	FromNodeID string `json:"from_node_id"`
-	ToNodeID   string `json:"to_node_id"`
-	Label      string `json:"label,omitempty"`
-	Inferred   bool   `json:"inferred,omitempty"`
+	EdgeID          string `json:"edge_id"`
+	Kind            string `json:"kind"`
+	FromNodeID      string `json:"from_node_id"`
+	ToNodeID        string `json:"to_node_id"`
+	Label           string `json:"label,omitempty"`
+	Inferred        bool   `json:"inferred,omitempty"`
+	ResolutionBasis string `json:"resolution_basis,omitempty"`
 }
 
 type SemanticAuditNodeRef struct {
@@ -256,7 +257,7 @@ func (idx *snapshotIndex) firstBusinessCalls(startNodeID string) ([]SemanticAudi
 
 	current := startNodeID
 	seen := map[string]bool{current: true}
-	setupConsumed := false
+	supportBudget := 3
 	blockedByNoise := false
 
 	for len(calls) < 3 {
@@ -278,12 +279,12 @@ func (idx *snapshotIndex) firstBusinessCalls(startNodeID string) ([]SemanticAudi
 			}
 			current = selected.To
 			seen[current] = true
-		case targetBucketSetup:
-			if setupConsumed || len(calls) > 0 || seen[selected.To] {
+		case targetBucketSetup, targetBucketNeutral:
+			if supportBudget == 0 || seen[selected.To] {
 				current = ""
 				break
 			}
-			setupConsumed = true
+			supportBudget--
 			current = selected.To
 			seen[current] = true
 		case targetBucketWrapperNoise, targetBucketObservabilityNoise:
@@ -676,12 +677,13 @@ func (idx *snapshotIndex) isNoiseNode(nodeID string) bool {
 
 func (idx *snapshotIndex) auditEdgeRef(edge graph.Edge) SemanticAuditEdgeRef {
 	return SemanticAuditEdgeRef{
-		EdgeID:     edge.ID,
-		Kind:       string(edge.Kind),
-		FromNodeID: edge.From,
-		ToNodeID:   edge.To,
-		Label:      stepLabel(edge, idx),
-		Inferred:   edge.Confidence.Tier == graph.ConfidenceInferred,
+		EdgeID:          edge.ID,
+		Kind:            string(edge.Kind),
+		FromNodeID:      edge.From,
+		ToNodeID:        edge.To,
+		Label:           stepLabel(edge, idx),
+		Inferred:        edge.Confidence.Tier == graph.ConfidenceInferred,
+		ResolutionBasis: edge.Properties["resolution_basis"],
 	}
 }
 
