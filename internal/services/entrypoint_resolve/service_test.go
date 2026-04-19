@@ -49,6 +49,19 @@ func TestResolve_HTTPHandler(t *testing.T) {
 	assertRootFound(t, result, "n1", entrypoint.RootHTTP, entrypoint.ConfidenceHigh)
 }
 
+func TestResolve_PersistedHTTPEndpointRoot(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			endpointNode("boundary_http", "GET /users", boundaryroot.KindHTTP, "repo1"),
+		},
+	}
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRootFound(t, result, "boundary_http", entrypoint.RootHTTP, entrypoint.ConfidenceHigh)
+}
+
 func TestResolve_GRPCHandler(t *testing.T) {
 	snapshot := graph.GraphSnapshot{
 		Nodes: []graph.Node{
@@ -150,7 +163,6 @@ func TestResolve_NoRoots(t *testing.T) {
 	}
 }
 
-
 // --- fallback suppression tests ---
 
 // TestResolve_FallbackHTTPSkippedWhenDetectorRootPresent ensures that when an HTTP
@@ -221,6 +233,26 @@ func TestResolve_FallbackInvokedWhenNoDetectorRoots(t *testing.T) {
 	assertRootFound(t, result, "grpc-node", entrypoint.RootGRPC, entrypoint.ConfidenceHigh)
 }
 
+func TestResolve_PersistedBoundarySuppressesHTTPFallback(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			endpointNode("boundary_http", "GET /users", boundaryroot.KindHTTP, "repo1"),
+			symbolNode("http-node", "api/handler.GetUser", string(symbol.KindRouteHandler), "repo1"),
+		},
+	}
+	result, err := New().Resolve(snapshot, repository.Inventory{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRootFound(t, result, "boundary_http", entrypoint.RootHTTP, entrypoint.ConfidenceHigh)
+	for _, r := range result.Roots {
+		if r.NodeID == "http-node" {
+			t.Fatalf("expected route_handler fallback to be suppressed by persisted endpoint root, got %+v", result.Roots)
+		}
+	}
+}
+
 // --- test helpers ---
 
 func symbolNode(id, canonical, kind, repoID string) graph.Node {
@@ -232,6 +264,18 @@ func symbolNode(id, canonical, kind, repoID string) graph.Node {
 		Properties: map[string]string{
 			"kind": kind,
 			"name": shortSymbolName(canonical),
+		},
+	}
+}
+
+func endpointNode(id, canonical string, kind boundaryroot.Kind, repoID string) graph.Node {
+	return graph.Node{
+		ID:            id,
+		Kind:          graph.NodeEndpoint,
+		CanonicalName: canonical,
+		RepositoryID:  repoID,
+		Properties: map[string]string{
+			"boundary_kind": string(kind),
 		},
 	}
 }

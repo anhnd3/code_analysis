@@ -58,6 +58,20 @@ func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inve
 		}
 	}
 
+	// 0.5 Persisted endpoint roots from the snapshot graph.
+	// This keeps root resolution snapshot-first even when live boundary detection
+	// is unavailable or intentionally bypassed.
+	persistedRoots := s.resolvePersistedBoundaryRoots(snapshot.Nodes)
+	roots = append(roots, persistedRoots...)
+	for _, root := range persistedRoots {
+		switch root.RootType {
+		case entrypoint.RootHTTP:
+			httpCoveredByDetector = true
+		case entrypoint.RootGRPC:
+			grpcCoveredByDetector = true
+		}
+	}
+
 	// 1. Bootstrap roots: main.main, cmd.Execute, Start patterns
 	roots = append(roots, s.resolveBootstrapRoots(symbolNodes)...)
 
@@ -118,6 +132,29 @@ func (s Service) resolveBootstrapRoots(nodes []graph.Node) []entrypoint.Root {
 				})
 			}
 		}
+	}
+	return roots
+}
+
+func (s Service) resolvePersistedBoundaryRoots(nodes []graph.Node) []entrypoint.Root {
+	var roots []entrypoint.Root
+	for _, n := range nodes {
+		if n.Kind != graph.NodeEndpoint {
+			continue
+		}
+		boundaryKind := boundaryroot.Kind(n.Properties["boundary_kind"])
+		rootType := mapBoundaryKind(boundaryKind)
+		if !isBoundaryRootKind(boundaryKind) {
+			continue
+		}
+		roots = append(roots, entrypoint.Root{
+			NodeID:        n.ID,
+			CanonicalName: n.CanonicalName,
+			RootType:      rootType,
+			Confidence:    entrypoint.ConfidenceHigh,
+			RepositoryID:  n.RepositoryID,
+			Evidence:      "snapshot endpoint node",
+		})
 	}
 	return roots
 }
@@ -296,5 +333,14 @@ func mapBoundaryKind(kind boundaryroot.Kind) entrypoint.RootType {
 		return entrypoint.RootConsumer
 	default:
 		return entrypoint.RootHTTP // Safe default
+	}
+}
+
+func isBoundaryRootKind(kind boundaryroot.Kind) bool {
+	switch kind {
+	case boundaryroot.KindHTTP, boundaryroot.KindHTTPGateway, boundaryroot.KindGRPC, boundaryroot.KindCLI, boundaryroot.KindWorker, boundaryroot.KindConsumer:
+		return true
+	default:
+		return false
 	}
 }

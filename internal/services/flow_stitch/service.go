@@ -19,7 +19,7 @@ func New() Service {
 	return Service{}
 }
 
-// Build walks from each resolved entrypoint through the CALLS graph,
+// Build walks from each resolved entrypoint through the graph,
 // producing ordered execution chains and marking boundary nodes.
 func (s Service) Build(snapshot graph.GraphSnapshot, entrypoints entrypoint.Result, inventory repository.Inventory) (flow.Bundle, error) {
 	idx := newSnapshotIndex(snapshot)
@@ -28,7 +28,7 @@ func (s Service) Build(snapshot graph.GraphSnapshot, entrypoints entrypoint.Resu
 	var markers []flow.BoundaryMarker
 
 	for _, root := range entrypoints.Roots {
-		chain, visited := s.walkChain(root, idx)
+		chain, visited := s.buildRootChain(root, idx)
 		if len(chain.Steps) > 0 {
 			chains = append(chains, chain)
 		}
@@ -46,15 +46,28 @@ func (s Service) Build(snapshot graph.GraphSnapshot, entrypoints entrypoint.Resu
 	}, nil
 }
 
-// walkChain performs a depth-first traversal from a root, following CALLS edges.
-func (s Service) walkChain(root entrypoint.Root, idx *snapshotIndex) (flow.Chain, map[string]bool) {
-	chain := flow.Chain{
+func (s Service) buildRootChain(root entrypoint.Root, idx *snapshotIndex) (flow.Chain, map[string]bool) {
+	if root.RootType == entrypoint.RootHTTP {
+		if chain, visited, ok := s.walkSemanticSpine(root, idx); ok {
+			return chain, visited
+		}
+	}
+	return s.walkLegacyChain(root, idx)
+}
+
+func newChain(root entrypoint.Root) flow.Chain {
+	return flow.Chain{
 		RootNodeID:   root.NodeID,
 		RepositoryID: root.RepositoryID,
 		ServiceID:    root.ServiceID,
 	}
+}
 
+// walkLegacyChain preserves the previous deterministic DFS traversal as a fallback.
+func (s Service) walkLegacyChain(root entrypoint.Root, idx *snapshotIndex) (flow.Chain, map[string]bool) {
+	chain := newChain(root)
 	visited := map[string]bool{}
+
 	var stack []string
 	stack = append(stack, root.NodeID)
 
@@ -67,13 +80,15 @@ func (s Service) walkChain(root entrypoint.Root, idx *snapshotIndex) (flow.Chain
 		}
 		visited[current] = true
 
-		outgoing := idx.outgoingCalls(current)
-		// Sort by execution-inspired weight then by ID for determinism
+		outgoing := idx.outgoingLegacy(current)
 		sort.Slice(outgoing, func(i, j int) bool {
 			wi := edgeOrderWeight(outgoing[i].Kind)
 			wj := edgeOrderWeight(outgoing[j].Kind)
 			if wi != wj {
 				return wi < wj
+			}
+			if outgoing[i].Confidence.Tier != outgoing[j].Confidence.Tier {
+				return outgoing[i].Confidence.Tier == graph.ConfidenceConfirmed
 			}
 			return outgoing[i].To < outgoing[j].To
 		})
@@ -83,15 +98,7 @@ func (s Service) walkChain(root entrypoint.Root, idx *snapshotIndex) (flow.Chain
 				continue
 			}
 
-			step := flow.Step{
-				FromNodeID: current,
-				ToNodeID:   edge.To,
-				EdgeID:     edge.ID,
-				Kind:       classifyStep(edge, idx),
-				Label:      stepLabel(edge, idx),
-				Inferred:   edge.Confidence.Tier == graph.ConfidenceInferred,
-			}
-			chain.Steps = append(chain.Steps, step)
+			chain.Steps = append(chain.Steps, newStep(current, edge, idx))
 			stack = append(stack, edge.To)
 		}
 	}
@@ -135,7 +142,6 @@ func (s Service) detectBoundaries(visited map[string]bool, idx *snapshotIndex) [
 			})
 		}
 
-		// Check edges for outbound HTTP/gRPC/Kafka calls
 		for _, edge := range idx.outgoing[nodeID] {
 			switch edge.Kind {
 			case graph.EdgeCallsHTTP:
@@ -172,6 +178,17 @@ func (s Service) detectBoundaries(visited map[string]bool, idx *snapshotIndex) [
 	return markers
 }
 
+func newStep(fromNodeID string, edge graph.Edge, idx *snapshotIndex) flow.Step {
+	return flow.Step{
+		FromNodeID: fromNodeID,
+		ToNodeID:   edge.To,
+		EdgeID:     edge.ID,
+		Kind:       classifyStep(edge, idx),
+		Label:      stepLabel(edge, idx),
+		Inferred:   edge.Confidence.Tier == graph.ConfidenceInferred,
+	}
+}
+
 func classifyStep(edge graph.Edge, idx *snapshotIndex) flow.StepKind {
 	switch edge.Kind {
 	case graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic:
@@ -202,46 +219,47 @@ func classifyStep(edge graph.Edge, idx *snapshotIndex) flow.StepKind {
 }
 
 func stepLabel(edge graph.Edge, idx *snapshotIndex) string {
-	if edge.Kind == graph.EdgeBranches || edge.Evidence.Type == "semantic" {
+	switch edge.Kind {
+	case graph.EdgeBranches:
+		if edge.Evidence.Source != "" {
+			return edge.Evidence.Source
+		}
+	case graph.EdgeSpawns, graph.EdgeDefers, graph.EdgeWaitsOn:
 		if edge.Evidence.Source != "" {
 			return edge.Evidence.Source
 		}
 	}
+
 	target, ok := idx.nodeByID[edge.To]
-	if !ok {
-		return ""
+	if ok {
+		return nodeShortName(target)
 	}
-	return nodeShortName(target)
+	if strings.HasPrefix(edge.To, "unresolved_") {
+		return strings.TrimPrefix(edge.To, "unresolved_")
+	}
+	return ""
 }
 
 func edgeOrderWeight(kind graph.EdgeKind) int {
 	switch kind {
-	case graph.EdgeCalls, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic, graph.EdgeReturnsHandler:
+	case graph.EdgeRegistersBoundary:
 		return 0
-	case graph.EdgeBranches:
+	case graph.EdgeCalls, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic, graph.EdgeReturnsHandler:
 		return 1
-	case graph.EdgeSpawns:
+	case graph.EdgeBranches:
 		return 2
-	case graph.EdgeWaitsOn:
+	case graph.EdgeSpawns:
 		return 3
-	case graph.EdgeDefers:
+	case graph.EdgeWaitsOn:
 		return 4
+	case graph.EdgeDefers:
+		return 5
 	}
 	return 10
 }
 
 func isConstructorName(name string) bool {
-	return strings.HasPrefix(name, "New") || strings.HasPrefix(name, "Create") || strings.HasPrefix(name, "Init")
-}
-
-func isAsyncIndicator(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.Contains(lower, "goroutine") || strings.Contains(lower, "async") || strings.Contains(lower, "spawn")
-}
-
-func isDeferIndicator(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.Contains(lower, "defer") || strings.Contains(lower, "cleanup") || strings.Contains(lower, "close")
+	return strings.HasPrefix(name, "New") || strings.HasPrefix(name, "Create") || strings.HasPrefix(name, "Init") || strings.HasPrefix(name, "Build")
 }
 
 func nodeSymbolKind(n graph.Node) string {
@@ -283,8 +301,6 @@ func deduplicateMarkers(markers []flow.BoundaryMarker) []flow.BoundaryMarker {
 	return out
 }
 
-// --- snapshot index ---
-
 type snapshotIndex struct {
 	nodeByID map[string]graph.Node
 	outgoing map[string][]graph.Edge
@@ -304,13 +320,23 @@ func newSnapshotIndex(snapshot graph.GraphSnapshot) *snapshotIndex {
 	return idx
 }
 
-func (idx *snapshotIndex) outgoingCalls(nodeID string) []graph.Edge {
-	var calls []graph.Edge
+func (idx *snapshotIndex) outgoingLegacy(nodeID string) []graph.Edge {
+	var edges []graph.Edge
 	for _, e := range idx.outgoing[nodeID] {
 		switch e.Kind {
-		case graph.EdgeCalls, graph.EdgeSpawns, graph.EdgeDefers, graph.EdgeWaitsOn, graph.EdgeReturnsHandler, graph.EdgeRegistersBoundary, graph.EdgeCallsHTTP, graph.EdgeCallsGRPC, graph.EdgeProducesTopic, graph.EdgeSubscribesTopic, graph.EdgeBranches:
-			calls = append(calls, e)
+		case graph.EdgeCalls,
+			graph.EdgeCallsHTTP,
+			graph.EdgeCallsGRPC,
+			graph.EdgeProducesTopic,
+			graph.EdgeSubscribesTopic,
+			graph.EdgeReturnsHandler,
+			graph.EdgeRegistersBoundary,
+			graph.EdgeSpawns,
+			graph.EdgeDefers,
+			graph.EdgeWaitsOn,
+			graph.EdgeBranches:
+			edges = append(edges, e)
 		}
 	}
-	return calls
+	return edges
 }

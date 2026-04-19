@@ -259,6 +259,202 @@ func TestBuild_ExecutionOrder(t *testing.T) {
 	}
 }
 
+func TestBuild_HTTPRootUsesSemanticSpineAndPreservesSideEdges(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			endpointNode("endpoint_orders", "GET /orders"),
+			testSymbolNode("handler_factory", "api.MakeOrdersHandler", "function"),
+			testSymbolNode("handler_closure", "api.MakeOrdersHandler.$closure_return_0", "function"),
+			testSymbolNode("service_target", "svc.OrderService", "function"),
+			testSymbolNode("log_target", "obs.LogRequest", "function"),
+			testSymbolNode("branch_target", "api.BranchArm", "function"),
+			testSymbolNode("spawn_target", "api.SpawnWorker", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_orders", To: "handler_factory", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_return", Kind: graph.EdgeReturnsHandler, From: "handler_factory", To: "handler_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_log", Kind: graph.EdgeCalls, From: "handler_closure", To: "log_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_service", Kind: graph.EdgeCalls, From: "handler_closure", To: "service_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_branch", Kind: graph.EdgeBranches, From: "handler_closure", To: "branch_target", Evidence: graph.Evidence{Source: "if featureEnabled"}, Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_spawn", Kind: graph.EdgeSpawns, From: "handler_closure", To: "spawn_target", Evidence: graph.Evidence{Source: "go dispatch()"}, Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_orders",
+			CanonicalName: "GET /orders",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := New().Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Chains) != 1 {
+		t.Fatalf("expected 1 chain, got %d", len(bundle.Chains))
+	}
+
+	steps := bundle.Chains[0].Steps
+	if len(steps) != 5 {
+		t.Fatalf("expected 5 semantic-spine steps, got %d: %+v", len(steps), steps)
+	}
+	if steps[0].ToNodeID != "handler_factory" || steps[0].Kind != flow.StepBoundary {
+		t.Fatalf("expected boundary registration step first, got %+v", steps[0])
+	}
+	if steps[1].ToNodeID != "handler_closure" || steps[1].Kind != flow.StepCall {
+		t.Fatalf("expected RETURNS_HANDLER peel second, got %+v", steps[1])
+	}
+	if steps[2].ToNodeID != "service_target" || steps[2].Kind != flow.StepCall {
+		t.Fatalf("expected business service call to win over noise, got %+v", steps[2])
+	}
+	if steps[3].Kind != flow.StepBranch || steps[4].Kind != flow.StepAsync {
+		t.Fatalf("expected side structure after the selected mainline, got %+v", steps[3:])
+	}
+}
+
+func TestBuild_HTTPFallbackRootAllowsInferredEligibleBusinessCall(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			testSymbolNode("handler_root", "api.HandleOrders", string(symbol.KindRouteHandler)),
+			testSymbolNode("service_target", "svc.OrderService", "function"),
+			testSymbolNode("log_target", "obs.LogOrders", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_inferred_service", Kind: graph.EdgeCalls, From: "handler_root", To: "service_target", Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.6}},
+			{ID: "e_confirmed_log", Kind: graph.EdgeCalls, From: "handler_root", To: "log_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "handler_root",
+			CanonicalName: "api.HandleOrders",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := New().Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Chains) != 1 || len(bundle.Chains[0].Steps) != 1 {
+		t.Fatalf("expected one semantic step, got %+v", bundle.Chains)
+	}
+	if got := bundle.Chains[0].Steps[0].ToNodeID; got != "service_target" {
+		t.Fatalf("expected inferred service call to remain eligible and win on score, got %s", got)
+	}
+	if !bundle.Chains[0].Steps[0].Inferred {
+		t.Fatalf("expected inferred service edge to remain marked inferred")
+	}
+}
+
+func TestBuildAudit_ClassifiesBusinessWarnings(t *testing.T) {
+	service := New()
+
+	t.Run("noise_frontier", func(t *testing.T) {
+		snapshot := graph.GraphSnapshot{
+			WorkspaceID: "ws_noise",
+			ID:          "snap_noise",
+			Nodes: []graph.Node{
+				endpointNode("endpoint_noise", "GET /noise"),
+				testSymbolNode("handler_noise", "api.HandleNoise", "function"),
+				testSymbolNode("log_target", "obs.LogRequest", "function"),
+			},
+			Edges: []graph.Edge{
+				{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_noise", To: "handler_noise", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+				{ID: "e_log", Kind: graph.EdgeCalls, From: "handler_noise", To: "log_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			},
+		}
+		roots := entrypoint.Result{
+			Roots: []entrypoint.Root{{
+				NodeID:        "endpoint_noise",
+				CanonicalName: "GET /noise",
+				RootType:      entrypoint.RootHTTP,
+				RepositoryID:  "repo1",
+			}},
+		}
+
+		bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		audit := service.BuildAudit(snapshot, roots, bundle)
+		if len(audit.Roots) != 1 {
+			t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+		}
+		if len(audit.Roots[0].FirstBusinessCalls) != 0 {
+			t.Fatalf("expected no first business calls for noise-only frontier, got %+v", audit.Roots[0].FirstBusinessCalls)
+		}
+		assertAuditWarningKind(t, audit.Roots[0].Warnings, "business_frontier_blocked_by_noise")
+	})
+
+	t.Run("tiny_handler", func(t *testing.T) {
+		snapshot := graph.GraphSnapshot{
+			WorkspaceID: "ws_tiny",
+			ID:          "snap_tiny",
+			Nodes: []graph.Node{
+				endpointNode("endpoint_tiny", "GET /tiny"),
+				testSymbolNode("handler_tiny", "api.HandleTiny", "function"),
+			},
+			Edges: []graph.Edge{
+				{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_tiny", To: "handler_tiny", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			},
+		}
+		roots := entrypoint.Result{
+			Roots: []entrypoint.Root{{
+				NodeID:        "endpoint_tiny",
+				CanonicalName: "GET /tiny",
+				RootType:      entrypoint.RootHTTP,
+				RepositoryID:  "repo1",
+			}},
+		}
+
+		bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		audit := service.BuildAudit(snapshot, roots, bundle)
+		if len(audit.Roots) != 1 {
+			t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+		}
+		assertAuditWarningKind(t, audit.Roots[0].Warnings, "no_business_call_after_handler")
+	})
+}
+
+func TestBuildAudit_FlagsExternalGatewayProxyTarget(t *testing.T) {
+	service := New()
+	snapshot := graph.GraphSnapshot{
+		WorkspaceID: "ws_gateway",
+		ID:          "snap_gateway",
+		Nodes: []graph.Node{
+			endpointNode("endpoint_gateway", "PROXY RegisterUsersHandlerFromEndpoint"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_gateway", To: "unresolved_RegisterUsersHandlerFromEndpoint", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_gateway",
+			CanonicalName: "PROXY RegisterUsersHandlerFromEndpoint",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := service.BuildAudit(snapshot, roots, bundle)
+	if len(audit.Roots) != 1 {
+		t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+	}
+	assertAuditWarningKind(t, audit.Roots[0].Warnings, "gateway_proxy_external")
+}
+
 // --- test helpers ---
 
 func testSymbolNode(id, canonical, kind string) graph.Node {
@@ -291,4 +487,26 @@ func callEdge(id, from, to string) graph.Edge {
 		To:         to,
 		Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.95},
 	}
+}
+
+func endpointNode(id, canonical string) graph.Node {
+	return graph.Node{
+		ID:            id,
+		Kind:          graph.NodeEndpoint,
+		CanonicalName: canonical,
+		RepositoryID:  "repo1",
+		Properties: map[string]string{
+			"boundary_kind": "http",
+		},
+	}
+}
+
+func assertAuditWarningKind(t *testing.T, warnings []SemanticAuditWarning, kind string) {
+	t.Helper()
+	for _, warning := range warnings {
+		if warning.Kind == kind {
+			return
+		}
+	}
+	t.Fatalf("warning %q not found in %+v", kind, warnings)
 }

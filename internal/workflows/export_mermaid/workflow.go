@@ -167,6 +167,8 @@ func (w Workflow) Run(req Request, inventory repository.Inventory, snapshot grap
 		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: %w", err)
 	}
+	semanticAudit := w.flowStitch.BuildAudit(snapshot, filtered, bundle)
+	debug.semanticAudit = &semanticAudit
 
 	links, err := w.crossBoundaryLink.Build(snapshot, inventory, bundle)
 	debug.boundaryBundle = &links
@@ -247,6 +249,9 @@ func (w Workflow) runSingleRootExport(req Request, snapshot graph.GraphSnapshot,
 	rootExports := []RootExport{rootExport}
 
 	debug.rootExports = rootExports
+	if auditRoot, ok := semanticAuditRootByNodeID(debug.semanticAudit, root.NodeID); ok {
+		debug.rootSemanticAudits = append(debug.rootSemanticAudits, rootSemanticAuditDebug{Audit: auditRoot})
+	}
 	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "root_exports.json", artifact.TypeRootExports, rootExports); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
@@ -363,6 +368,12 @@ func (w Workflow) runPerRootHTTPExports(req Request, snapshot graph.GraphSnapsho
 			Sequence:     &output.sequence,
 			MermaidCode:  output.mermaidCode,
 		})
+		if auditRoot, ok := semanticAuditRootByNodeID(debug.semanticAudit, export.RootNodeID); ok {
+			debug.rootSemanticAudits = append(debug.rootSemanticAudits, rootSemanticAuditDebug{
+				Slug:  export.Slug,
+				Audit: auditRoot,
+			})
+		}
 	}
 
 	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "root_exports.json", artifact.TypeRootExports, rootExports); err == nil {
@@ -507,10 +518,12 @@ type debugBundle struct {
 	flowBundle          *flow.Bundle
 	boundaryBundle      *boundary.Bundle
 	rootExports         []RootExport
+	semanticAudit       *flow_stitch.SemanticAudit
 	reducedChain        *reduced.Chain
 	sequenceModel       *sequence.Diagram
 	mermaidCode         string
 	rootRenderOutputs   []rootRenderDebug
+	rootSemanticAudits  []rootSemanticAuditDebug
 }
 
 type rootRenderDebug struct {
@@ -518,6 +531,11 @@ type rootRenderDebug struct {
 	ReducedChain *reduced.Chain
 	Sequence     *sequence.Diagram
 	MermaidCode  string
+}
+
+type rootSemanticAuditDebug struct {
+	Slug  string
+	Audit flow_stitch.SemanticAuditRoot
 }
 
 func (d debugBundle) write() error {
@@ -559,6 +577,11 @@ func (d debugBundle) write() error {
 	}
 	if d.boundaryBundle != nil {
 		if err := saveDebugJSON(filepath.Join(d.dir, "boundary_bundle.json"), d.boundaryBundle); err != nil {
+			return err
+		}
+	}
+	if d.semanticAudit != nil {
+		if err := saveDebugJSON(filepath.Join(d.dir, "semantic_audit.json"), d.semanticAudit); err != nil {
 			return err
 		}
 	}
@@ -609,6 +632,18 @@ func (d debugBundle) write() error {
 			if err := os.WriteFile(filepath.Join(rootDir, "diagram.mmd"), []byte(rootDebug.MermaidCode), 0o644); err != nil {
 				return err
 			}
+		}
+	}
+	for _, auditDebug := range d.rootSemanticAudits {
+		if auditDebug.Slug == "" {
+			continue
+		}
+		rootDir := filepath.Join(d.dir, "roots", auditDebug.Slug)
+		if err := os.MkdirAll(rootDir, 0o755); err != nil {
+			return err
+		}
+		if err := saveDebugJSON(filepath.Join(rootDir, "semantic_audit.json"), auditDebug.Audit); err != nil {
+			return err
 		}
 	}
 
@@ -736,6 +771,18 @@ func manifestArtifactRefs(workspaceID string, refs []artifact.Ref) []artifact.Re
 		})
 	}
 	return manifestRefs
+}
+
+func semanticAuditRootByNodeID(report *flow_stitch.SemanticAudit, nodeID string) (flow_stitch.SemanticAuditRoot, bool) {
+	if report == nil {
+		return flow_stitch.SemanticAuditRoot{}, false
+	}
+	for _, root := range report.Roots {
+		if root.RootNodeID == nodeID {
+			return root, true
+		}
+	}
+	return flow_stitch.SemanticAuditRoot{}, false
 }
 
 type rootRenderOutput struct {

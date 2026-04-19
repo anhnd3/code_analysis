@@ -72,7 +72,7 @@ func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
 		t.Fatalf("expected multi-root per-root exports, got %+v", result.RootExports)
 	}
 
-	for _, name := range []string{"boundary_roots.json", "boundary_diagnostics.json", "resolved_roots.json", "flow_bundle.json", "boundary_bundle.json", "root_exports.json"} {
+	for _, name := range []string{"boundary_roots.json", "boundary_diagnostics.json", "resolved_roots.json", "flow_bundle.json", "boundary_bundle.json", "root_exports.json", "semantic_audit.json"} {
 		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
 			t.Fatalf("expected debug artifact %s after successful export: %v", name, statErr)
 		}
@@ -91,7 +91,7 @@ func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
 		if rootExport.Status != export_mermaid.RootExportRendered {
 			t.Fatalf("expected rendered accessor root export, got %+v", rootExport)
 		}
-		for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd"} {
+		for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "semantic_audit.json"} {
 			if _, statErr := os.Stat(filepath.Join(debugDir, "roots", rootExport.Slug, name)); statErr != nil {
 				t.Fatalf("expected per-root debug artifact %s for %s: %v", name, rootExport.Slug, statErr)
 			}
@@ -127,7 +127,7 @@ func TestWorkflowPreservesSingleRootSelectorBehavior(t *testing.T) {
 	if len(result.RootExports) != 1 || result.RootExports[0].CanonicalName != "GET /health" {
 		t.Fatalf("expected one selected root export, got %+v", result.RootExports)
 	}
-	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json"} {
+	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "semantic_audit.json"} {
 		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
 			t.Fatalf("expected single-root debug artifact %s: %v", name, statErr)
 		}

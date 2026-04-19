@@ -44,7 +44,9 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 	symbolByID := map[symbol.ID]symbol.Symbol{}
 	symbolNodeByID := map[symbol.ID]graph.Node{}
 	symbolsByFileAndName := map[string]map[string][]symbol.Symbol{}
+	symbolsByPackageAndName := map[string]map[string][]symbol.Symbol{}
 	exportCanonicalByFile := map[string]map[string]string{}
+	packageByFile := map[string]string{}
 	methodsBySuffix := map[string][]symbol.Symbol{}
 	serviceNodeIDs := map[string]map[string]string{}
 
@@ -53,12 +55,18 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 			if _, ok := symbolsByFileAndName[fileResult.FilePath]; !ok {
 				symbolsByFileAndName[fileResult.FilePath] = map[string][]symbol.Symbol{}
 			}
+			packageByFile[fileResult.FilePath] = fileResult.PackageName
+			packageKey := packageSymbolsKey(string(repoExt.Repository.ID), fileResult.PackageName)
+			if _, ok := symbolsByPackageAndName[packageKey]; !ok {
+				symbolsByPackageAndName[packageKey] = map[string][]symbol.Symbol{}
+			}
 			for _, sym := range fileResult.Symbols {
 				symbolByCanonical[sym.CanonicalName] = sym
 				symbolByID[sym.ID] = sym
 				suffix := "." + sym.Name
 				methodsBySuffix[suffix] = append(methodsBySuffix[suffix], sym)
 				symbolsByFileAndName[fileResult.FilePath][sym.Name] = append(symbolsByFileAndName[fileResult.FilePath][sym.Name], sym)
+				symbolsByPackageAndName[packageKey][sym.Name] = append(symbolsByPackageAndName[packageKey][sym.Name], sym)
 			}
 			exportCanonicalByFile[fileResult.FilePath] = map[string]string{}
 			for _, exportBinding := range fileResult.Exports {
@@ -340,10 +348,12 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 
 		// If handler target is resolved to a symbol:
 		if br.HandlerTarget != "" {
-			targetSym, _, resolved := resolveTarget(symbol.RelationCandidate{TargetCanonicalName: br.HandlerTarget}, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix)
+			targetSym, targetConfidence, resolved := resolveBoundaryTarget(br, symbolByCanonical, symbolByID, symbolsByFileAndName, symbolsByPackageAndName, exportCanonicalByFile, packageByFile, methodsBySuffix)
 			targetNodeID := "unresolved_" + br.HandlerTarget
+			edgeConfidence := graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.5}
 			if resolved {
 				targetNodeID = symbolNodeByID[targetSym.ID].ID
+				edgeConfidence = targetConfidence
 			}
 			edge := graph.Edge{
 				ID:   ids.Stable("edge", rootNode.ID, targetNodeID, string(graph.EdgeRegistersBoundary)),
@@ -356,7 +366,7 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 					ExtractionMethod: br.Framework,
 					Details:          "boundary_detector",
 				},
-				Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1.0},
+				Confidence: edgeConfidence,
 				SnapshotID: snapshotID,
 			}
 			edges = append(edges, edge)
@@ -424,6 +434,43 @@ func resolveTarget(relation symbol.RelationCandidate, symbolByCanonical map[stri
 		}
 	}
 	return symbol.Symbol{}, graph.Confidence{}, false
+}
+
+func resolveBoundaryTarget(br boundaryroot.Root, symbolByCanonical map[string]symbol.Symbol, symbolByID map[symbol.ID]symbol.Symbol, symbolsByFileAndName map[string]map[string][]symbol.Symbol, symbolsByPackageAndName map[string]map[string][]symbol.Symbol, exportCanonicalByFile map[string]map[string]string, packageByFile map[string]string, methodsBySuffix map[string][]symbol.Symbol) (symbol.Symbol, graph.Confidence, bool) {
+	relation := symbol.RelationCandidate{TargetCanonicalName: br.HandlerTarget}
+	if targetName := boundaryTargetName(br.HandlerTarget); targetName != "" {
+		relation.TargetFilePath = br.SourceFile
+		relation.TargetExportName = targetName
+	}
+	if targetSym, confidence, resolved := resolveTarget(relation, symbolByCanonical, symbolByID, symbolsByFileAndName, exportCanonicalByFile, methodsBySuffix); resolved {
+		return targetSym, confidence, true
+	}
+
+	targetName := boundaryTargetName(br.HandlerTarget)
+	packageName := packageByFile[br.SourceFile]
+	if targetName == "" || packageName == "" {
+		return symbol.Symbol{}, graph.Confidence{}, false
+	}
+	candidates := symbolsByPackageAndName[packageSymbolsKey(br.RepositoryID, packageName)][targetName]
+	if len(candidates) == 1 {
+		return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.8}, true
+	}
+	return symbol.Symbol{}, graph.Confidence{}, false
+}
+
+func boundaryTargetName(target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" || strings.HasPrefix(target, "func(") {
+		return ""
+	}
+	if idx := strings.LastIndex(target, "."); idx >= 0 {
+		return target[idx+1:]
+	}
+	return target
+}
+
+func packageSymbolsKey(repoID, packageName string) string {
+	return repoID + "|" + packageName
 }
 
 func resolveHintTarget(hint executionhint.Hint, symbolByCanonical map[string]symbol.Symbol, symbolByID map[symbol.ID]symbol.Symbol, symbolNodeByID map[symbol.ID]graph.Node) (symbol.Symbol, string, bool) {

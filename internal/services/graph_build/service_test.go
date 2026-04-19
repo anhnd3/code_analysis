@@ -4,10 +4,13 @@ import (
 	"testing"
 
 	"analysis-module/internal/app/progress"
+	"analysis-module/internal/domain/boundaryroot"
+	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/service"
 	"analysis-module/internal/domain/symbol"
 	"analysis-module/internal/services/symbol_index"
+	"analysis-module/pkg/ids"
 )
 
 func TestBuildCreatesCallAndTestEdges(t *testing.T) {
@@ -60,4 +63,117 @@ func TestBuildCreatesCallAndTestEdges(t *testing.T) {
 	if !foundTestedBy {
 		t.Fatal("expected TESTED_BY edge")
 	}
+}
+
+func TestBuildResolvesBoundaryHandlerTargetFromSameFileShortName(t *testing.T) {
+	builder := New(progress.NoopReporter{})
+	inventory := repository.Inventory{
+		WorkspaceID: "ws_demo",
+		Repositories: []repository.Manifest{{
+			ID:                "repo_demo",
+			Name:              "demo",
+			RootPath:          "/demo",
+			Role:              repository.RoleService,
+			CandidateServices: []service.Manifest{{ID: "svc_demo", Name: "demo"}},
+		}},
+	}
+	extraction := symbol_index.Result{
+		Repositories: []symbol_index.RepositoryExtraction{{
+			Repository: inventory.Repositories[0],
+			Files: []symbol.FileExtractionResult{{
+				FilePath:    "service.go",
+				PackageName: "demo",
+				Symbols: []symbol.Symbol{
+					{ID: "sym_handle", RepositoryID: "repo_demo", FilePath: "service.go", PackageName: "demo", Name: "Handle", CanonicalName: "demo.Handle", Kind: symbol.KindFunction},
+				},
+			}},
+		}},
+	}
+	root := boundaryroot.Root{
+		ID:            "endpoint_any_/users",
+		Kind:          boundaryroot.KindHTTP,
+		Framework:     "net/http",
+		Method:        "ANY",
+		Path:          "/users",
+		CanonicalName: "ANY /users",
+		HandlerTarget: "Handle",
+		RepositoryID:  "repo_demo",
+		SourceFile:    "service.go",
+	}
+
+	result := builder.Build("ws1", "snap1", inventory, extraction, []boundaryroot.Root{root})
+	edge := findEdgeByKind(t, result.Snapshot.Edges, graph.EdgeRegistersBoundary)
+	if edge.To != idsForSymbol("sym_handle") {
+		t.Fatalf("expected boundary edge to resolve same-file short name, got %+v", edge)
+	}
+	if edge.Confidence.Tier != graph.ConfidenceConfirmed {
+		t.Fatalf("expected confirmed boundary target resolution, got %+v", edge.Confidence)
+	}
+}
+
+func TestBuildResolvesBoundaryHandlerTargetFromSamePackageShortName(t *testing.T) {
+	builder := New(progress.NoopReporter{})
+	inventory := repository.Inventory{
+		WorkspaceID: "ws_demo",
+		Repositories: []repository.Manifest{{
+			ID:                "repo_demo",
+			Name:              "demo",
+			RootPath:          "/demo",
+			Role:              repository.RoleService,
+			CandidateServices: []service.Manifest{{ID: "svc_demo", Name: "demo"}},
+		}},
+	}
+	extraction := symbol_index.Result{
+		Repositories: []symbol_index.RepositoryExtraction{{
+			Repository: inventory.Repositories[0],
+			Files: []symbol.FileExtractionResult{
+				{
+					FilePath:    "routes.go",
+					PackageName: "demo",
+				},
+				{
+					FilePath:    "handlers.go",
+					PackageName: "demo",
+					Symbols: []symbol.Symbol{
+						{ID: "sym_handle", RepositoryID: "repo_demo", FilePath: "handlers.go", PackageName: "demo", Name: "Handle", CanonicalName: "demo.Handle", Kind: symbol.KindFunction},
+					},
+				},
+			},
+		}},
+	}
+	root := boundaryroot.Root{
+		ID:            "endpoint_any_/users",
+		Kind:          boundaryroot.KindHTTP,
+		Framework:     "net/http",
+		Method:        "ANY",
+		Path:          "/users",
+		CanonicalName: "ANY /users",
+		HandlerTarget: "Handle",
+		RepositoryID:  "repo_demo",
+		SourceFile:    "routes.go",
+	}
+
+	result := builder.Build("ws1", "snap1", inventory, extraction, []boundaryroot.Root{root})
+	edge := findEdgeByKind(t, result.Snapshot.Edges, graph.EdgeRegistersBoundary)
+	if edge.To != idsForSymbol("sym_handle") {
+		t.Fatalf("expected boundary edge to resolve same-package short name, got %+v", edge)
+	}
+	if edge.Confidence.Tier != graph.ConfidenceInferred {
+		t.Fatalf("expected inferred same-package boundary target resolution, got %+v", edge.Confidence)
+	}
+}
+
+func findEdgeByKind(t *testing.T, edges []graph.Edge, kind graph.EdgeKind) graph.Edge {
+	t.Helper()
+	for _, edge := range edges {
+		if edge.Kind == kind {
+			return edge
+		}
+	}
+	t.Fatalf("expected %s edge", kind)
+	return graph.Edge{}
+}
+
+func idsForSymbol(symbolID string) string {
+	return ids.Stable("node", "symbol", symbolID)
 }
