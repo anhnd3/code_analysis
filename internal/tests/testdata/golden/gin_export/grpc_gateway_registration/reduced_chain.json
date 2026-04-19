@@ -1,0 +1,36 @@
+{
+  "root_node_id": "boundary_42b01092f1bd",
+  "nodes": [
+    {
+      "id": "",
+      "canonical_name": "",
+      "short_name": "",
+      "role": "remote"
+    },
+    {
+      "id": "boundary_42b01092f1bd",
+      "canonical_name": "PROXY RegisterUsersHandlerFromEndpoint",
+      "short_name": "PROXY RegisterUsersHandlerFromEndpoint",
+      "role": "root",
+      "repository_id": "repo_9ae3ede5bf87"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "boundary_42b01092f1bd",
+      "to_id": "unresolved_RegisterUsersHandlerFromEndpoint",
+      "label": "RegisterUsersHandlerFromEndpoint",
+      "inferred": true,
+      "cross_repo": true,
+      "link_status": "external_only"
+    }
+  ],
+  "blocks": null,
+  "notes": [
+    {
+      "at_node_id": "unresolved_RegisterUsersHandlerFromEndpoint",
+      "text": "external-only boundary (no inbound match)",
+      "kind": "candidate"
+    }
+  ]
+}

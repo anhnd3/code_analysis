@@ -18,6 +18,8 @@ const (
 	TypeBoundaryBundle      Type = "boundary_bundle"
 	TypeRootExports         Type = "root_exports"
 	TypeReducedChain        Type = "reduced_chain"
+	TypeReviewFlow          Type = "review_flow"
+	TypeReviewFlowBuild     Type = "review_flow_build"
 	TypeSequenceModel       Type = "sequence_model"
 	TypeMermaidDiagram      Type = "mermaid_diagram"
 )

@@ -1,6 +1,10 @@
 sequenceDiagram
     title http flow
-    participant boundary_88620620b9a0 as GET /api/v1/camera/config
-    participant node_a735dc66f1de as GetConfig
+    participant review_participant_70e9b38d4bba as GET /api/v1/camera/config
+    participant review_participant_66a306d7211f as Handler
 
-    boundary_88620620b9a0->>node_a735dc66f1de: GetConfig
+    note over review_participant_66a306d7211f: Stage: Boundary Entry
+    review_participant_70e9b38d4bba->>review_participant_66a306d7211f: dispatch request
+    note over review_participant_66a306d7211f: Stage: Response
+    review_participant_66a306d7211f-->>-review_participant_70e9b38d4bba: return response
+    note over review_participant_70e9b38d4bba: no promoted business call was found after the handler entry

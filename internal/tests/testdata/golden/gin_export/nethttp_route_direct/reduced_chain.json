@@ -1,0 +1,36 @@
+{
+  "root_node_id": "boundary_88ca4952aeae",
+  "nodes": [
+    {
+      "id": "",
+      "canonical_name": "",
+      "short_name": "",
+      "role": "remote"
+    },
+    {
+      "id": "boundary_88ca4952aeae",
+      "canonical_name": "ANY /users",
+      "short_name": "ANY /users",
+      "role": "root",
+      "repository_id": "repo_a190c4b8597a"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "boundary_88ca4952aeae",
+      "to_id": "unresolved_listUsers",
+      "label": "listUsers",
+      "inferred": true,
+      "cross_repo": true,
+      "link_status": "external_only"
+    }
+  ],
+  "blocks": null,
+  "notes": [
+    {
+      "at_node_id": "unresolved_listUsers",
+      "text": "external-only boundary (no inbound match)",
+      "kind": "candidate"
+    }
+  ]
+}

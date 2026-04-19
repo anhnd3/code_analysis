@@ -117,12 +117,25 @@ func assertGinAccessorRecovery(t *testing.T, run ginAccessorRun) {
 	if len(run.exports) != len(run.resolved.Roots) {
 		t.Fatalf("expected one root export per resolved root, got %d exports for %d roots", len(run.exports), len(run.resolved.Roots))
 	}
+	renderedCanonicals := map[string]bool{}
 	for _, rootExport := range run.exports {
-		if rootExport.Status != export_mermaid.RootExportRendered {
-			t.Fatalf("expected rendered root export for accessor fixture, got %+v", rootExport)
+		switch rootExport.Status {
+		case export_mermaid.RootExportRendered:
+			renderedCanonicals[rootExport.CanonicalName] = true
+			if len(rootExport.ArtifactRefs) != 5 {
+				t.Fatalf("expected reduced/review/sequence/mermaid refs for %s, got %+v", rootExport.CanonicalName, rootExport.ArtifactRefs)
+			}
+		case export_mermaid.RootExportSkipped:
+			if rootExport.Reason == "" {
+				t.Fatalf("expected skip reason for %+v", rootExport)
+			}
+		default:
+			t.Fatalf("unexpected root export status %+v", rootExport)
 		}
-		if len(rootExport.ArtifactRefs) != 3 {
-			t.Fatalf("expected reduced/sequence/mermaid refs for %s, got %+v", rootExport.CanonicalName, rootExport.ArtifactRefs)
+	}
+	for _, canonical := range []string{"GET /health", "GET /v1/camera/config/all", "POST /v1/camera/detect-qr", "POST /v2/camera/detect-qr"} {
+		if !renderedCanonicals[canonical] {
+			t.Fatalf("expected renderable business root %q to be rendered, got %+v", canonical, run.exports)
 		}
 	}
 

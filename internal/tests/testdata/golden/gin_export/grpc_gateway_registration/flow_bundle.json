@@ -1,0 +1,19 @@
+{
+  "chains": [
+    {
+      "root_node_id": "boundary_42b01092f1bd",
+      "repository_id": "repo_9ae3ede5bf87",
+      "steps": [
+        {
+          "from_node_id": "boundary_42b01092f1bd",
+          "to_node_id": "unresolved_RegisterUsersHandlerFromEndpoint",
+          "edge_id": "edge_9fcaeaea2dc3",
+          "kind": "boundary",
+          "label": "RegisterUsersHandlerFromEndpoint",
+          "inferred": true
+        }
+      ]
+    }
+  ],
+  "boundary_markers": null
+}

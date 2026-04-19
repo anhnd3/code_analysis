@@ -1,0 +1,35 @@
+[
+  {
+    "root_node_id": "boundary_42b01092f1bd",
+    "canonical_name": "PROXY RegisterUsersHandlerFromEndpoint",
+    "slug": "proxy-registerusershandlerfromendpoint__1092f1bd",
+    "status": "rendered",
+    "artifact_refs": [
+      {
+        "type": "reduced_chain",
+        "workspace_id": "ws_grpc_gateway_registration_9ae3ede5bf87",
+        "path": "reduced_chain.json"
+      },
+      {
+        "type": "review_flow",
+        "workspace_id": "ws_grpc_gateway_registration_9ae3ede5bf87",
+        "path": "review_flow.json"
+      },
+      {
+        "type": "review_flow_build",
+        "workspace_id": "ws_grpc_gateway_registration_9ae3ede5bf87",
+        "path": "review_flow_build.json"
+      },
+      {
+        "type": "sequence_model",
+        "workspace_id": "ws_grpc_gateway_registration_9ae3ede5bf87",
+        "path": "sequence_model.json"
+      },
+      {
+        "type": "mermaid_diagram",
+        "workspace_id": "ws_grpc_gateway_registration_9ae3ede5bf87",
+        "path": "diagram_http.mmd"
+      }
+    ]
+  }
+]

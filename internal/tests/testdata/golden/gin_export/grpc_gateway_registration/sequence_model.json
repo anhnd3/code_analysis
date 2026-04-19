@@ -1,0 +1,64 @@
+{
+  "title": "http flow",
+  "participants": [
+    {
+      "id": "review_participant_3cf3434ffe65",
+      "label": "Gateway Proxy",
+      "short_name": "Gateway Proxy"
+    },
+    {
+      "id": "review_participant_be83147d3956",
+      "label": "Gateway Client",
+      "short_name": "Gateway Client",
+      "is_external": true
+    }
+  ],
+  "elements": [
+    {
+      "note": {
+        "over_id": "review_participant_3cf3434ffe65",
+        "text": "Stage: Boundary Entry"
+      }
+    },
+    {
+      "message": {
+        "from_id": "review_participant_3cf3434ffe65",
+        "to_id": "review_participant_be83147d3956",
+        "label": "dispatch proxy request",
+        "kind": "sync"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_3cf3434ffe65",
+        "text": "Stage: Response"
+      }
+    },
+    {
+      "message": {
+        "from_id": "review_participant_be83147d3956",
+        "to_id": "review_participant_3cf3434ffe65",
+        "label": "proxy response",
+        "kind": "return"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_3cf3434ffe65",
+        "text": "gateway registration target could not be resolved to an in-repo symbol"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_3cf3434ffe65",
+        "text": "no promoted business call was found after the handler entry"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_3cf3434ffe65",
+        "text": "external-only boundary (no inbound match)"
+      }
+    }
+  ]
+}

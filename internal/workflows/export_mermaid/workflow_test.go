@@ -63,3 +63,28 @@ func TestFilterRootsHonorsSelectorWithinType(t *testing.T) {
 		t.Fatalf("expected node-id selector to narrow to root_health, got %+v", filteredByNode.Roots)
 	}
 }
+
+func TestRenderModeForRoot_DefaultsHTTPToReviewWhenMetadataPresent(t *testing.T) {
+	w := Workflow{}
+	mode := w.renderModeForRoot(Request{}, entrypoint.Root{
+		NodeID:    "root_health",
+		RootType:  entrypoint.RootHTTP,
+		Framework: "gin",
+		Method:    "GET",
+		Path:      "/health",
+	})
+	if mode != RenderModeReview {
+		t.Fatalf("expected HTTP root with metadata to default to review, got %s", mode)
+	}
+}
+
+func TestRenderModeForRoot_HonorsExplicitReducedDebug(t *testing.T) {
+	w := Workflow{}
+	mode := w.renderModeForRoot(Request{RenderMode: RenderModeReducedDebug}, entrypoint.Root{
+		NodeID:   "root_health",
+		RootType: entrypoint.RootHTTP,
+	})
+	if mode != RenderModeReducedDebug {
+		t.Fatalf("expected explicit reduced_debug mode, got %s", mode)
+	}
+}

@@ -29,6 +29,9 @@ type Root struct {
 	Confidence    Confidence `json:"confidence"`
 	RepositoryID  string     `json:"repository_id"`
 	ServiceID     string     `json:"service_id,omitempty"`
+	Framework     string     `json:"framework,omitempty"`
+	Method        string     `json:"method,omitempty"`
+	Path          string     `json:"path,omitempty"`
 	Evidence      string     `json:"evidence,omitempty"`
 }
 

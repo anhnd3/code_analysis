@@ -60,6 +60,7 @@ func TestResolve_PersistedHTTPEndpointRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertRootFound(t, result, "boundary_http", entrypoint.RootHTTP, entrypoint.ConfidenceHigh)
+	assertRootMetadata(t, result, "boundary_http", "gin", "GET", "/users")
 }
 
 func TestResolve_GRPCHandler(t *testing.T) {
@@ -195,6 +196,7 @@ func TestResolve_FallbackHTTPSkippedWhenDetectorRootPresent(t *testing.T) {
 	if !found {
 		t.Error("expected detected Gin root to appear in output but it was missing")
 	}
+	assertRootMetadata(t, result, detectedRoot.ID, "gin", "GET", "/users")
 }
 
 // TestResolve_FallbackGRPCSkippedWhenDetectorRootPresent mirrors the HTTP test for gRPC.
@@ -276,6 +278,9 @@ func endpointNode(id, canonical string, kind boundaryroot.Kind, repoID string) g
 		RepositoryID:  repoID,
 		Properties: map[string]string{
 			"boundary_kind": string(kind),
+			"framework":     "gin",
+			"method":        "GET",
+			"path":          "/users",
 		},
 	}
 }
@@ -294,6 +299,26 @@ func assertRootFound(t *testing.T, result entrypoint.Result, nodeID string, root
 		}
 	}
 	t.Errorf("root %s not found in results (have %d roots)", nodeID, len(result.Roots))
+}
+
+func assertRootMetadata(t *testing.T, result entrypoint.Result, nodeID, framework, method, path string) {
+	t.Helper()
+	for _, r := range result.Roots {
+		if r.NodeID != nodeID {
+			continue
+		}
+		if r.Framework != framework {
+			t.Fatalf("root %s: expected framework %q, got %q", nodeID, framework, r.Framework)
+		}
+		if r.Method != method {
+			t.Fatalf("root %s: expected method %q, got %q", nodeID, method, r.Method)
+		}
+		if r.Path != path {
+			t.Fatalf("root %s: expected path %q, got %q", nodeID, path, r.Path)
+		}
+		return
+	}
+	t.Fatalf("root %s not found in results (have %d roots)", nodeID, len(result.Roots))
 }
 
 // makeBoundaryRoot builds a minimal boundaryroot.Root for use in tests.

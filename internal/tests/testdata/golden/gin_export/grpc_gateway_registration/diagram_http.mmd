@@ -1,0 +1,12 @@
+sequenceDiagram
+    title http flow
+    participant review_participant_3cf3434ffe65 as Gateway Proxy
+    participant review_participant_be83147d3956 as Gateway Client [external]
+
+    note over review_participant_3cf3434ffe65: Stage: Boundary Entry
+    review_participant_3cf3434ffe65->>review_participant_be83147d3956: dispatch proxy request
+    note over review_participant_3cf3434ffe65: Stage: Response
+    review_participant_be83147d3956-->>-review_participant_3cf3434ffe65: proxy response
+    note over review_participant_3cf3434ffe65: gateway registration target could not be resolved to an in-repo symbol
+    note over review_participant_3cf3434ffe65: no promoted business call was found after the handler entry
+    note over review_participant_3cf3434ffe65: external-only boundary (no inbound match)

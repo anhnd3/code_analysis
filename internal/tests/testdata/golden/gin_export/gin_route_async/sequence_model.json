@@ -2,23 +2,49 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "boundary_3cb27b71785d",
+      "id": "review_participant_c94c03a583ac",
       "label": "GET /async",
       "short_name": "GET /async"
     },
     {
-      "id": "node_383193589a5e",
-      "label": "$inline_handler_0",
-      "short_name": "$inline_handler_0"
+      "id": "review_participant_708c959ac27f",
+      "label": "Handler",
+      "short_name": "Handler"
     }
   ],
   "elements": [
     {
+      "note": {
+        "over_id": "review_participant_708c959ac27f",
+        "text": "Stage: Boundary Entry"
+      }
+    },
+    {
       "message": {
-        "from_id": "boundary_3cb27b71785d",
-        "to_id": "node_383193589a5e",
-        "label": "$inline_handler_0",
+        "from_id": "review_participant_c94c03a583ac",
+        "to_id": "review_participant_708c959ac27f",
+        "label": "dispatch request",
         "kind": "sync"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_708c959ac27f",
+        "text": "Stage: Response"
+      }
+    },
+    {
+      "message": {
+        "from_id": "review_participant_708c959ac27f",
+        "to_id": "review_participant_c94c03a583ac",
+        "label": "return response",
+        "kind": "return"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_c94c03a583ac",
+        "text": "no promoted business call was found after the handler entry"
       }
     }
   ]

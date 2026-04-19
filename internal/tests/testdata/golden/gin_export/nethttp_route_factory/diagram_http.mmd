@@ -1,0 +1,11 @@
+sequenceDiagram
+    title http flow
+    participant review_participant_434716cf59c4 as ANY /users/factory
+    participant review_participant_a4f2147eb57a as MakeUsersHandler [external]
+
+    note over review_participant_434716cf59c4: Stage: Boundary Entry
+    review_participant_434716cf59c4->>review_participant_a4f2147eb57a: dispatch request
+    note over review_participant_434716cf59c4: Stage: Response
+    review_participant_a4f2147eb57a-->>-review_participant_434716cf59c4: return response
+    note over review_participant_434716cf59c4: no promoted business call was found after the handler entry
+    note over review_participant_434716cf59c4: external-only boundary (no inbound match)

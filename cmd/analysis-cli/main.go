@@ -17,11 +17,11 @@ import (
 	"analysis-module/internal/workflows/blast_radius"
 	"analysis-module/internal/workflows/build_review_bundle"
 	"analysis-module/internal/workflows/build_snapshot"
+	"analysis-module/internal/workflows/export_mermaid"
 	"analysis-module/internal/workflows/impacted_tests"
 	"analysis-module/internal/workflows/review_graph_export"
 	"analysis-module/internal/workflows/review_graph_import"
 	"analysis-module/internal/workflows/review_graph_list_startpoints"
-	"analysis-module/internal/workflows/export_mermaid"
 )
 
 func main() {
@@ -152,6 +152,7 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	snapshotFile := fs.String("snapshot", "", "JSON snapshot path to load and export")
 	rootType := fs.String("root-type", "master", "root type: bootstrap|http|worker|symbol|master")
 	rootSelector := fs.String("root-selector", "", "target canonical name or node id")
+	renderMode := fs.String("render-mode", "auto", "render mode: auto|review|reduced_debug")
 	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
 	maxBranches := fs.Int("max-branches", 5, "max branch limit")
 	collapseMode := fs.String("collapse-mode", "default", "collapse mode: default|none|aggressive")
@@ -208,6 +209,7 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 		SnapshotID:        snapshot.ID,
 		RootType:          export_mermaid.RootTypeFilter(*rootType),
 		RootSelector:      *rootSelector,
+		RenderMode:        export_mermaid.RenderMode(*renderMode),
 		MaxDepth:          *maxDepth,
 		MaxBranches:       *maxBranches,
 		CollapseMode:      *collapseMode,
@@ -248,12 +250,12 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 	// Step 2: Pass A - Bootstrap
 	app.Logger.Info("Exporting 'bootstrap' flows...")
 	resBoot, err := app.ExportMermaid.Run(export_mermaid.Request{
-		WorkspaceID:       snapResult.WorkspaceID,
-		SnapshotID:        snapResult.Snapshot.ID,
-		RootType:          export_mermaid.RootFilterBootstrap,
-		MaxDepth:          *maxDepth,
-		MaxBranches:       *maxBranches,
-		CollapseMode:      "default",
+		WorkspaceID:  snapResult.WorkspaceID,
+		SnapshotID:   snapResult.Snapshot.ID,
+		RootType:     export_mermaid.RootFilterBootstrap,
+		MaxDepth:     *maxDepth,
+		MaxBranches:  *maxBranches,
+		CollapseMode: "default",
 	}, snapResult.Inventory, snapResult.Snapshot)
 	if err != nil {
 		app.Logger.Error("bootstrap export failed", "error", err)
@@ -264,11 +266,12 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 	// Step 3: Pass B - HTTP
 	app.Logger.Info("Exporting 'http' endpoint flows...")
 	resHTTP, err := app.ExportMermaid.Run(export_mermaid.Request{
-		WorkspaceID:       snapResult.WorkspaceID,
-		SnapshotID:        snapResult.Snapshot.ID,
-		RootType:          export_mermaid.RootFilterHTTP,
-		MaxDepth:          *maxDepth,
-		CollapseMode:      "default",
+		WorkspaceID:  snapResult.WorkspaceID,
+		SnapshotID:   snapResult.Snapshot.ID,
+		RootType:     export_mermaid.RootFilterHTTP,
+		RenderMode:   export_mermaid.RenderModeReview,
+		MaxDepth:     *maxDepth,
+		CollapseMode: "default",
 	}, snapResult.Inventory, snapResult.Snapshot)
 	if err != nil {
 		app.Logger.Error("http export failed", "error", err)
@@ -279,11 +282,11 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 	// Step 4: Pass C - Worker
 	app.Logger.Info("Exporting 'worker' flows...")
 	resWorker, err := app.ExportMermaid.Run(export_mermaid.Request{
-		WorkspaceID:       snapResult.WorkspaceID,
-		SnapshotID:        snapResult.Snapshot.ID,
-		RootType:          export_mermaid.RootFilterWorker,
-		MaxDepth:          *maxDepth,
-		CollapseMode:      "aggressive",
+		WorkspaceID:  snapResult.WorkspaceID,
+		SnapshotID:   snapResult.Snapshot.ID,
+		RootType:     export_mermaid.RootFilterWorker,
+		MaxDepth:     *maxDepth,
+		CollapseMode: "aggressive",
 	}, snapResult.Inventory, snapResult.Snapshot)
 	if err != nil {
 		app.Logger.Error("worker export failed", "error", err)
@@ -378,15 +381,15 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	outDir := fs.String("out", "", "review directory output path")
 	_ = fs.Parse(args)
 	result, err := app.ReviewGraphExport.Run(review_graph_export.Request{
-		DBPath:       *dbPath,
-		TargetsFile:  *targetsFile,
-		Mode:         *mode,
-		RenderMode:   *renderMode,
+		DBPath:        *dbPath,
+		TargetsFile:   *targetsFile,
+		Mode:          *mode,
+		RenderMode:    *renderMode,
 		CompanionView: *companionView,
-		IncludeAsync: *includeAsync,
-		ForwardDepth: *forwardDepth,
-		ReverseDepth: *reverseDepth,
-		OutDir:       *outDir,
+		IncludeAsync:  *includeAsync,
+		ForwardDepth:  *forwardDepth,
+		ReverseDepth:  *reverseDepth,
+		OutDir:        *outDir,
 	})
 	if err != nil {
 		fatal(err)

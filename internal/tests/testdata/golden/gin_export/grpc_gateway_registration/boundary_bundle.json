@@ -1,0 +1,13 @@
+{
+  "links": [
+    {
+      "outbound_node_id": "boundary_42b01092f1bd",
+      "inbound_node_id": "unresolved_RegisterUsersHandlerFromEndpoint",
+      "protocol": "rest",
+      "status": "external_only",
+      "outbound_repo_id": "repo_9ae3ede5bf87",
+      "inbound_repo_id": "",
+      "evidence": "unresolved boundary handler target"
+    }
+  ]
+}

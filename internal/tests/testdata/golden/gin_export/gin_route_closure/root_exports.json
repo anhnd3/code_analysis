@@ -11,6 +11,16 @@
         "path": "reduced_chain.json"
       },
       {
+        "type": "review_flow",
+        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "path": "review_flow.json"
+      },
+      {
+        "type": "review_flow_build",
+        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "path": "review_flow_build.json"
+      },
+      {
         "type": "sequence_model",
         "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
         "path": "sequence_model.json"

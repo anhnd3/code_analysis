@@ -152,8 +152,14 @@ func assertGinBoundaryHardeningResult(t *testing.T, result ginBoundaryHardeningR
 	}
 
 	registerEdges := boundaryEdges(result.snapshot.Snapshot.Edges)
-	if len(registerEdges) < len(result.roots) {
-		t.Fatalf("expected registers-boundary edges for each root, got %d edges for %d roots", len(registerEdges), len(result.roots))
+	expectedRegisterEdges := 0
+	for _, root := range result.roots {
+		if root.HandlerTarget != "" {
+			expectedRegisterEdges++
+		}
+	}
+	if len(registerEdges) < expectedRegisterEdges {
+		t.Fatalf("expected registers-boundary edges for roots with handler targets, got %d edges for %d expected roots", len(registerEdges), expectedRegisterEdges)
 	}
 
 	for _, root := range result.roots {
@@ -182,12 +188,25 @@ func assertGinBoundaryHardeningResult(t *testing.T, result ginBoundaryHardeningR
 	if len(result.exports) != len(result.roots) {
 		t.Fatalf("expected one root export per boundary root, got %d exports for %d roots", len(result.exports), len(result.roots))
 	}
+	renderedCanonicals := map[string]bool{}
 	for _, rootExport := range result.exports {
-		if rootExport.Status != export_mermaid.RootExportRendered {
-			t.Fatalf("expected rendered root export, got %+v", rootExport)
+		switch rootExport.Status {
+		case export_mermaid.RootExportRendered:
+			renderedCanonicals[rootExport.CanonicalName] = true
+		case export_mermaid.RootExportSkipped:
+			if rootExport.Reason == "" {
+				t.Fatalf("expected skip reason for %+v", rootExport)
+			}
+		default:
+			t.Fatalf("unexpected root export status %+v", rootExport)
 		}
 		if strings.Contains(rootExport.CanonicalName, "Any /") {
 			t.Fatalf("expected rendered exports to exclude false-positive Any roots, got %+v", rootExport)
+		}
+	}
+	for _, canonical := range []string{"GET /health", "GET /v1/camera/config/all", "POST /v1/camera/detect-qr", "GET /v1/camera/abtest", "POST /v2/camera/detect-qr"} {
+		if !renderedCanonicals[canonical] {
+			t.Fatalf("expected business root %q to be rendered, got %+v", canonical, result.exports)
 		}
 	}
 }

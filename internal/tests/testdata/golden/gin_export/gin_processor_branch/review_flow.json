@@ -1,0 +1,85 @@
+{
+  "id": "reviewflow_5c1bbc4a445b",
+  "root_node_id": "boundary_1928d477d1bb",
+  "canonical_name": "POST /process",
+  "participants": [
+    {
+      "id": "review_participant_e9a88ebace05",
+      "kind": "boundary",
+      "label": "POST /process",
+      "role": "boundary",
+      "source_node_ids": [
+        "boundary_1928d477d1bb"
+      ]
+    },
+    {
+      "id": "review_participant_d82358b7df55",
+      "kind": "handler",
+      "label": "Handler",
+      "role": "handler",
+      "source_node_ids": [
+        "node_a86e18cf2c18"
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "id": "review_stage_89bf9863db78",
+      "kind": "boundary_entry",
+      "label": "Boundary Entry",
+      "participant_ids": [
+        "review_participant_d82358b7df55",
+        "review_participant_e9a88ebace05"
+      ],
+      "messages": [
+        {
+          "id": "review_msg_a78748ae5bdf",
+          "from_participant_id": "review_participant_e9a88ebace05",
+          "to_participant_id": "review_participant_d82358b7df55",
+          "label": "dispatch request",
+          "kind": "sync",
+          "source_edge_ids": [
+            "edge_6ed3490036d0"
+          ]
+        }
+      ],
+      "source_edge_ids": [
+        "edge_6ed3490036d0"
+      ]
+    },
+    {
+      "id": "review_stage_1ee1f0ef0b31",
+      "kind": "response",
+      "label": "Response",
+      "participant_ids": [
+        "review_participant_d82358b7df55",
+        "review_participant_e9a88ebace05"
+      ],
+      "messages": [
+        {
+          "id": "review_msg_4c8e52775a4d",
+          "from_participant_id": "review_participant_d82358b7df55",
+          "to_participant_id": "review_participant_e9a88ebace05",
+          "label": "return response",
+          "kind": "return"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "id": "review_note_5a8eddde1f29",
+      "over_participant_id": "review_participant_e9a88ebace05",
+      "text": "no promoted business call was found after the handler entry",
+      "kind": "no_business_call_after_handler"
+    }
+  ],
+  "source_root_type": "http",
+  "source_evidence": "framework adapter: gin",
+  "metadata": {
+    "candidate_kind": "compact_review",
+    "signature": "boundary_1928d477d1bb|POST /process|http|compact_review|gin|p:boundary:POST /process|p:handler:Handler|s:boundary_entry|m:review_participant_e9a88ebace05:review_participant_d82358b7df55:sync:dispatch request|s:response|m:review_participant_d82358b7df55:review_participant_e9a88ebace05:return:return response|n:no_business_call_after_handler:no promoted business call was found after the handler entry",
+    "score": 7,
+    "root_framework": "gin"
+  }
+}

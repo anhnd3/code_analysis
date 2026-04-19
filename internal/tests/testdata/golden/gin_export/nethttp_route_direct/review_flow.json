@@ -1,0 +1,95 @@
+{
+  "id": "reviewflow_dd47d7d4c28e",
+  "root_node_id": "boundary_88ca4952aeae",
+  "canonical_name": "ANY /users",
+  "participants": [
+    {
+      "id": "review_participant_11e14528455d",
+      "kind": "boundary",
+      "label": "ANY /users",
+      "role": "boundary",
+      "source_node_ids": [
+        "boundary_88ca4952aeae"
+      ]
+    },
+    {
+      "id": "review_participant_d5d049abd96e",
+      "kind": "remote",
+      "label": "ListUsers",
+      "role": "remote",
+      "source_node_ids": [
+        "unresolved_listUsers"
+      ],
+      "is_external": true
+    }
+  ],
+  "stages": [
+    {
+      "id": "review_stage_1de83ae5fced",
+      "kind": "boundary_entry",
+      "label": "Boundary Entry",
+      "participant_ids": [
+        "review_participant_11e14528455d",
+        "review_participant_d5d049abd96e"
+      ],
+      "messages": [
+        {
+          "id": "review_msg_0026cef5fcd2",
+          "from_participant_id": "review_participant_11e14528455d",
+          "to_participant_id": "review_participant_d5d049abd96e",
+          "label": "dispatch request",
+          "kind": "sync",
+          "source_edge_ids": [
+            "edge_cf155bf93ce8"
+          ]
+        }
+      ],
+      "source_edge_ids": [
+        "edge_cf155bf93ce8"
+      ]
+    },
+    {
+      "id": "review_stage_db7d01a1d104",
+      "kind": "response",
+      "label": "Response",
+      "participant_ids": [
+        "review_participant_11e14528455d",
+        "review_participant_d5d049abd96e"
+      ],
+      "messages": [
+        {
+          "id": "review_msg_f8c804de94e3",
+          "from_participant_id": "review_participant_d5d049abd96e",
+          "to_participant_id": "review_participant_11e14528455d",
+          "label": "return response",
+          "kind": "return"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "id": "review_note_1b2de9cf9e0b",
+      "over_participant_id": "review_participant_11e14528455d",
+      "text": "external-only boundary (no inbound match)",
+      "kind": "candidate",
+      "source_node_ids": [
+        "unresolved_listUsers"
+      ]
+    },
+    {
+      "id": "review_note_7ea8e5b1bf37",
+      "over_participant_id": "review_participant_11e14528455d",
+      "text": "no promoted business call was found after the handler entry",
+      "kind": "no_business_call_after_handler"
+    }
+  ],
+  "source_root_type": "http",
+  "source_evidence": "framework adapter: net/http",
+  "metadata": {
+    "candidate_kind": "compact_review",
+    "signature": "boundary_88ca4952aeae|ANY /users|http|compact_review|net/http|p:boundary:ANY /users|p:remote:ListUsers|s:boundary_entry|m:review_participant_11e14528455d:review_participant_d5d049abd96e:sync:dispatch request|s:response|m:review_participant_d5d049abd96e:review_participant_11e14528455d:return:return response|n:candidate:external-only boundary (no inbound match)|n:no_business_call_after_handler:no promoted business call was found after the handler entry",
+    "score": 10,
+    "root_framework": "net/http"
+  }
+}

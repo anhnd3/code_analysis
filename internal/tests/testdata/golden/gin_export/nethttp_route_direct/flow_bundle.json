@@ -1,0 +1,19 @@
+{
+  "chains": [
+    {
+      "root_node_id": "boundary_88ca4952aeae",
+      "repository_id": "repo_a190c4b8597a",
+      "steps": [
+        {
+          "from_node_id": "boundary_88ca4952aeae",
+          "to_node_id": "unresolved_listUsers",
+          "edge_id": "edge_cf155bf93ce8",
+          "kind": "boundary",
+          "label": "listUsers",
+          "inferred": true
+        }
+      ]
+    }
+  ],
+  "boundary_markers": null
+}

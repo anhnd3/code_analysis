@@ -24,6 +24,9 @@ func TestExportMermaidGin(t *testing.T) {
 		"gin_route_closure",
 		"gin_route_async",
 		"gin_processor_branch",
+		"nethttp_route_direct",
+		"nethttp_route_factory",
+		"grpc_gateway_registration",
 		"zpa_camera_config_be",
 	}
 

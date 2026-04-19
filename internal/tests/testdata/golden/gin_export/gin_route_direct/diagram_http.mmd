@@ -1,5 +1,10 @@
 sequenceDiagram
     title http flow
-    participant boundary_0d91223701f8 as GET /ping
-    participant unknown as  [external]
+    participant review_participant_a9a31d298149 as GET /ping
+    participant review_participant_afe927d82f94 as Handler
 
+    note over review_participant_a9a31d298149: Stage: Boundary Entry
+    review_participant_a9a31d298149->>review_participant_afe927d82f94: dispatch request
+    note over review_participant_a9a31d298149: Stage: Response
+    review_participant_afe927d82f94-->>-review_participant_a9a31d298149: return response
+    note over review_participant_a9a31d298149: no promoted business call was found after the handler entry

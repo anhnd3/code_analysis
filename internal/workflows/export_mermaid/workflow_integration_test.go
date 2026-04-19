@@ -87,15 +87,26 @@ func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
 	if len(rootExports) != len(result.RootExports) {
 		t.Fatalf("expected debug root export manifest to mirror result, got %d vs %d", len(rootExports), len(result.RootExports))
 	}
+	rendered := 0
 	for _, rootExport := range rootExports {
-		if rootExport.Status != export_mermaid.RootExportRendered {
-			t.Fatalf("expected rendered accessor root export, got %+v", rootExport)
+		if rootExport.Status == export_mermaid.RootExportSkipped {
+			if rootExport.Reason == "" {
+				t.Fatalf("expected skip reason for %+v", rootExport)
+			}
+			continue
 		}
-		for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "semantic_audit.json"} {
+		if rootExport.Status != export_mermaid.RootExportRendered {
+			t.Fatalf("expected rendered or skipped accessor root export, got %+v", rootExport)
+		}
+		rendered++
+		for _, name := range []string{"reduced_chain.json", "review_flow.json", "review_flow_build.json", "sequence_model.json", "diagram.mmd", "semantic_audit.json"} {
 			if _, statErr := os.Stat(filepath.Join(debugDir, "roots", rootExport.Slug, name)); statErr != nil {
 				t.Fatalf("expected per-root debug artifact %s for %s: %v", name, rootExport.Slug, statErr)
 			}
 		}
+	}
+	if rendered == 0 {
+		t.Fatal("expected at least one rendered root export")
 	}
 }
 
@@ -127,13 +138,86 @@ func TestWorkflowPreservesSingleRootSelectorBehavior(t *testing.T) {
 	if len(result.RootExports) != 1 || result.RootExports[0].CanonicalName != "GET /health" {
 		t.Fatalf("expected one selected root export, got %+v", result.RootExports)
 	}
-	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "semantic_audit.json"} {
+	for _, name := range []string{"reduced_chain.json", "review_flow.json", "review_flow_build.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "semantic_audit.json"} {
 		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
 			t.Fatalf("expected single-root debug artifact %s: %v", name, statErr)
 		}
 	}
 	if _, statErr := os.Stat(filepath.Join(debugDir, "roots")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no per-root debug directory in single-root mode, got %v", statErr)
+	}
+}
+
+func TestWorkflowSupportsExplicitReducedDebugMode(t *testing.T) {
+	app := newWorkflowTestApplication(t)
+	workspace := fixtures.WorkspacePath(t, "gin_accessor_hardening")
+
+	snapshotResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath: workspace,
+	})
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+
+	debugDir := t.TempDir()
+	_, err = app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:    snapshotResult.WorkspaceID,
+		SnapshotID:     snapshotResult.Snapshot.ID,
+		RootType:       export_mermaid.RootFilterHTTP,
+		RootSelector:   "GET /health",
+		RenderMode:     export_mermaid.RenderModeReducedDebug,
+		DebugBundleDir: debugDir,
+	}, snapshotResult.Inventory, snapshotResult.Snapshot)
+	if err != nil {
+		t.Fatalf("export mermaid in reduced_debug mode: %v", err)
+	}
+
+	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "semantic_audit.json"} {
+		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
+			t.Fatalf("expected reduced_debug artifact %s: %v", name, statErr)
+		}
+	}
+	for _, unexpected := range []string{"review_flow.json", "review_flow_build.json"} {
+		if _, statErr := os.Stat(filepath.Join(debugDir, unexpected)); !os.IsNotExist(statErr) {
+			t.Fatalf("expected reduced_debug mode to skip %s, got %v", unexpected, statErr)
+		}
+	}
+}
+
+func TestWorkflowIncludeCandidatesEmitsExtraCandidateArtifacts(t *testing.T) {
+	app := newWorkflowTestApplication(t)
+	workspace := fixtures.WorkspacePath(t, "gin_accessor_hardening")
+
+	snapshotResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath: workspace,
+	})
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+
+	result, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:       snapshotResult.WorkspaceID,
+		SnapshotID:        snapshotResult.Snapshot.ID,
+		RootType:          export_mermaid.RootFilterHTTP,
+		RootSelector:      "GET /health",
+		IncludeCandidates: true,
+	}, snapshotResult.Inventory, snapshotResult.Snapshot)
+	if err != nil {
+		t.Fatalf("export mermaid with IncludeCandidates: %v", err)
+	}
+
+	foundCandidateSequence := false
+	foundCandidateDiagram := false
+	for _, ref := range result.RootExports[0].ArtifactRefs {
+		switch filepath.Base(ref.Path) {
+		case "candidate_sequence_model__faithful.json", "candidate_sequence_model__async_summarized.json":
+			foundCandidateSequence = true
+		case "candidate_diagram__faithful.mmd", "candidate_diagram__async_summarized.mmd":
+			foundCandidateDiagram = true
+		}
+	}
+	if !foundCandidateSequence || !foundCandidateDiagram {
+		t.Fatalf("expected candidate render artifacts in root export refs, got %+v", result.RootExports[0].ArtifactRefs)
 	}
 }
 

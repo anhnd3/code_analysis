@@ -1,0 +1,58 @@
+{
+  "title": "http flow",
+  "participants": [
+    {
+      "id": "review_participant_434716cf59c4",
+      "label": "ANY /users/factory",
+      "short_name": "ANY /users/factory"
+    },
+    {
+      "id": "review_participant_a4f2147eb57a",
+      "label": "MakeUsersHandler",
+      "short_name": "MakeUsersHandler",
+      "is_external": true
+    }
+  ],
+  "elements": [
+    {
+      "note": {
+        "over_id": "review_participant_434716cf59c4",
+        "text": "Stage: Boundary Entry"
+      }
+    },
+    {
+      "message": {
+        "from_id": "review_participant_434716cf59c4",
+        "to_id": "review_participant_a4f2147eb57a",
+        "label": "dispatch request",
+        "kind": "sync"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_434716cf59c4",
+        "text": "Stage: Response"
+      }
+    },
+    {
+      "message": {
+        "from_id": "review_participant_a4f2147eb57a",
+        "to_id": "review_participant_434716cf59c4",
+        "label": "return response",
+        "kind": "return"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_434716cf59c4",
+        "text": "no promoted business call was found after the handler entry"
+      }
+    },
+    {
+      "note": {
+        "over_id": "review_participant_434716cf59c4",
+        "text": "external-only boundary (no inbound match)"
+      }
+    }
+  ]
+}

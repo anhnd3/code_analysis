@@ -47,6 +47,9 @@ func (s Service) Resolve(snapshot graph.GraphSnapshot, inventory repository.Inve
 			RootType:      mapBoundaryKind(br.Kind),
 			Confidence:    entrypoint.ConfidenceHigh, // Explicit detection is highly confident
 			RepositoryID:  repoID,
+			Framework:     br.Framework,
+			Method:        br.Method,
+			Path:          br.Path,
 			Evidence:      "framework adapter: " + br.Framework,
 		})
 
@@ -153,6 +156,9 @@ func (s Service) resolvePersistedBoundaryRoots(nodes []graph.Node) []entrypoint.
 			RootType:      rootType,
 			Confidence:    entrypoint.ConfidenceHigh,
 			RepositoryID:  n.RepositoryID,
+			Framework:     n.Properties["framework"],
+			Method:        n.Properties["method"],
+			Path:          n.Properties["path"],
 			Evidence:      "snapshot endpoint node",
 		})
 	}

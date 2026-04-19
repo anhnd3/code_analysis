@@ -1,6 +1,10 @@
 sequenceDiagram
     title http flow
-    participant boundary_717f7eb5ed69 as GET /closure
-    participant node_42adcc816ccf as $inline_handler_0
+    participant review_participant_04c61facabc8 as GET /closure
+    participant review_participant_c8e0f17dc81f as Handler
 
-    boundary_717f7eb5ed69->>node_42adcc816ccf: $inline_handler_0
+    note over review_participant_04c61facabc8: Stage: Boundary Entry
+    review_participant_04c61facabc8->>review_participant_c8e0f17dc81f: dispatch request
+    note over review_participant_04c61facabc8: Stage: Response
+    review_participant_c8e0f17dc81f-->>-review_participant_04c61facabc8: return response
+    note over review_participant_04c61facabc8: no promoted business call was found after the handler entry

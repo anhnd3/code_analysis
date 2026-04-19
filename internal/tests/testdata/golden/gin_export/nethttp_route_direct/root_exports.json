@@ -1,0 +1,35 @@
+[
+  {
+    "root_node_id": "boundary_88ca4952aeae",
+    "canonical_name": "ANY /users",
+    "slug": "any-users__4952aeae",
+    "status": "rendered",
+    "artifact_refs": [
+      {
+        "type": "reduced_chain",
+        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "path": "reduced_chain.json"
+      },
+      {
+        "type": "review_flow",
+        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "path": "review_flow.json"
+      },
+      {
+        "type": "review_flow_build",
+        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "path": "review_flow_build.json"
+      },
+      {
+        "type": "sequence_model",
+        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "path": "sequence_model.json"
+      },
+      {
+        "type": "mermaid_diagram",
+        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "path": "diagram_http.mmd"
+      }
+    ]
+  }
+]

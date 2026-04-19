@@ -1,0 +1,19 @@
+{
+  "chains": [
+    {
+      "root_node_id": "boundary_3c65b3ef7651",
+      "repository_id": "repo_9a9aa066d950",
+      "steps": [
+        {
+          "from_node_id": "boundary_3c65b3ef7651",
+          "to_node_id": "unresolved_makeUsersHandler",
+          "edge_id": "edge_d52d8e66111a",
+          "kind": "boundary",
+          "label": "makeUsersHandler",
+          "inferred": true
+        }
+      ]
+    }
+  ],
+  "boundary_markers": null
+}

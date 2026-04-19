@@ -1,0 +1,36 @@
+{
+  "root_node_id": "boundary_3c65b3ef7651",
+  "nodes": [
+    {
+      "id": "",
+      "canonical_name": "",
+      "short_name": "",
+      "role": "remote"
+    },
+    {
+      "id": "boundary_3c65b3ef7651",
+      "canonical_name": "ANY /users/factory",
+      "short_name": "ANY /users/factory",
+      "role": "root",
+      "repository_id": "repo_9a9aa066d950"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "boundary_3c65b3ef7651",
+      "to_id": "unresolved_makeUsersHandler",
+      "label": "makeUsersHandler",
+      "inferred": true,
+      "cross_repo": true,
+      "link_status": "external_only"
+    }
+  ],
+  "blocks": null,
+  "notes": [
+    {
+      "at_node_id": "unresolved_makeUsersHandler",
+      "text": "external-only boundary (no inbound match)",
+      "kind": "candidate"
+    }
+  ]
+}
