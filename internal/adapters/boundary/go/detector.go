@@ -13,6 +13,7 @@ import (
 type ParsedGoFile struct {
 	RepositoryID string
 	Path         string
+	PackageName  string
 	Content      []byte
 	Root         *tree_sitter.Node
 }
@@ -21,4 +22,10 @@ type ParsedGoFile struct {
 type BoundaryDetector interface {
 	Name() string
 	DetectBoundaries(file ParsedGoFile, symbols []symbol.Symbol) ([]boundaryroot.Root, []symbol.Diagnostic)
+}
+
+// PackageAwareDetector is an optional capability for detectors that need
+// package-scoped AST preparation before per-file boundary detection.
+type PackageAwareDetector interface {
+	PreparePackage(files []ParsedGoFile, symbols []symbol.Symbol) []symbol.Diagnostic
 }

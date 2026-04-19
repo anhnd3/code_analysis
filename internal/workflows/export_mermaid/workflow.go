@@ -1,16 +1,23 @@
 package export_mermaid
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"unicode"
 
 	"analysis-module/internal/domain/artifact"
 	"analysis-module/internal/domain/boundary"
+	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/entrypoint"
 	"analysis-module/internal/domain/flow"
+	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/quality"
 	"analysis-module/internal/domain/reduced"
-	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
+	"analysis-module/internal/domain/sequence"
 	"analysis-module/internal/domain/symbol"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	"analysis-module/internal/services/boundary_detect"
@@ -20,9 +27,6 @@ import (
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/mermaid_emit"
 	"analysis-module/internal/services/sequence_model_build"
-	"encoding/json"
-	"os"
-	"path/filepath"
 )
 
 // RootTypeFilter selects which entrypoint types to include.
@@ -35,6 +39,23 @@ const (
 	RootFilterSymbol    RootTypeFilter = "symbol"
 	RootFilterMaster    RootTypeFilter = "master"
 )
+
+type RootExportStatus string
+
+const (
+	RootExportRendered RootExportStatus = "rendered"
+	RootExportSkipped  RootExportStatus = "skipped"
+)
+
+// RootExport records the render outcome for a single resolved root.
+type RootExport struct {
+	RootNodeID    string           `json:"root_node_id"`
+	CanonicalName string           `json:"canonical_name"`
+	Slug          string           `json:"slug"`
+	Status        RootExportStatus `json:"status"`
+	Reason        string           `json:"reason,omitempty"`
+	ArtifactRefs  []artifact.Ref   `json:"artifact_refs,omitempty"`
+}
 
 // Request configures the export_mermaid workflow.
 type Request struct {
@@ -55,6 +76,7 @@ type Result struct {
 	WorkspaceID  string                     `json:"workspace_id"`
 	SnapshotID   string                     `json:"snapshot_id"`
 	ArtifactRefs []artifact.Ref             `json:"artifact_refs"`
+	RootExports  []RootExport               `json:"root_exports,omitempty"`
 	FlowMetrics  quality.FlowQualityMetrics `json:"flow_metrics"`
 	MermaidCode  string                     `json:"mermaid_code,omitempty"`
 }
@@ -94,12 +116,10 @@ func New(
 	}
 }
 
-// Run executes the complete Mermaid export pipeline:
-//
-//	resolve entrypoints → stitch flows → link boundaries
-//	→ reduce chain → build sequence model → emit mermaid → save artifacts → metrics
+// Run executes the complete Mermaid export pipeline.
 func (w Workflow) Run(req Request, inventory repository.Inventory, snapshot graph.GraphSnapshot) (Result, error) {
-	// 2. Resolve entrypoints
+	debug := debugBundle{dir: req.DebugBundleDir}
+
 	var symbols []symbol.Symbol
 	for _, node := range snapshot.Nodes {
 		if node.Kind == graph.NodeSymbol && node.Location != nil {
@@ -111,93 +131,300 @@ func (w Workflow) Run(req Request, inventory repository.Inventory, snapshot grap
 			})
 		}
 	}
-	detectedRoots, _ := w.boundaryDetect.DetectAll(inventory, symbols)
-	resolved, err := w.entrypointResolve.Resolve(snapshot, inventory, detectedRoots)
+
+	detected, err := w.boundaryDetect.DetectAllDetailed(inventory, symbols)
 	if err != nil {
+		return Result{}, fmt.Errorf("export_mermaid: detect boundaries: %w", err)
+	}
+	debug.boundaryRoots = detected.Roots
+	debug.boundaryDiagnostics = detected.Diagnostics
+	if err := debug.write(); err != nil {
+		return Result{}, fmt.Errorf("export_mermaid: write debug bundle: %w", err)
+	}
+
+	resolved, err := w.entrypointResolve.Resolve(snapshot, inventory, detected.Roots)
+	if err != nil {
+		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: resolve entrypoints: %w", err)
 	}
 	filtered := filterRoots(resolved, req)
-
-	// 3. Stitch flows
-	bundle, err := w.flowStitch.Build(snapshot, filtered, inventory)
-	if err != nil {
-		return Result{}, fmt.Errorf("export_mermaid: stitch flows: %w", err)
+	debug.resolvedRoots = filtered
+	if err := debug.write(); err != nil {
+		return Result{}, fmt.Errorf("export_mermaid: write debug bundle: %w", err)
+	}
+	if err := ensureNonEmptyRoots(filtered, req.RootType); err != nil {
+		_ = debug.write()
+		return Result{}, fmt.Errorf("export_mermaid: %w", err)
 	}
 
-	// 4. Link boundaries
-	links, err := w.crossBoundaryLink.Build(snapshot, inventory, bundle)
+	bundle, err := w.flowStitch.Build(snapshot, filtered, inventory)
+	debug.flowBundle = &bundle
 	if err != nil {
+		_ = debug.write()
+		return Result{}, fmt.Errorf("export_mermaid: stitch flows: %w", err)
+	}
+	if err := ensureNonEmptyChains(bundle); err != nil {
+		_ = debug.write()
+		return Result{}, fmt.Errorf("export_mermaid: %w", err)
+	}
+
+	links, err := w.crossBoundaryLink.Build(snapshot, inventory, bundle)
+	debug.boundaryBundle = &links
+	if err != nil {
+		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: link boundaries: %w", err)
 	}
 
-	// 5. Reduce chain
+	if usesPerRootHTTPExports(req, filtered) {
+		return w.runPerRootHTTPExports(req, snapshot, filtered, bundle, links, debug)
+	}
+	return w.runSingleRootExport(req, snapshot, filtered, bundle, links, debug)
+}
+
+func (w Workflow) runSingleRootExport(req Request, snapshot graph.GraphSnapshot, filtered entrypoint.Result, bundle flow.Bundle, links boundary.Bundle, debug debugBundle) (Result, error) {
 	reducedChain, err := w.chainReduce.Reduce(snapshot, bundle, links, chain_reduce.Request{
 		MaxDepth:     req.MaxDepth,
 		MaxBranches:  req.MaxBranches,
 		CollapseMode: req.CollapseMode,
 	})
+	debug.reducedChain = &reducedChain
 	if err != nil {
+		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: reduce chain: %w", err)
 	}
+	if err := ensureNonEmptyReducedChain(reducedChain); err != nil {
+		_ = debug.write()
+		return Result{}, fmt.Errorf("export_mermaid: %w", err)
+	}
 
-	// 6. Build sequence model
+	root := selectedRoot(filtered, reducedChain.RootNodeID)
+	if root.NodeID == "" && len(filtered.Roots) > 0 {
+		root = filtered.Roots[0]
+	}
+
 	diagram, err := w.sequenceModel.Build(reducedChain, sequence_model_build.Options{
 		Title:            diagramTitle(req),
 		ServiceShortName: req.ServiceShortName,
 	})
+	debug.sequenceModel = &diagram
 	if err != nil {
+		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: build sequence model: %w", err)
 	}
+	if err := ensureNonEmptySequence(diagram); err != nil {
+		_ = debug.write()
+		return Result{}, fmt.Errorf("export_mermaid: %w", err)
+	}
 
-	// 7. Emit Mermaid
 	mermaidCode, err := w.mermaidEmit.Emit(diagram)
+	debug.mermaidCode = mermaidCode
 	if err != nil {
+		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: emit mermaid: %w", err)
 	}
 
-	// 8. Save artifacts
 	var artifactRefs []artifact.Ref
-
 	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "flow_bundle.json", artifact.TypeFlowBundle, bundle); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
 	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "boundary_bundle.json", artifact.TypeBoundaryBundle, links); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
-	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "reduced_chain.json", artifact.TypeReducedChain, reducedChain); err == nil {
+
+	rootExport := RootExport{
+		RootNodeID:    root.NodeID,
+		CanonicalName: root.CanonicalName,
+		Slug:          rootExportSlug(root),
+		Status:        RootExportRendered,
+	}
+	rootArtifactRefs, err := w.saveSingleRenderArtifacts(req, reducedChain, diagram, mermaidCode)
+	if err != nil {
+		_ = debug.write()
+		return Result{}, fmt.Errorf("export_mermaid: save render artifacts: %w", err)
+	}
+	rootExport.ArtifactRefs = manifestArtifactRefs(req.WorkspaceID, rootArtifactRefs)
+	artifactRefs = append(artifactRefs, rootArtifactRefs...)
+	rootExports := []RootExport{rootExport}
+
+	debug.rootExports = rootExports
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "root_exports.json", artifact.TypeRootExports, rootExports); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
-	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "sequence_model.json", artifact.TypeSequenceModel, diagram); err == nil {
-		artifactRefs = append(artifactRefs, ref)
-	}
-	if mermaidCode != "" {
-		filename := mermaidFilename(req)
-		if ref, err := w.artifactStore.SaveText(req.WorkspaceID, req.SnapshotID, filename, artifact.TypeMermaidDiagram, mermaidCode); err == nil {
-			artifactRefs = append(artifactRefs, ref)
-		}
+	if err := debug.write(); err != nil {
+		return Result{}, fmt.Errorf("export_mermaid: write debug bundle: %w", err)
 	}
 
-	// 8.5. Emit debug bundle if requested
-	if req.DebugBundleDir != "" {
-		if err := os.MkdirAll(req.DebugBundleDir, 0755); err == nil {
-			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "boundary_roots.json"), detectedRoots)
-			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "flow_bundle.json"), bundle)
-			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "reduced_chain.json"), reducedChain)
-			_ = saveDebugJSON(filepath.Join(req.DebugBundleDir, "sequence_model.json"), diagram)
-			_ = os.WriteFile(filepath.Join(req.DebugBundleDir, "diagram.mmd"), []byte(mermaidCode), 0644)
-		}
-	}
-
-	// 9. Build metrics
-	metrics := buildFlowMetrics(filtered, bundle, links, reducedChain, mermaidCode)
-
+	metrics := buildFlowMetrics(filtered, bundle, links, rootExports)
 	return Result{
 		WorkspaceID:  req.WorkspaceID,
 		SnapshotID:   req.SnapshotID,
 		ArtifactRefs: artifactRefs,
+		RootExports:  rootExports,
 		FlowMetrics:  metrics,
 		MermaidCode:  mermaidCode,
 	}, nil
+}
+
+func (w Workflow) runPerRootHTTPExports(req Request, snapshot graph.GraphSnapshot, filtered entrypoint.Result, bundle flow.Bundle, links boundary.Bundle, debug debugBundle) (Result, error) {
+	chainByRoot := mapChainsByRoot(bundle.Chains)
+
+	rootExports := make([]RootExport, 0, len(filtered.Roots))
+	renderedOutputs := make([]rootRenderOutput, 0, len(filtered.Roots))
+	for _, root := range filtered.Roots {
+		export := RootExport{
+			RootNodeID:    root.NodeID,
+			CanonicalName: root.CanonicalName,
+			Slug:          rootExportSlug(root),
+		}
+
+		chain, ok := chainByRoot[root.NodeID]
+		if !ok {
+			export.Status = RootExportSkipped
+			export.Reason = "no stitched chain for root"
+			rootExports = append(rootExports, export)
+			continue
+		}
+
+		reducedChain, err := w.chainReduce.ReduceChain(snapshot, chain, bundle.BoundaryMarkers, links, chain_reduce.Request{
+			MaxDepth:     req.MaxDepth,
+			MaxBranches:  req.MaxBranches,
+			CollapseMode: req.CollapseMode,
+		})
+		if err != nil {
+			_ = debug.write()
+			return Result{}, fmt.Errorf("export_mermaid: reduce chain for %s: %w", root.CanonicalName, err)
+		}
+		if reducedChain.RootNodeID == "" {
+			export.Status = RootExportSkipped
+			export.Reason = "reduced chain is empty"
+			rootExports = append(rootExports, export)
+			continue
+		}
+
+		diagram, err := w.sequenceModel.Build(reducedChain, sequence_model_build.Options{
+			Title:            diagramTitleForRoot(req, root),
+			ServiceShortName: req.ServiceShortName,
+		})
+		if err != nil {
+			_ = debug.write()
+			return Result{}, fmt.Errorf("export_mermaid: build sequence model for %s: %w", root.CanonicalName, err)
+		}
+		if len(diagram.Participants) == 0 && len(diagram.Elements) == 0 {
+			export.Status = RootExportSkipped
+			export.Reason = "sequence model is empty"
+			rootExports = append(rootExports, export)
+			continue
+		}
+
+		mermaidCode, err := w.mermaidEmit.Emit(diagram)
+		if err != nil {
+			_ = debug.write()
+			return Result{}, fmt.Errorf("export_mermaid: emit mermaid for %s: %w", root.CanonicalName, err)
+		}
+
+		export.Status = RootExportRendered
+		rootExports = append(rootExports, export)
+		renderedOutputs = append(renderedOutputs, rootRenderOutput{
+			exportIndex:  len(rootExports) - 1,
+			reducedChain: reducedChain,
+			sequence:     diagram,
+			mermaidCode:  mermaidCode,
+		})
+	}
+
+	debug.rootExports = rootExports
+	if renderedRootCount(rootExports) == 0 {
+		if err := debug.write(); err != nil {
+			return Result{}, fmt.Errorf("export_mermaid: write debug bundle: %w", err)
+		}
+		return Result{}, fmt.Errorf("export_mermaid: no http roots produced renderable diagrams")
+	}
+
+	var artifactRefs []artifact.Ref
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "flow_bundle.json", artifact.TypeFlowBundle, bundle); err == nil {
+		artifactRefs = append(artifactRefs, ref)
+	}
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "boundary_bundle.json", artifact.TypeBoundaryBundle, links); err == nil {
+		artifactRefs = append(artifactRefs, ref)
+	}
+
+	for _, output := range renderedOutputs {
+		export := &rootExports[output.exportIndex]
+		refs, err := w.savePerRootArtifacts(req, export.Slug, output.reducedChain, output.sequence, output.mermaidCode)
+		if err != nil {
+			_ = debug.write()
+			return Result{}, fmt.Errorf("export_mermaid: save per-root artifacts for %s: %w", export.CanonicalName, err)
+		}
+		export.ArtifactRefs = manifestArtifactRefs(req.WorkspaceID, refs)
+		artifactRefs = append(artifactRefs, refs...)
+		debug.rootRenderOutputs = append(debug.rootRenderOutputs, rootRenderDebug{
+			Slug:         export.Slug,
+			ReducedChain: &output.reducedChain,
+			Sequence:     &output.sequence,
+			MermaidCode:  output.mermaidCode,
+		})
+	}
+
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "root_exports.json", artifact.TypeRootExports, rootExports); err == nil {
+		artifactRefs = append(artifactRefs, ref)
+	}
+	if err := debug.write(); err != nil {
+		return Result{}, fmt.Errorf("export_mermaid: write debug bundle: %w", err)
+	}
+
+	metrics := buildFlowMetrics(filtered, bundle, links, rootExports)
+	return Result{
+		WorkspaceID:  req.WorkspaceID,
+		SnapshotID:   req.SnapshotID,
+		ArtifactRefs: artifactRefs,
+		RootExports:  rootExports,
+		FlowMetrics:  metrics,
+		MermaidCode:  "",
+	}, nil
+}
+
+func (w Workflow) saveSingleRenderArtifacts(req Request, reducedChain reduced.Chain, diagram sequence.Diagram, mermaidCode string) ([]artifact.Ref, error) {
+	var refs []artifact.Ref
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "reduced_chain.json", artifact.TypeReducedChain, reducedChain); err != nil {
+		return nil, err
+	} else {
+		refs = append(refs, ref)
+	}
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "sequence_model.json", artifact.TypeSequenceModel, diagram); err != nil {
+		return nil, err
+	} else {
+		refs = append(refs, ref)
+	}
+	if mermaidCode != "" {
+		if ref, err := w.artifactStore.SaveText(req.WorkspaceID, req.SnapshotID, mermaidFilename(req), artifact.TypeMermaidDiagram, mermaidCode); err != nil {
+			return nil, err
+		} else {
+			refs = append(refs, ref)
+		}
+	}
+	return refs, nil
+}
+
+func (w Workflow) savePerRootArtifacts(req Request, slug string, reducedChain reduced.Chain, diagram sequence.Diagram, mermaidCode string) ([]artifact.Ref, error) {
+	var refs []artifact.Ref
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, reducedChainFilenameForRoot(slug), artifact.TypeReducedChain, reducedChain); err != nil {
+		return nil, err
+	} else {
+		refs = append(refs, ref)
+	}
+	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, sequenceModelFilenameForRoot(slug), artifact.TypeSequenceModel, diagram); err != nil {
+		return nil, err
+	} else {
+		refs = append(refs, ref)
+	}
+	if mermaidCode != "" {
+		if ref, err := w.artifactStore.SaveText(req.WorkspaceID, req.SnapshotID, mermaidFilenameForRoot(req, slug), artifact.TypeMermaidDiagram, mermaidCode); err != nil {
+			return nil, err
+		} else {
+			refs = append(refs, ref)
+		}
+	}
+	return refs, nil
 }
 
 func diagramTitle(req Request) string {
@@ -208,6 +435,13 @@ func diagramTitle(req Request) string {
 		return req.RootSelector
 	}
 	return string(req.RootType) + " flow"
+}
+
+func diagramTitleForRoot(req Request, root entrypoint.Root) string {
+	if req.ServiceShortName != "" {
+		return req.ServiceShortName + " — " + root.CanonicalName
+	}
+	return root.CanonicalName
 }
 
 func mermaidFilename(req Request) string {
@@ -222,12 +456,25 @@ func mermaidFilename(req Request) string {
 	return base + "_" + suffix + ".mmd"
 }
 
-func filterRoots(full entrypoint.Result, req Request) entrypoint.Result {
-	if req.RootType == RootFilterMaster || req.RootType == "" {
-		return full
+func mermaidFilenameForRoot(req Request, slug string) string {
+	suffix := string(req.RootType)
+	if suffix == "" {
+		suffix = "master"
 	}
+	return "diagram_" + suffix + "__" + slug + ".mmd"
+}
 
+func reducedChainFilenameForRoot(slug string) string {
+	return "reduced_chain__" + slug + ".json"
+}
+
+func sequenceModelFilenameForRoot(slug string) string {
+	return "sequence_model__" + slug + ".json"
+}
+
+func filterRoots(full entrypoint.Result, req Request) entrypoint.Result {
 	var kind entrypoint.RootType
+	filterByType := true
 	switch req.RootType {
 	case RootFilterBootstrap:
 		kind = entrypoint.RootBootstrap
@@ -235,18 +482,172 @@ func filterRoots(full entrypoint.Result, req Request) entrypoint.Result {
 		kind = entrypoint.RootHTTP
 	case RootFilterWorker:
 		kind = entrypoint.RootWorker
+	case RootFilterMaster, "":
+		filterByType = false
+	default:
+		filterByType = false
 	}
 
 	var filtered []entrypoint.Root
-	for _, r := range full.Roots {
-		if r.RootType == kind {
-			filtered = append(filtered, r)
-		} else if req.RootSelector != "" && r.CanonicalName == req.RootSelector {
-			filtered = append(filtered, r)
+	for _, root := range full.Roots {
+		matchesType := !filterByType || root.RootType == kind
+		matchesSelector := req.RootSelector == "" || root.CanonicalName == req.RootSelector || root.NodeID == req.RootSelector
+		if matchesType && matchesSelector {
+			filtered = append(filtered, root)
+		}
+	}
+	return entrypoint.Result{Roots: filtered}
+}
+
+type debugBundle struct {
+	dir                 string
+	boundaryRoots       []boundaryroot.Root
+	boundaryDiagnostics []symbol.Diagnostic
+	resolvedRoots       entrypoint.Result
+	flowBundle          *flow.Bundle
+	boundaryBundle      *boundary.Bundle
+	rootExports         []RootExport
+	reducedChain        *reduced.Chain
+	sequenceModel       *sequence.Diagram
+	mermaidCode         string
+	rootRenderOutputs   []rootRenderDebug
+}
+
+type rootRenderDebug struct {
+	Slug         string
+	ReducedChain *reduced.Chain
+	Sequence     *sequence.Diagram
+	MermaidCode  string
+}
+
+func (d debugBundle) write() error {
+	if d.dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(d.dir, 0o755); err != nil {
+		return err
+	}
+
+	roots := d.boundaryRoots
+	if roots == nil {
+		roots = []boundaryroot.Root{}
+	}
+	if err := saveDebugJSON(filepath.Join(d.dir, "boundary_roots.json"), roots); err != nil {
+		return err
+	}
+
+	diagnostics := d.boundaryDiagnostics
+	if diagnostics == nil {
+		diagnostics = []symbol.Diagnostic{}
+	}
+	if err := saveDebugJSON(filepath.Join(d.dir, "boundary_diagnostics.json"), diagnostics); err != nil {
+		return err
+	}
+
+	resolvedRoots := d.resolvedRoots
+	if resolvedRoots.Roots == nil {
+		resolvedRoots.Roots = []entrypoint.Root{}
+	}
+	if err := saveDebugJSON(filepath.Join(d.dir, "resolved_roots.json"), resolvedRoots); err != nil {
+		return err
+	}
+
+	if d.flowBundle != nil {
+		if err := saveDebugJSON(filepath.Join(d.dir, "flow_bundle.json"), d.flowBundle); err != nil {
+			return err
+		}
+	}
+	if d.boundaryBundle != nil {
+		if err := saveDebugJSON(filepath.Join(d.dir, "boundary_bundle.json"), d.boundaryBundle); err != nil {
+			return err
 		}
 	}
 
-	return entrypoint.Result{Roots: filtered}
+	rootExports := d.rootExports
+	if rootExports == nil {
+		rootExports = []RootExport{}
+	}
+	if err := saveDebugJSON(filepath.Join(d.dir, "root_exports.json"), rootExports); err != nil {
+		return err
+	}
+
+	if d.reducedChain != nil {
+		if err := saveDebugJSON(filepath.Join(d.dir, "reduced_chain.json"), d.reducedChain); err != nil {
+			return err
+		}
+	}
+	if d.sequenceModel != nil {
+		if err := saveDebugJSON(filepath.Join(d.dir, "sequence_model.json"), d.sequenceModel); err != nil {
+			return err
+		}
+	}
+	if d.mermaidCode != "" {
+		if err := os.WriteFile(filepath.Join(d.dir, "diagram.mmd"), []byte(d.mermaidCode), 0o644); err != nil {
+			return err
+		}
+	}
+
+	for _, rootDebug := range d.rootRenderOutputs {
+		if rootDebug.Slug == "" {
+			continue
+		}
+		rootDir := filepath.Join(d.dir, "roots", rootDebug.Slug)
+		if err := os.MkdirAll(rootDir, 0o755); err != nil {
+			return err
+		}
+		if rootDebug.ReducedChain != nil {
+			if err := saveDebugJSON(filepath.Join(rootDir, "reduced_chain.json"), rootDebug.ReducedChain); err != nil {
+				return err
+			}
+		}
+		if rootDebug.Sequence != nil {
+			if err := saveDebugJSON(filepath.Join(rootDir, "sequence_model.json"), rootDebug.Sequence); err != nil {
+				return err
+			}
+		}
+		if rootDebug.MermaidCode != "" {
+			if err := os.WriteFile(filepath.Join(rootDir, "diagram.mmd"), []byte(rootDebug.MermaidCode), 0o644); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func ensureNonEmptyRoots(result entrypoint.Result, rootType RootTypeFilter) error {
+	if len(result.Roots) > 0 {
+		return nil
+	}
+	return fmt.Errorf("no %s roots remained after entrypoint resolution", effectiveRootType(rootType))
+}
+
+func ensureNonEmptyChains(bundle flow.Bundle) error {
+	if len(bundle.Chains) > 0 {
+		return nil
+	}
+	return fmt.Errorf("no rooted execution chains were stitched from the resolved roots")
+}
+
+func ensureNonEmptyReducedChain(chain reduced.Chain) error {
+	if chain.RootNodeID != "" {
+		return nil
+	}
+	return fmt.Errorf("reduced chain is empty because no rooted chain survived reduction")
+}
+
+func ensureNonEmptySequence(diagram sequence.Diagram) error {
+	if len(diagram.Participants) != 0 || len(diagram.Elements) != 0 {
+		return nil
+	}
+	return fmt.Errorf("sequence model is empty because no participants or elements were produced")
+}
+
+func effectiveRootType(rootType RootTypeFilter) string {
+	if rootType == "" {
+		return string(RootFilterMaster)
+	}
+	return string(rootType)
 }
 
 func saveDebugJSON(path string, data any) error {
@@ -254,18 +655,18 @@ func saveDebugJSON(path string, data any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, bytes, 0644)
+	return os.WriteFile(path, bytes, 0o644)
 }
 
-func buildFlowMetrics(roots entrypoint.Result, bundle flow.Bundle, links boundary.Bundle, chain reduced.Chain, mermaidCode string) quality.FlowQualityMetrics {
+func buildFlowMetrics(roots entrypoint.Result, bundle flow.Bundle, links boundary.Bundle, rootExports []RootExport) quality.FlowQualityMetrics {
 	stitchedEdges := 0
-	for _, c := range bundle.Chains {
-		stitchedEdges += len(c.Steps)
+	for _, chain := range bundle.Chains {
+		stitchedEdges += len(chain.Steps)
 	}
 
 	confirmed, subset, candidate, mismatch, externalOnly := 0, 0, 0, 0, 0
-	for _, l := range links.Links {
-		switch l.Status {
+	for _, link := range links.Links {
+		switch link.Status {
 		case boundary.StatusConfirmed:
 			confirmed++
 		case boundary.StatusCompatibleSubset:
@@ -279,26 +680,111 @@ func buildFlowMetrics(roots entrypoint.Result, bundle flow.Bundle, links boundar
 		}
 	}
 
-	reducedChains := 0
-	if chain.RootNodeID != "" {
-		reducedChains = 1
-	}
-
-	mermaidGenerated := 0
-	if mermaidCode != "" {
-		mermaidGenerated = 1
-	}
-
+	rendered := renderedRootCount(rootExports)
 	return quality.FlowQualityMetrics{
-		ResolvedEntrypoints:    len(roots.Roots),
-		StitchedEdges:          stitchedEdges,
-		BoundaryMarkers:        len(bundle.BoundaryMarkers),
-		ConfirmedLinks:         confirmed,
-		SubsetCompatibleLinks:  subset,
-		CandidateLinks:         candidate,
-		MismatchLinks:          mismatch,
-		ExternalOnlyLinks:      externalOnly,
-		ReducedChainsGenerated: reducedChains,
-		MermaidExportsGenerated: mermaidGenerated,
+		ResolvedEntrypoints:     len(roots.Roots),
+		StitchedEdges:           stitchedEdges,
+		BoundaryMarkers:         len(bundle.BoundaryMarkers),
+		ConfirmedLinks:          confirmed,
+		SubsetCompatibleLinks:   subset,
+		CandidateLinks:          candidate,
+		MismatchLinks:           mismatch,
+		ExternalOnlyLinks:       externalOnly,
+		ReducedChainsGenerated:  rendered,
+		MermaidExportsGenerated: rendered,
 	}
+}
+
+func usesPerRootHTTPExports(req Request, roots entrypoint.Result) bool {
+	return req.RootType == RootFilterHTTP && req.RootSelector == "" && len(roots.Roots) > 1
+}
+
+func mapChainsByRoot(chains []flow.Chain) map[string]flow.Chain {
+	result := make(map[string]flow.Chain, len(chains))
+	for _, chain := range chains {
+		result[chain.RootNodeID] = chain
+	}
+	return result
+}
+
+func selectedRoot(result entrypoint.Result, nodeID string) entrypoint.Root {
+	for _, root := range result.Roots {
+		if root.NodeID == nodeID {
+			return root
+		}
+	}
+	return entrypoint.Root{}
+}
+
+func renderedRootCount(rootExports []RootExport) int {
+	count := 0
+	for _, rootExport := range rootExports {
+		if rootExport.Status == RootExportRendered {
+			count++
+		}
+	}
+	return count
+}
+
+func manifestArtifactRefs(workspaceID string, refs []artifact.Ref) []artifact.Ref {
+	manifestRefs := make([]artifact.Ref, 0, len(refs))
+	for _, ref := range refs {
+		manifestRefs = append(manifestRefs, artifact.Ref{
+			Type:        ref.Type,
+			WorkspaceID: workspaceID,
+			Path:        filepath.Base(ref.Path),
+		})
+	}
+	return manifestRefs
+}
+
+type rootRenderOutput struct {
+	exportIndex  int
+	reducedChain reduced.Chain
+	sequence     sequence.Diagram
+	mermaidCode  string
+}
+
+func rootExportSlug(root entrypoint.Root) string {
+	base := slugify(root.CanonicalName)
+	if base == "" {
+		base = "root"
+	}
+	suffix := stableIDSuffix(root.NodeID)
+	return base + "__" + suffix
+}
+
+func stableIDSuffix(id string) string {
+	if id == "" {
+		return "unknown"
+	}
+	if idx := strings.LastIndex(id, "_"); idx >= 0 && idx+1 < len(id) {
+		id = id[idx+1:]
+	}
+	if len(id) > 8 {
+		id = id[len(id)-8:]
+	}
+	return strings.ToLower(id)
+}
+
+func slugify(value string) string {
+	var builder strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(value) {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r):
+			builder.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash {
+				builder.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	slug := strings.Trim(builder.String(), "-")
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
+	return slug
 }

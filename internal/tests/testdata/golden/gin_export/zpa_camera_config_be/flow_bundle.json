@@ -1,4 +1,18 @@
 {
-  "chains": null,
+  "chains": [
+    {
+      "root_node_id": "boundary_88620620b9a0",
+      "repository_id": "repo_fd3d4c19ea25",
+      "steps": [
+        {
+          "from_node_id": "boundary_88620620b9a0",
+          "to_node_id": "node_a735dc66f1de",
+          "edge_id": "edge_7818736ebaf1",
+          "kind": "boundary",
+          "label": "GetConfig"
+        }
+      ]
+    }
+  ],
   "boundary_markers": null
 }

@@ -1,0 +1,25 @@
+[
+  {
+    "root_node_id": "boundary_0d91223701f8",
+    "canonical_name": "GET /ping",
+    "slug": "get-ping__223701f8",
+    "status": "rendered",
+    "artifact_refs": [
+      {
+        "type": "reduced_chain",
+        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "path": "reduced_chain.json"
+      },
+      {
+        "type": "sequence_model",
+        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "path": "sequence_model.json"
+      },
+      {
+        "type": "mermaid_diagram",
+        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "path": "diagram_http.mmd"
+      }
+    ]
+  }
+]

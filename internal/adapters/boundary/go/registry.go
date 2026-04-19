@@ -37,6 +37,21 @@ type registryEntry struct {
 	key string
 }
 
+func diagnosticKey(diag symbol.Diagnostic) string {
+	return fmt.Sprintf("%s|%s|%s|%s|%s", diag.Category, diag.FilePath, diag.SymbolID, diag.Message, diag.Evidence)
+}
+
+func sortDiagnostics(diags []symbol.Diagnostic) {
+	sort.Slice(diags, func(i, j int) bool {
+		left := diagnosticKey(diags[i])
+		right := diagnosticKey(diags[j])
+		if left != right {
+			return left < right
+		}
+		return diags[i].FilePath < diags[j].FilePath
+	})
+}
+
 // dedupKey builds the normalized identity used to collapse duplicate detector output.
 func dedupKey(root boundaryroot.Root) string {
 	return fmt.Sprintf(
@@ -97,20 +112,45 @@ func resultWins(candidate, existing registryEntry) bool {
 	return candidate.Root.ID < existing.Root.ID
 }
 
+// PreparePackage runs package-scoped preparation for detectors that support it.
+// Output is sorted and deduplicated to remain stable across detector order.
+func (r *Registry) PreparePackage(files []ParsedGoFile, symbols []symbol.Symbol) []symbol.Diagnostic {
+	seen := map[string]symbol.Diagnostic{}
+	for _, detector := range r.detectors {
+		packageAware, ok := detector.(PackageAwareDetector)
+		if !ok {
+			continue
+		}
+		for _, diag := range packageAware.PreparePackage(files, symbols) {
+			seen[diagnosticKey(diag)] = diag
+		}
+	}
+
+	var diags []symbol.Diagnostic
+	for _, diag := range seen {
+		diags = append(diags, diag)
+	}
+	sortDiagnostics(diags)
+	return diags
+}
+
 // DetectAll runs all registered detectors on the given file and returns de-duplicated results.
 // Collisions are resolved deterministically so output ordering does not depend on detector
 // registration order or map iteration order.
-func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Result {
+func (r *Registry) DetectAllDetailed(file ParsedGoFile, symbols []symbol.Symbol) ([]Result, []symbol.Diagnostic) {
 	// Collect raw results from all detectors.
 	var raw []registryEntry
+	diagByKey := map[string]symbol.Diagnostic{}
 	for _, d := range r.detectors {
 		roots, diags := d.DetectBoundaries(file, symbols)
+		for _, diag := range diags {
+			diagByKey[diagnosticKey(diag)] = diag
+		}
 		for _, root := range roots {
 			raw = append(raw, registryEntry{
 				Result: Result{
-					Root:        root,
-					Diagnostics: diags,
-					Detector:    d.Name(),
+					Root:     root,
+					Detector: d.Name(),
 				},
 				key: dedupKey(root),
 			})
@@ -157,8 +197,10 @@ func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Resul
 
 	var out []Result
 	for key, win := range winnersByKey {
-		win.Diagnostics = append(win.Diagnostics, diagsByKey[key]...)
 		out = append(out, win.Result)
+		for _, diag := range diagsByKey[key] {
+			diagByKey[diagnosticKey(diag)] = diag
+		}
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -173,5 +215,16 @@ func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Resul
 		return left.Root.ID < right.Root.ID
 	})
 
-	return out
+	var diags []symbol.Diagnostic
+	for _, diag := range diagByKey {
+		diags = append(diags, diag)
+	}
+	sortDiagnostics(diags)
+	return out, diags
+}
+
+// DetectAll preserves the previous roots-only call shape for existing callers.
+func (r *Registry) DetectAll(file ParsedGoFile, symbols []symbol.Symbol) []Result {
+	results, _ := r.DetectAllDetailed(file, symbols)
+	return results
 }

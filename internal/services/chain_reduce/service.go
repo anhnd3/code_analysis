@@ -43,14 +43,24 @@ func (s Service) Reduce(snapshot graph.GraphSnapshot, flows flow.Bundle, links b
 		return reduced.Chain{}, nil
 	}
 
-	cfg := normalizeConfig(req)
-	idx := newReduceIndex(snapshot, flows, links)
+	return s.ReduceChain(snapshot, flows.Chains[0], flows.BoundaryMarkers, links, req)
+}
 
-	// Use the first flow chain as the primary chain to reduce
-	primary := flows.Chains[0]
+// ReduceChain reduces one pre-selected stitched chain while still using the
+// aggregate boundary markers and link bundle for cross-boundary shaping.
+func (s Service) ReduceChain(snapshot graph.GraphSnapshot, chain flow.Chain, markers []flow.BoundaryMarker, links boundary.Bundle, req Request) (reduced.Chain, error) {
+	if chain.RootNodeID == "" {
+		return reduced.Chain{}, nil
+	}
+
+	cfg := normalizeConfig(req)
+	idx := newReduceIndex(snapshot, flow.Bundle{
+		Chains:          []flow.Chain{chain},
+		BoundaryMarkers: markers,
+	}, links)
 
 	// Build reduced nodes and edges
-	nodes, edges, blocks, notes := s.walkAndReduce(primary, idx, cfg, snapshot)
+	nodes, edges, blocks, notes := s.walkAndReduce(chain, idx, cfg, snapshot)
 
 	// Sort for deterministic output
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
@@ -63,7 +73,7 @@ func (s Service) Reduce(snapshot graph.GraphSnapshot, flows flow.Bundle, links b
 	sort.Slice(notes, func(i, j int) bool { return notes[i].AtNodeID < notes[j].AtNodeID })
 
 	return reduced.Chain{
-		RootNodeID: primary.RootNodeID,
+		RootNodeID: chain.RootNodeID,
 		Nodes:      nodes,
 		Edges:      edges,
 		Blocks:     blocks,
@@ -151,7 +161,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 		crossRepo := false
 		linkStatus := ""
 		fromGraphNode := idx.nodeByID[step.FromNodeID]
-		
+
 		if strings.HasPrefix(step.ToNodeID, "unresolved_") {
 			crossRepo = true
 			linkStatus = idx.linkStatusBetween(step.FromNodeID, step.ToNodeID)
@@ -164,7 +174,7 @@ func (s Service) walkAndReduce(chain flow.Chain, idx *reduceIndex, cfg reduceCon
 			crossRepo = true
 			linkStatus = idx.linkStatusBetween(step.FromNodeID, step.ToNodeID)
 		}
-		
+
 		if crossRepo {
 			// Cross-project crossing rules
 			switch boundary.LinkStatus(linkStatus) {
@@ -387,7 +397,7 @@ func isStdlibWrapper(name string) bool {
 
 func (s Service) toReducedNode(gn graph.Node, role reduced.NodeRole, snapshot graph.GraphSnapshot) reduced.Node {
 	class := s.classifier.Classify(gn, snapshot)
-	
+
 	return reduced.Node{
 		ID:            gn.ID,
 		CanonicalName: gn.CanonicalName,

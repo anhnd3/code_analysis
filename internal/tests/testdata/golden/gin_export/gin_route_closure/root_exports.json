@@ -1,0 +1,25 @@
+[
+  {
+    "root_node_id": "boundary_717f7eb5ed69",
+    "canonical_name": "GET /closure",
+    "slug": "get-closure__7eb5ed69",
+    "status": "rendered",
+    "artifact_refs": [
+      {
+        "type": "reduced_chain",
+        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "path": "reduced_chain.json"
+      },
+      {
+        "type": "sequence_model",
+        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "path": "sequence_model.json"
+      },
+      {
+        "type": "mermaid_diagram",
+        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "path": "diagram_http.mmd"
+      }
+    ]
+  }
+]

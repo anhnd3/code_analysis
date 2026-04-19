@@ -1,0 +1,25 @@
+[
+  {
+    "root_node_id": "boundary_88620620b9a0",
+    "canonical_name": "GET /api/v1/camera/config",
+    "slug": "get-api-v1-camera-config__0620b9a0",
+    "status": "rendered",
+    "artifact_refs": [
+      {
+        "type": "reduced_chain",
+        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "path": "reduced_chain.json"
+      },
+      {
+        "type": "sequence_model",
+        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "path": "sequence_model.json"
+      },
+      {
+        "type": "mermaid_diagram",
+        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "path": "diagram_http.mmd"
+      }
+    ]
+  }
+]

@@ -16,6 +16,7 @@ const (
 	TypeImpactedTests       Type = "impacted_tests"
 	TypeFlowBundle          Type = "flow_bundle"
 	TypeBoundaryBundle      Type = "boundary_bundle"
+	TypeRootExports         Type = "root_exports"
 	TypeReducedChain        Type = "reduced_chain"
 	TypeSequenceModel       Type = "sequence_model"
 	TypeMermaidDiagram      Type = "mermaid_diagram"

@@ -1,0 +1,165 @@
+package export_mermaid_test
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"analysis-module/internal/app/bootstrap"
+	"analysis-module/internal/app/config"
+	"analysis-module/internal/app/logging"
+	"analysis-module/internal/domain/graph"
+	"analysis-module/internal/domain/repository"
+	"analysis-module/internal/tests/fixtures"
+	"analysis-module/internal/workflows/build_snapshot"
+	"analysis-module/internal/workflows/export_mermaid"
+)
+
+func TestWorkflowFailsOnEmptyRootsAndWritesDebugBundle(t *testing.T) {
+	app := newWorkflowTestApplication(t)
+	debugDir := t.TempDir()
+
+	_, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:    "ws_test",
+		SnapshotID:     "snap_test",
+		RootType:       export_mermaid.RootFilterHTTP,
+		DebugBundleDir: debugDir,
+	}, repository.Inventory{}, graph.GraphSnapshot{})
+	if err == nil {
+		t.Fatal("expected export to fail when no rooted flow exists")
+	}
+	if !strings.Contains(err.Error(), "no http roots remained") {
+		t.Fatalf("expected explicit empty-root failure, got %v", err)
+	}
+
+	for _, name := range []string{"boundary_roots.json", "boundary_diagnostics.json", "resolved_roots.json"} {
+		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
+			t.Fatalf("expected debug artifact %s on empty-root failure: %v", name, statErr)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(debugDir, "flow_bundle.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected flow_bundle.json to be absent before flow stitching, got %v", statErr)
+	}
+}
+
+func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
+	app := newWorkflowTestApplication(t)
+	workspace := fixtures.WorkspacePath(t, "gin_accessor_hardening")
+
+	snapshotResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath: workspace,
+	})
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+
+	debugDir := t.TempDir()
+	result, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:    snapshotResult.WorkspaceID,
+		SnapshotID:     snapshotResult.Snapshot.ID,
+		RootType:       export_mermaid.RootFilterHTTP,
+		DebugBundleDir: debugDir,
+	}, snapshotResult.Inventory, snapshotResult.Snapshot)
+	if err != nil {
+		t.Fatalf("export mermaid: %v", err)
+	}
+	if result.MermaidCode != "" {
+		t.Fatalf("expected multi-root export to leave MermaidCode empty, got %q", result.MermaidCode)
+	}
+	if len(result.RootExports) <= 1 {
+		t.Fatalf("expected multi-root per-root exports, got %+v", result.RootExports)
+	}
+
+	for _, name := range []string{"boundary_roots.json", "boundary_diagnostics.json", "resolved_roots.json", "flow_bundle.json", "boundary_bundle.json", "root_exports.json"} {
+		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
+			t.Fatalf("expected debug artifact %s after successful export: %v", name, statErr)
+		}
+	}
+	for _, unexpected := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd"} {
+		if _, statErr := os.Stat(filepath.Join(debugDir, unexpected)); !os.IsNotExist(statErr) {
+			t.Fatalf("expected multi-root export to skip %s at debug root, got %v", unexpected, statErr)
+		}
+	}
+
+	rootExports := readRootExportsFile(t, filepath.Join(debugDir, "root_exports.json"))
+	if len(rootExports) != len(result.RootExports) {
+		t.Fatalf("expected debug root export manifest to mirror result, got %d vs %d", len(rootExports), len(result.RootExports))
+	}
+	for _, rootExport := range rootExports {
+		if rootExport.Status != export_mermaid.RootExportRendered {
+			t.Fatalf("expected rendered accessor root export, got %+v", rootExport)
+		}
+		for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd"} {
+			if _, statErr := os.Stat(filepath.Join(debugDir, "roots", rootExport.Slug, name)); statErr != nil {
+				t.Fatalf("expected per-root debug artifact %s for %s: %v", name, rootExport.Slug, statErr)
+			}
+		}
+	}
+}
+
+func TestWorkflowPreservesSingleRootSelectorBehavior(t *testing.T) {
+	app := newWorkflowTestApplication(t)
+	workspace := fixtures.WorkspacePath(t, "gin_accessor_hardening")
+
+	snapshotResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
+		WorkspacePath: workspace,
+	})
+	if err != nil {
+		t.Fatalf("build snapshot: %v", err)
+	}
+
+	debugDir := t.TempDir()
+	result, err := app.ExportMermaid.Run(export_mermaid.Request{
+		WorkspaceID:    snapshotResult.WorkspaceID,
+		SnapshotID:     snapshotResult.Snapshot.ID,
+		RootType:       export_mermaid.RootFilterHTTP,
+		RootSelector:   "GET /health",
+		DebugBundleDir: debugDir,
+	}, snapshotResult.Inventory, snapshotResult.Snapshot)
+	if err != nil {
+		t.Fatalf("export mermaid with selector: %v", err)
+	}
+	if result.MermaidCode == "" || result.MermaidCode == "sequenceDiagram\n" {
+		t.Fatalf("expected selector-narrowed single-root Mermaid output, got %q", result.MermaidCode)
+	}
+	if len(result.RootExports) != 1 || result.RootExports[0].CanonicalName != "GET /health" {
+		t.Fatalf("expected one selected root export, got %+v", result.RootExports)
+	}
+	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json"} {
+		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
+			t.Fatalf("expected single-root debug artifact %s: %v", name, statErr)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(debugDir, "roots")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no per-root debug directory in single-root mode, got %v", statErr)
+	}
+}
+
+func newWorkflowTestApplication(t *testing.T) *bootstrap.Application {
+	t.Helper()
+
+	cfg := config.Default()
+	cfg.ArtifactRoot = t.TempDir()
+	cfg.SQLitePath = filepath.Join(cfg.ArtifactRoot, "analysis.sqlite")
+	app, err := bootstrap.New(cfg, logging.New())
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	return app
+}
+
+func readRootExportsFile(t *testing.T, path string) []export_mermaid.RootExport {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var exports []export_mermaid.RootExport
+	if err := json.Unmarshal(data, &exports); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	return exports
+}

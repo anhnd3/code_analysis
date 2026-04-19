@@ -12,7 +12,6 @@ import (
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/flow"
 	"analysis-module/internal/domain/graph"
-	"analysis-module/internal/domain/sequence"
 	"analysis-module/internal/tests/fixtures"
 	"analysis-module/internal/workflows/build_snapshot"
 	"analysis-module/internal/workflows/export_mermaid"
@@ -53,7 +52,7 @@ type ginBoundaryHardeningRun struct {
 	snapshot build_snapshot.Result
 	roots    []boundaryroot.Root
 	flow     flow.Bundle
-	sequence sequence.Diagram
+	exports  []export_mermaid.RootExport
 }
 
 func runGinBoundaryHardeningE2E(t *testing.T, app *bootstrap.Application, workspace string) ginBoundaryHardeningRun {
@@ -83,14 +82,14 @@ func runGinBoundaryHardeningE2E(t *testing.T, app *bootstrap.Application, worksp
 	var flowBundle flow.Bundle
 	readJSONFile(t, filepath.Join(debugDir, "flow_bundle.json"), &flowBundle)
 
-	var diagram sequence.Diagram
-	readJSONFile(t, filepath.Join(debugDir, "sequence_model.json"), &diagram)
+	var rootExports []export_mermaid.RootExport
+	readJSONFile(t, filepath.Join(debugDir, "root_exports.json"), &rootExports)
 
 	return ginBoundaryHardeningRun{
 		snapshot: buildResult,
 		roots:    roots,
 		flow:     flowBundle,
-		sequence: diagram,
+		exports:  rootExports,
 	}
 }
 
@@ -177,9 +176,16 @@ func assertGinBoundaryHardeningResult(t *testing.T, result ginBoundaryHardeningR
 		}
 	}
 
-	participantLabels := participantLabels(result.sequence)
-	if slices.Contains(participantLabels, "Any /zlp_token") || slices.Contains(participantLabels, "Any /error") {
-		t.Fatalf("expected sequence model to exclude false-positive Any participants, got %v", participantLabels)
+	if len(result.exports) != len(result.roots) {
+		t.Fatalf("expected one root export per boundary root, got %d exports for %d roots", len(result.exports), len(result.roots))
+	}
+	for _, rootExport := range result.exports {
+		if rootExport.Status != export_mermaid.RootExportRendered {
+			t.Fatalf("expected rendered root export, got %+v", rootExport)
+		}
+		if strings.Contains(rootExport.CanonicalName, "Any /") {
+			t.Fatalf("expected rendered exports to exclude false-positive Any roots, got %+v", rootExport)
+		}
 	}
 }
 
@@ -240,14 +246,6 @@ func registerEdgeFrom(edges []graph.Edge, from string) (graph.Edge, bool) {
 		}
 	}
 	return graph.Edge{}, false
-}
-
-func participantLabels(diagram sequence.Diagram) []string {
-	labels := make([]string, 0, len(diagram.Participants))
-	for _, participant := range diagram.Participants {
-		labels = append(labels, participant.Label)
-	}
-	return labels
 }
 
 func readJSONFile(t *testing.T, path string, dest any) {

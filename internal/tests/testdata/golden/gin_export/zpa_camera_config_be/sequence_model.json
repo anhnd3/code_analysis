@@ -1,4 +1,25 @@
 {
-  "participants": null,
-  "elements": null
+  "title": "http flow",
+  "participants": [
+    {
+      "id": "boundary_88620620b9a0",
+      "label": "GET /api/v1/camera/config",
+      "short_name": "GET /api/v1/camera/config"
+    },
+    {
+      "id": "node_a735dc66f1de",
+      "label": "GetConfig",
+      "short_name": "GetConfig"
+    }
+  ],
+  "elements": [
+    {
+      "message": {
+        "from_id": "boundary_88620620b9a0",
+        "to_id": "node_a735dc66f1de",
+        "label": "GetConfig",
+        "kind": "sync"
+      }
+    }
+  ]
 }

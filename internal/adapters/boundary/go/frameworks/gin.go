@@ -1,19 +1,30 @@
 package frameworks
 
 import (
-	"analysis-module/internal/adapters/boundary/go"
+	boundary "analysis-module/internal/adapters/boundary/go"
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/symbol"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
-type GinDetector struct{}
+type GinDetector struct {
+	packageStates map[string]*ginPackageState
+}
 
 type ginContext struct {
 	prefix     string
 	aliasDepth int
+}
+
+type ginPackageState struct {
+	fieldContexts   map[string]map[string]ginContext
+	methodProviders map[string]map[string]ginContext
+	functions       map[string]ginContext
 }
 
 var ginRouteMethods = map[string]bool{
@@ -28,104 +39,248 @@ var ginRouteMethods = map[string]bool{
 }
 
 func NewGinDetector() *GinDetector {
-	return &GinDetector{}
+	return &GinDetector{
+		packageStates: map[string]*ginPackageState{},
+	}
 }
 
 func (d *GinDetector) Name() string {
 	return "gin"
 }
 
+func (d *GinDetector) PreparePackage(files []boundary.ParsedGoFile, _ []symbol.Symbol) []symbol.Diagnostic {
+	if len(files) == 0 {
+		return nil
+	}
+
+	state := newGinPackageState()
+	for iteration := 0; iteration < 3; iteration++ {
+		changed := false
+		for _, file := range files {
+			changed = d.prepareFile(file, state) || changed
+		}
+		if !changed {
+			break
+		}
+	}
+
+	d.packageStates[d.packageKey(files[0])] = state
+	return nil
+}
+
 func (d *GinDetector) DetectBoundaries(file boundary.ParsedGoFile, symbols []symbol.Symbol) ([]boundaryroot.Root, []symbol.Diagnostic) {
 	var roots []boundaryroot.Root
 	var diags []symbol.Diagnostic
+
+	state := d.packageStates[d.packageKey(file)]
 
 	walk(file.Root, func(n *tree_sitter.Node) bool {
 		switch n.Kind() {
 		case "function_declaration", "method_declaration", "func_literal":
 			body := n.ChildByFieldName("body")
-			if body != nil && body.Kind() == "block" {
-				roots = append(roots, d.processBlock(body, file, symbols, map[string]ginContext{})...)
+			if body == nil || body.Kind() != "block" {
+				return false
 			}
+			receiverEnv := receiverAliasesForDeclaration(n, file.Content)
+			foundRoots, foundDiags := d.processBlock(body, file, symbols, map[string]ginContext{}, receiverEnv, state)
+			roots = append(roots, foundRoots...)
+			diags = append(diags, foundDiags...)
 			return false
 		default:
 			return true
 		}
 	})
 
-	return roots, diags
+	return roots, sortGinDiagnostics(diags)
 }
 
-func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, symbols []symbol.Symbol, inherited map[string]ginContext) []boundaryroot.Root {
-	scope := cloneGinScope(inherited)
-	var roots []boundaryroot.Root
-
-	statementList := block
-	if block.NamedChildCount() == 1 {
-		if child := block.NamedChild(0); child != nil && child.Kind() == "statement_list" {
-			statementList = child
+func (d *GinDetector) prepareFile(file boundary.ParsedGoFile, state *ginPackageState) bool {
+	changed := false
+	walk(file.Root, func(n *tree_sitter.Node) bool {
+		switch n.Kind() {
+		case "function_declaration", "method_declaration":
+			body := n.ChildByFieldName("body")
+			if body == nil || body.Kind() != "block" {
+				return false
+			}
+			receiverEnv := receiverAliasesForDeclaration(n, file.Content)
+			receiverType := declarationReceiverType(n, file.Content)
+			changed = d.prepareBlock(body, file, map[string]ginContext{}, receiverEnv, receiverType, state) || changed
+			return false
+		default:
+			return true
 		}
-	}
+	})
+	return changed
+}
 
+func (d *GinDetector) prepareBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, inheritedScope map[string]ginContext, inheritedReceivers map[string]string, receiverType string, state *ginPackageState) bool {
+	scope := cloneGinScope(inheritedScope)
+	receiverEnv := cloneReceiverAliases(inheritedReceivers)
+	changed := false
+
+	statementList := statementListNode(block)
 	for i := 0; i < int(statementList.NamedChildCount()); i++ {
 		stmt := statementList.NamedChild(uint(i))
 		if stmt == nil {
 			continue
 		}
 
-		d.bindGinContext(stmt, file.Content, scope)
+		if stmt.Kind() == "block" {
+			changed = d.prepareBlock(stmt, file, scope, receiverEnv, receiverType, state) || changed
+			continue
+		}
+
+		d.bindReceiverAliases(stmt, file.Content, receiverEnv)
+		changed = d.bindGinContext(stmt, file.Content, scope, receiverEnv, state) || changed
+		changed = d.captureCompositeLiteralContexts(stmt, file.Content, scope, receiverEnv, state) || changed
+		changed = d.captureProviderReturn(stmt, file.Content, scope, receiverEnv, receiverType, state) || changed
+
+		for _, child := range nestedBlocks(stmt) {
+			changed = d.prepareBlock(child, file, scope, receiverEnv, receiverType, state) || changed
+		}
+	}
+
+	return changed
+}
+
+func (d *GinDetector) processBlock(block *tree_sitter.Node, file boundary.ParsedGoFile, symbols []symbol.Symbol, inheritedScope map[string]ginContext, inheritedReceivers map[string]string, state *ginPackageState) ([]boundaryroot.Root, []symbol.Diagnostic) {
+	scope := cloneGinScope(inheritedScope)
+	receiverEnv := cloneReceiverAliases(inheritedReceivers)
+	var roots []boundaryroot.Root
+	var diags []symbol.Diagnostic
+
+	statementList := statementListNode(block)
+	for i := 0; i < int(statementList.NamedChildCount()); i++ {
+		stmt := statementList.NamedChild(uint(i))
+		if stmt == nil {
+			continue
+		}
+
+		if stmt.Kind() == "block" {
+			nestedRoots, nestedDiags := d.processBlock(stmt, file, symbols, scope, receiverEnv, state)
+			roots = append(roots, nestedRoots...)
+			diags = append(diags, nestedDiags...)
+			continue
+		}
+
+		d.bindReceiverAliases(stmt, file.Content, receiverEnv)
+		d.bindGinContext(stmt, file.Content, scope, receiverEnv, state)
 
 		if call := callExpressionFromStatement(stmt); call != nil {
-			if root := d.handleRouteCall(call, file, scope, symbols); root != nil {
+			root, diag := d.handleRouteCall(call, file, scope, receiverEnv, state, symbols)
+			if root != nil {
 				roots = append(roots, *root)
+			}
+			if diag.Category != "" {
+				diags = append(diags, diag)
 			}
 		}
 
-		d.processNestedBlocks(stmt, file, symbols, scope, &roots)
-	}
-
-	return roots
-}
-
-func (d *GinDetector) processNestedBlocks(node *tree_sitter.Node, file boundary.ParsedGoFile, symbols []symbol.Symbol, scope map[string]ginContext, roots *[]boundaryroot.Root) {
-	for i := 0; i < int(node.NamedChildCount()); i++ {
-		child := node.NamedChild(uint(i))
-		if child == nil {
-			continue
-		}
-		switch child.Kind() {
-		case "block":
-			*roots = append(*roots, d.processBlock(child, file, symbols, scope)...)
-		case "func_literal":
-			// Route registration inside handler closures is out of scope for boundary detection.
-			continue
-		default:
-			d.processNestedBlocks(child, file, symbols, scope, roots)
+		for _, child := range nestedBlocks(stmt) {
+			nestedRoots, nestedDiags := d.processBlock(child, file, symbols, scope, receiverEnv, state)
+			roots = append(roots, nestedRoots...)
+			diags = append(diags, nestedDiags...)
 		}
 	}
+
+	return roots, diags
 }
 
-func (d *GinDetector) bindGinContext(stmt *tree_sitter.Node, content []byte, scope map[string]ginContext) {
+func (d *GinDetector) bindReceiverAliases(stmt *tree_sitter.Node, content []byte, receiverEnv map[string]string) {
 	switch stmt.Kind() {
 	case "short_var_declaration", "short_variable_declaration", "assignment_statement":
-		d.bindAssignment(stmt, content, scope)
+		left := stmt.ChildByFieldName("left")
+		right := stmt.ChildByFieldName("right")
+		if (left == nil || right == nil) && stmt.NamedChildCount() >= 2 {
+			left = stmt.NamedChild(0)
+			right = stmt.NamedChild(1)
+		}
+		if left == nil || right == nil {
+			return
+		}
+		leftItems := expressionItems(left)
+		rightItems := expressionItems(right)
+		count := minInt(len(leftItems), len(rightItems))
+		for i := 0; i < count; i++ {
+			lhs := leftItems[i]
+			rhs := rightItems[i]
+			name := identifierName(lhs, content)
+			if name == "" {
+				continue
+			}
+			receiverType, ok := resolveReceiverType(rhs, content, receiverEnv)
+			if ok {
+				receiverEnv[name] = receiverType
+				continue
+			}
+			delete(receiverEnv, name)
+		}
 	case "var_declaration":
 		for i := 0; i < int(stmt.NamedChildCount()); i++ {
 			spec := stmt.NamedChild(uint(i))
-			if spec != nil && spec.Kind() == "var_spec" {
-				d.bindVarSpec(spec, content, scope)
+			if spec == nil || spec.Kind() != "var_spec" {
+				continue
+			}
+			nameList := spec.ChildByFieldName("name")
+			valueList := spec.ChildByFieldName("value")
+			if nameList == nil || valueList == nil {
+				continue
+			}
+			nameItems := expressionItems(nameList)
+			valueItems := expressionItems(valueList)
+			count := minInt(len(nameItems), len(valueItems))
+			for j := 0; j < count; j++ {
+				name := identifierName(nameItems[j], content)
+				if name == "" {
+					continue
+				}
+				receiverType, ok := resolveReceiverType(valueItems[j], content, receiverEnv)
+				if ok {
+					receiverEnv[name] = receiverType
+					continue
+				}
+				delete(receiverEnv, name)
 			}
 		}
 	case "declaration_statement":
 		for i := 0; i < int(stmt.NamedChildCount()); i++ {
 			child := stmt.NamedChild(uint(i))
 			if child != nil && child.Kind() == "var_declaration" {
-				d.bindGinContext(child, content, scope)
+				d.bindReceiverAliases(child, content, receiverEnv)
 			}
 		}
 	}
 }
 
-func (d *GinDetector) bindAssignment(stmt *tree_sitter.Node, content []byte, scope map[string]ginContext) {
+func (d *GinDetector) bindGinContext(stmt *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState) bool {
+	switch stmt.Kind() {
+	case "short_var_declaration", "short_variable_declaration", "assignment_statement":
+		return d.bindAssignment(stmt, content, scope, receiverEnv, state)
+	case "var_declaration":
+		changed := false
+		for i := 0; i < int(stmt.NamedChildCount()); i++ {
+			spec := stmt.NamedChild(uint(i))
+			if spec != nil && spec.Kind() == "var_spec" {
+				changed = d.bindVarSpec(spec, content, scope, receiverEnv, state) || changed
+			}
+		}
+		return changed
+	case "declaration_statement":
+		changed := false
+		for i := 0; i < int(stmt.NamedChildCount()); i++ {
+			child := stmt.NamedChild(uint(i))
+			if child != nil && child.Kind() == "var_declaration" {
+				changed = d.bindGinContext(child, content, scope, receiverEnv, state) || changed
+			}
+		}
+		return changed
+	default:
+		return false
+	}
+}
+
+func (d *GinDetector) bindAssignment(stmt *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState) bool {
 	left := stmt.ChildByFieldName("left")
 	right := stmt.ChildByFieldName("right")
 	if (left == nil || right == nil) && stmt.NamedChildCount() >= 2 {
@@ -133,47 +288,138 @@ func (d *GinDetector) bindAssignment(stmt *tree_sitter.Node, content []byte, sco
 		right = stmt.NamedChild(1)
 	}
 	if left == nil || right == nil {
-		return
+		return false
 	}
 
-	count := minNamedChildren(left.NamedChildCount(), right.NamedChildCount())
+	changed := false
+	leftItems := expressionItems(left)
+	rightItems := expressionItems(right)
+	count := minInt(len(leftItems), len(rightItems))
 	for i := 0; i < count; i++ {
-		name := identifierName(left.NamedChild(uint(i)), content)
-		if name == "" {
+		lhs := leftItems[i]
+		rhs := rightItems[i]
+
+		if name := identifierName(lhs, content); name != "" {
+			ctx, ok := d.resolveAssignedContext(rhs, content, scope, receiverEnv, state)
+			if ok {
+				scope[name] = ctx
+				continue
+			}
+			delete(scope, name)
 			continue
 		}
-		ctx, ok := d.resolveAssignedContext(right.NamedChild(uint(i)), content, scope)
-		if ok {
-			scope[name] = ctx
+
+		fieldName, receiverType, ok := receiverField(lhs, content, receiverEnv)
+		if !ok {
 			continue
 		}
-		delete(scope, name)
+		ctx, resolved := d.resolveAssignedContext(rhs, content, scope, receiverEnv, state)
+		if !resolved {
+			continue
+		}
+		if setFieldContext(state, receiverType, fieldName, ctx) {
+			changed = true
+		}
 	}
+
+	return changed
 }
 
-func (d *GinDetector) bindVarSpec(spec *tree_sitter.Node, content []byte, scope map[string]ginContext) {
+func (d *GinDetector) bindVarSpec(spec *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState) bool {
 	nameList := spec.ChildByFieldName("name")
 	valueList := spec.ChildByFieldName("value")
 	if nameList == nil || valueList == nil {
-		return
+		return false
 	}
 
-	count := minNamedChildren(nameList.NamedChildCount(), valueList.NamedChildCount())
+	changed := false
+	nameItems := expressionItems(nameList)
+	valueItems := expressionItems(valueList)
+	count := minInt(len(nameItems), len(valueItems))
 	for i := 0; i < count; i++ {
-		name := identifierName(nameList.NamedChild(uint(i)), content)
+		name := identifierName(nameItems[i], content)
 		if name == "" {
 			continue
 		}
-		ctx, ok := d.resolveAssignedContext(valueList.NamedChild(uint(i)), content, scope)
+		ctx, ok := d.resolveAssignedContext(valueItems[i], content, scope, receiverEnv, state)
 		if ok {
 			scope[name] = ctx
 			continue
 		}
 		delete(scope, name)
 	}
+	return changed
 }
 
-func (d *GinDetector) resolveAssignedContext(expr *tree_sitter.Node, content []byte, scope map[string]ginContext) (ginContext, bool) {
+func (d *GinDetector) captureCompositeLiteralContexts(stmt *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState) bool {
+	changed := false
+	for _, literal := range compositeLiterals(stmt) {
+		typeName := compositeLiteralTypeName(literal, content)
+		if typeName == "" {
+			continue
+		}
+		walk(literal, func(current *tree_sitter.Node) bool {
+			switch current.Kind() {
+			case "func_literal":
+				return false
+			case "composite_literal":
+				return current == literal
+			case "keyed_element":
+				keyNode, valueNode := keyedElementParts(current)
+				if keyNode == nil || valueNode == nil {
+					return false
+				}
+				key := fieldNameFromNode(keyNode, content)
+				if key == "" {
+					return false
+				}
+				ctx, ok := d.resolvePreparedContextExpression(valueNode, content, scope, receiverEnv, state, 0)
+				if !ok {
+					return false
+				}
+				if setFieldContext(state, typeName, key, ctx) {
+					changed = true
+				}
+				return false
+			default:
+				return true
+			}
+		})
+	}
+	return changed
+}
+
+func (d *GinDetector) captureProviderReturn(stmt *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, receiverType string, state *ginPackageState) bool {
+	if stmt == nil || stmt.Kind() != "return_statement" || stmt.NamedChildCount() == 0 {
+		return false
+	}
+
+	expr := stmt.NamedChild(0)
+	if expr != nil && expr.Kind() == "expression_list" && expr.NamedChildCount() > 0 {
+		expr = expr.NamedChild(0)
+	}
+	ctx, ok := d.resolvePreparedContextExpression(expr, content, scope, receiverEnv, state, 0)
+	if !ok {
+		return false
+	}
+
+	owner := enclosingCallable(stmt)
+	if owner == nil {
+		return false
+	}
+
+	name := callableName(owner, content)
+	if name == "" {
+		return false
+	}
+
+	if owner.Kind() == "method_declaration" && receiverType != "" {
+		return setMethodProvider(state, receiverType, name, ctx)
+	}
+	return setFunctionProvider(state, name, ctx)
+}
+
+func (d *GinDetector) resolveAssignedContext(expr *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState) (ginContext, bool) {
 	expr = unwrapParens(expr)
 	if expr == nil {
 		return ginContext{}, false
@@ -190,7 +436,7 @@ func (d *GinDetector) resolveAssignedContext(expr *tree_sitter.Node, content []b
 		}, true
 	}
 
-	ctx, ok := d.resolveContextExpression(expr, content, scope)
+	ctx, ok := d.resolvePreparedContextExpression(expr, content, scope, receiverEnv, state, 0)
 	if !ok {
 		return ginContext{}, false
 	}
@@ -198,7 +444,7 @@ func (d *GinDetector) resolveAssignedContext(expr *tree_sitter.Node, content []b
 	return ctx, true
 }
 
-func (d *GinDetector) resolveContextExpression(expr *tree_sitter.Node, content []byte, scope map[string]ginContext) (ginContext, bool) {
+func (d *GinDetector) resolvePreparedContextExpression(expr *tree_sitter.Node, content []byte, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState, providerDepth int) (ginContext, bool) {
 	expr = unwrapParens(expr)
 	if expr == nil {
 		return ginContext{}, false
@@ -208,28 +454,47 @@ func (d *GinDetector) resolveContextExpression(expr *tree_sitter.Node, content [
 	case "identifier":
 		ctx, ok := scope[nodeText(expr, content)]
 		return ctx, ok
+	case "selector_expression":
+		fieldName, receiverType, ok := receiverField(expr, content, receiverEnv)
+		if !ok || state == nil {
+			return ginContext{}, false
+		}
+		ctx, ok := state.fieldContext(receiverType, fieldName)
+		return ctx, ok
 	case "call_expression":
 		fn := expr.ChildByFieldName("function")
-		if fn == nil || fn.Kind() != "selector_expression" {
+		args := expr.ChildByFieldName("arguments")
+		switch {
+		case fn == nil:
+			return ginContext{}, false
+		case fn.Kind() == "identifier":
+			if args != nil && args.NamedChildCount() > 0 {
+				return ginContext{}, false
+			}
+			if providerDepth >= 1 || state == nil {
+				return ginContext{}, false
+			}
+			ctx, ok := state.functions[nodeText(fn, content)]
+			return ctx, ok
+		case fn.Kind() != "selector_expression":
 			return ginContext{}, false
 		}
 
 		field := fn.ChildByFieldName("field")
+		operand := fn.ChildByFieldName("operand")
 		if field == nil {
 			return ginContext{}, false
 		}
 
 		methodName := nodeText(field, content)
-		operand := fn.ChildByFieldName("operand")
-		args := expr.ChildByFieldName("arguments")
-
 		switch methodName {
 		case "New", "Default":
 			if operand != nil && nodeText(operand, content) == "gin" {
 				return ginContext{prefix: ""}, true
 			}
+			return ginContext{}, false
 		case "Group":
-			parent, ok := d.resolveContextExpression(operand, content, scope)
+			parent, ok := d.resolvePreparedContextExpression(operand, content, scope, receiverEnv, state, providerDepth)
 			if !ok || args == nil || args.NamedChildCount() == 0 {
 				return ginContext{}, false
 			}
@@ -240,42 +505,56 @@ func (d *GinDetector) resolveContextExpression(expr *tree_sitter.Node, content [
 			return ginContext{
 				prefix: cleanPath(parent.prefix + "/" + getStringValue(prefixArg, content)),
 			}, true
+		default:
+			if providerDepth >= 1 || state == nil || args == nil || args.NamedChildCount() != 0 {
+				return ginContext{}, false
+			}
+			receiverType, ok := resolveReceiverType(operand, content, receiverEnv)
+			if !ok {
+				return ginContext{}, false
+			}
+			ctx, ok := state.methodProvider(receiverType, methodName)
+			return ctx, ok
 		}
+	default:
+		return ginContext{}, false
 	}
-
-	return ginContext{}, false
 }
 
-func (d *GinDetector) handleRouteCall(n *tree_sitter.Node, file boundary.ParsedGoFile, scope map[string]ginContext, symbols []symbol.Symbol) *boundaryroot.Root {
-	fn := n.ChildByFieldName("function")
+func (d *GinDetector) handleRouteCall(call *tree_sitter.Node, file boundary.ParsedGoFile, scope map[string]ginContext, receiverEnv map[string]string, state *ginPackageState, symbols []symbol.Symbol) (*boundaryroot.Root, symbol.Diagnostic) {
+	fn := call.ChildByFieldName("function")
 	if fn == nil || fn.Kind() != "selector_expression" {
-		return nil
+		return nil, symbol.Diagnostic{}
 	}
 
 	field := fn.ChildByFieldName("field")
 	if field == nil {
-		return nil
+		return nil, symbol.Diagnostic{}
 	}
 
 	method := nodeText(field, file.Content)
 	if !ginRouteMethods[method] {
-		return nil
+		return nil, symbol.Diagnostic{}
 	}
 
 	receiver := fn.ChildByFieldName("operand")
-	ctx, ok := d.resolveContextExpression(receiver, file.Content, scope)
+	ctx, ok := d.resolvePreparedContextExpression(receiver, file.Content, scope, receiverEnv, state, 0)
 	if !ok {
-		return nil
+		category := "boundary_unproven_receiver"
+		if receiver != nil && receiver.Kind() == "call_expression" {
+			category = "boundary_unsupported_accessor_pattern"
+		}
+		return nil, boundaryDiagnostic(category, file.Path, nodeText(call, file.Content), fmt.Sprintf("rejected %s route registration because receiver provenance was not proven", method))
 	}
 
-	args := n.ChildByFieldName("arguments")
+	args := call.ChildByFieldName("arguments")
 	if args == nil || args.NamedChildCount() < 2 {
-		return nil
+		return nil, boundaryDiagnostic("boundary_insufficient_args", file.Path, nodeText(call, file.Content), fmt.Sprintf("rejected %s route registration because it did not provide path and handler arguments", method))
 	}
 
 	pathArg := args.NamedChild(0)
 	if !isStringLiteral(pathArg) {
-		return nil
+		return nil, boundaryDiagnostic("boundary_nonliteral_path", file.Path, nodeText(call, file.Content), fmt.Sprintf("rejected %s route registration because the path is not a string literal", method))
 	}
 
 	fullPath := cleanPath(ctx.prefix + "/" + getStringValue(pathArg, file.Content))
@@ -291,28 +570,24 @@ func (d *GinDetector) handleRouteCall(n *tree_sitter.Node, file boundary.ParsedG
 		HandlerTarget:   handlerTarget,
 		RepositoryID:    file.RepositoryID,
 		SourceFile:      file.Path,
-		SourceStartByte: uint32(n.StartByte()),
-		SourceEndByte:   uint32(n.EndByte()),
-		SourceExpr:      nodeText(n, file.Content),
+		SourceStartByte: uint32(call.StartByte()),
+		SourceEndByte:   uint32(call.EndByte()),
+		SourceExpr:      nodeText(call, file.Content),
 		Confidence:      "high",
 	}
 	root.ID = boundaryroot.StableID(root)
-	return &root
+
+	if handlerTarget == "" {
+		return &root, boundaryDiagnostic("boundary_unresolved_handler_target", file.Path, root.SourceExpr, fmt.Sprintf("route %s has no exact handler target", root.CanonicalName))
+	}
+	return &root, symbol.Diagnostic{}
 }
 
-// resolveHandlerTarget extracts the most meaningful identifier from a handler argument node.
-//
-//   - Closure literal -> look up by symbol location, fall back to raw text.
-//   - Wrapper / factory call (e.g. auth.Required(h)) -> keep the outer callee name.
-//   - Bare identifier / selector -> return raw text.
-//
-// TODO(phase1-pr2): refine boundary wrapper attribution only if it materially improves entrypoint quality.
 func resolveHandlerTarget(handlerArg *tree_sitter.Node, content []byte, symbols []symbol.Symbol) string {
 	if handlerArg == nil {
 		return ""
 	}
 
-	// Priority 1: symbol table lookup for closures.
 	for _, sym := range symbols {
 		if sym.Location.StartLine == uint32(handlerArg.StartPosition().Row+1) &&
 			sym.Location.StartCol == uint32(handlerArg.StartPosition().Column+1) {
@@ -320,9 +595,15 @@ func resolveHandlerTarget(handlerArg *tree_sitter.Node, content []byte, symbols 
 		}
 	}
 
-	// Priority 2: if the argument is itself a call expression, use its callee name.
-	// This preserves exact wrapper/factory registration knowledge without inventing inner business targets.
-	if handlerArg.Kind() == "call_expression" {
+	handlerArg = unwrapParens(handlerArg)
+	if handlerArg == nil {
+		return ""
+	}
+
+	switch handlerArg.Kind() {
+	case "identifier", "selector_expression":
+		return nodeText(handlerArg, content)
+	case "call_expression":
 		fn := handlerArg.ChildByFieldName("function")
 		if fn != nil {
 			switch fn.Kind() {
@@ -330,10 +611,115 @@ func resolveHandlerTarget(handlerArg *tree_sitter.Node, content []byte, symbols 
 				return nodeText(fn, content)
 			}
 		}
+	case "func_literal":
+		return nodeText(handlerArg, content)
 	}
 
-	// Priority 3: raw text.
 	return nodeText(handlerArg, content)
+}
+
+func (d *GinDetector) packageKey(file boundary.ParsedGoFile) string {
+	dir := filepath.ToSlash(filepath.Dir(file.Path))
+	if dir == "." {
+		dir = ""
+	}
+	return strings.Join([]string{file.RepositoryID, dir, file.PackageName}, "|")
+}
+
+func newGinPackageState() *ginPackageState {
+	return &ginPackageState{
+		fieldContexts:   map[string]map[string]ginContext{},
+		methodProviders: map[string]map[string]ginContext{},
+		functions:       map[string]ginContext{},
+	}
+}
+
+func (s *ginPackageState) fieldContext(receiverType, fieldName string) (ginContext, bool) {
+	fields := s.fieldContexts[receiverType]
+	if fields == nil {
+		return ginContext{}, false
+	}
+	ctx, ok := fields[fieldName]
+	return ctx, ok
+}
+
+func (s *ginPackageState) methodProvider(receiverType, methodName string) (ginContext, bool) {
+	methods := s.methodProviders[receiverType]
+	if methods == nil {
+		return ginContext{}, false
+	}
+	ctx, ok := methods[methodName]
+	return ctx, ok
+}
+
+func setFieldContext(state *ginPackageState, receiverType, fieldName string, ctx ginContext) bool {
+	if receiverType == "" || fieldName == "" {
+		return false
+	}
+	if state.fieldContexts[receiverType] == nil {
+		state.fieldContexts[receiverType] = map[string]ginContext{}
+	}
+	existing, ok := state.fieldContexts[receiverType][fieldName]
+	if ok && existing.prefix == ctx.prefix {
+		return false
+	}
+	state.fieldContexts[receiverType][fieldName] = ginContext{prefix: ctx.prefix}
+	return true
+}
+
+func setMethodProvider(state *ginPackageState, receiverType, methodName string, ctx ginContext) bool {
+	if receiverType == "" || methodName == "" {
+		return false
+	}
+	if state.methodProviders[receiverType] == nil {
+		state.methodProviders[receiverType] = map[string]ginContext{}
+	}
+	existing, ok := state.methodProviders[receiverType][methodName]
+	if ok && existing.prefix == ctx.prefix {
+		return false
+	}
+	state.methodProviders[receiverType][methodName] = ginContext{prefix: ctx.prefix}
+	return true
+}
+
+func setFunctionProvider(state *ginPackageState, functionName string, ctx ginContext) bool {
+	if functionName == "" {
+		return false
+	}
+	existing, ok := state.functions[functionName]
+	if ok && existing.prefix == ctx.prefix {
+		return false
+	}
+	state.functions[functionName] = ginContext{prefix: ctx.prefix}
+	return true
+}
+
+func boundaryDiagnostic(category, filePath, evidence, message string) symbol.Diagnostic {
+	return symbol.Diagnostic{
+		Category: category,
+		FilePath: filePath,
+		Evidence: evidence,
+		Message:  message,
+	}
+}
+
+func sortGinDiagnostics(diags []symbol.Diagnostic) []symbol.Diagnostic {
+	seen := map[string]symbol.Diagnostic{}
+	for _, diag := range diags {
+		key := strings.Join([]string{diag.FilePath, diag.Category, diag.Message, diag.Evidence}, "|")
+		seen[key] = diag
+	}
+
+	out := make([]symbol.Diagnostic, 0, len(seen))
+	for _, diag := range seen {
+		out = append(out, diag)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		leftKey := strings.Join([]string{out[i].FilePath, out[i].Category, out[i].Message, out[i].Evidence}, "|")
+		rightKey := strings.Join([]string{out[j].FilePath, out[j].Category, out[j].Message, out[j].Evidence}, "|")
+		return leftKey < rightKey
+	})
+	return out
 }
 
 func cloneGinScope(scope map[string]ginContext) map[string]ginContext {
@@ -342,6 +728,45 @@ func cloneGinScope(scope map[string]ginContext) map[string]ginContext {
 		cloned[name] = ctx
 	}
 	return cloned
+}
+
+func cloneReceiverAliases(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func statementListNode(block *tree_sitter.Node) *tree_sitter.Node {
+	if block == nil {
+		return nil
+	}
+	if block.NamedChildCount() == 1 {
+		if child := block.NamedChild(0); child != nil && child.Kind() == "statement_list" {
+			return child
+		}
+	}
+	return block
+}
+
+func nestedBlocks(node *tree_sitter.Node) []*tree_sitter.Node {
+	var blocks []*tree_sitter.Node
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		child := node.NamedChild(uint(i))
+		if child == nil {
+			continue
+		}
+		switch child.Kind() {
+		case "block":
+			blocks = append(blocks, child)
+		case "func_literal":
+			continue
+		default:
+			blocks = append(blocks, nestedBlocks(child)...)
+		}
+	}
+	return blocks
 }
 
 func callExpressionFromStatement(stmt *tree_sitter.Node) *tree_sitter.Node {
@@ -360,9 +785,200 @@ func callExpressionFromStatement(stmt *tree_sitter.Node) *tree_sitter.Node {
 	return nil
 }
 
+func receiverAliasesForDeclaration(node *tree_sitter.Node, content []byte) map[string]string {
+	aliases := map[string]string{}
+	if node == nil || node.Kind() != "method_declaration" {
+		return aliases
+	}
+
+	receiver := node.ChildByFieldName("receiver")
+	if receiver == nil {
+		return aliases
+	}
+	for i := 0; i < int(receiver.NamedChildCount()); i++ {
+		param := receiver.NamedChild(uint(i))
+		if param == nil || param.Kind() != "parameter_declaration" {
+			continue
+		}
+		name := ""
+		if nameNode := param.ChildByFieldName("name"); nameNode != nil {
+			name = nodeText(nameNode, content)
+		} else if param.NamedChildCount() > 0 {
+			name = identifierName(param.NamedChild(0), content)
+		}
+		typeNode := param.ChildByFieldName("type")
+		if typeNode == nil && param.NamedChildCount() > 0 {
+			typeNode = param.NamedChild(uint(param.NamedChildCount() - 1))
+		}
+		if name != "" && typeNode != nil {
+			aliases[name] = normalizeTypeName(nodeText(typeNode, content))
+		}
+	}
+	return aliases
+}
+
+func declarationReceiverType(node *tree_sitter.Node, content []byte) string {
+	for _, receiverType := range receiverAliasesForDeclaration(node, content) {
+		return receiverType
+	}
+	return ""
+}
+
+func resolveReceiverType(expr *tree_sitter.Node, content []byte, receiverEnv map[string]string) (string, bool) {
+	expr = unwrapParens(expr)
+	if expr == nil {
+		return "", false
+	}
+
+	switch expr.Kind() {
+	case "identifier":
+		receiverType, ok := receiverEnv[nodeText(expr, content)]
+		return receiverType, ok
+	default:
+		return "", false
+	}
+}
+
+func receiverField(expr *tree_sitter.Node, content []byte, receiverEnv map[string]string) (fieldName string, receiverType string, ok bool) {
+	expr = unwrapParens(expr)
+	if expr == nil || expr.Kind() != "selector_expression" {
+		return "", "", false
+	}
+
+	field := expr.ChildByFieldName("field")
+	operand := expr.ChildByFieldName("operand")
+	if field == nil || operand == nil {
+		return "", "", false
+	}
+
+	receiverType, ok = resolveReceiverType(operand, content, receiverEnv)
+	if !ok {
+		return "", "", false
+	}
+	return nodeText(field, content), receiverType, true
+}
+
+func enclosingCallable(node *tree_sitter.Node) *tree_sitter.Node {
+	for current := node; current != nil; current = current.Parent() {
+		switch current.Kind() {
+		case "function_declaration", "method_declaration":
+			return current
+		}
+	}
+	return nil
+}
+
+func callableName(node *tree_sitter.Node, content []byte) string {
+	if node == nil {
+		return ""
+	}
+	name := node.ChildByFieldName("name")
+	if name == nil {
+		return ""
+	}
+	return nodeText(name, content)
+}
+
+func compositeLiterals(node *tree_sitter.Node) []*tree_sitter.Node {
+	var out []*tree_sitter.Node
+	walk(node, func(current *tree_sitter.Node) bool {
+		switch current.Kind() {
+		case "func_literal":
+			return false
+		case "composite_literal":
+			out = append(out, current)
+			return false
+		default:
+			return true
+		}
+	})
+	return out
+}
+
+func compositeLiteralTypeName(node *tree_sitter.Node, content []byte) string {
+	if node == nil {
+		return ""
+	}
+	if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+		return normalizeTypeName(nodeText(typeNode, content))
+	}
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		child := node.NamedChild(uint(i))
+		if child != nil && child.Kind() != "literal_value" {
+			return normalizeTypeName(nodeText(child, content))
+		}
+	}
+	return ""
+}
+
+func literalValueNode(node *tree_sitter.Node) *tree_sitter.Node {
+	if node == nil {
+		return nil
+	}
+	if body := node.ChildByFieldName("body"); body != nil {
+		return body
+	}
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		child := node.NamedChild(uint(i))
+		if child != nil && child.Kind() == "literal_value" {
+			return child
+		}
+	}
+	return nil
+}
+
+func normalizeTypeName(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "*")
+	if idx := strings.Index(raw, "["); idx >= 0 {
+		raw = raw[:idx]
+	}
+	if idx := strings.LastIndex(raw, "."); idx >= 0 {
+		raw = raw[idx+1:]
+	}
+	return raw
+}
+
+func fieldNameFromNode(node *tree_sitter.Node, content []byte) string {
+	node = unwrapParens(node)
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "identifier", "field_identifier":
+		return nodeText(node, content)
+	default:
+		return strings.TrimSpace(nodeText(node, content))
+	}
+}
+
+func keyedElementParts(node *tree_sitter.Node) (*tree_sitter.Node, *tree_sitter.Node) {
+	if node == nil || node.Kind() != "keyed_element" {
+		return nil, nil
+	}
+	keyNode := node.ChildByFieldName("key")
+	valueNode := node.ChildByFieldName("value")
+	if keyNode != nil && valueNode != nil {
+		return keyNode, valueNode
+	}
+	if node.NamedChildCount() >= 2 {
+		return node.NamedChild(0), node.NamedChild(1)
+	}
+	return nil, nil
+}
+
 func unwrapParens(n *tree_sitter.Node) *tree_sitter.Node {
-	for n != nil && n.Kind() == "parenthesized_expression" && n.NamedChildCount() == 1 {
-		n = n.NamedChild(0)
+	for n != nil {
+		switch {
+		case n.Kind() == "parenthesized_expression" && n.NamedChildCount() == 1:
+			n = n.NamedChild(0)
+		case n.Kind() == "literal_element" && n.NamedChildCount() == 1:
+			n = n.NamedChild(0)
+		case n.Kind() == "expression_list" && n.NamedChildCount() == 1:
+			n = n.NamedChild(0)
+		default:
+			return n
+		}
 	}
 	return n
 }
@@ -387,4 +1003,25 @@ func minNamedChildren(left, right uint) int {
 		return int(left)
 	}
 	return int(right)
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func expressionItems(node *tree_sitter.Node) []*tree_sitter.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind() == "expression_list" {
+		items := make([]*tree_sitter.Node, 0, node.NamedChildCount())
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			items = append(items, node.NamedChild(uint(i)))
+		}
+		return items
+	}
+	return []*tree_sitter.Node{node}
 }
