@@ -84,7 +84,7 @@ func (d *GRPCGatewayDetector) processBlock(block *tree_sitter.Node, file boundar
 
 		d.bindGatewayMuxScope(stmt, file.Content, imports, scope, receiverEnv, state)
 
-		if call := callExpressionFromStatement(stmt); call != nil {
+		for _, call := range gatewayCallsFromStatement(stmt) {
 			root, diag := d.handleCall(call, file, symbols, imports, scope, receiverEnv, state)
 			if root != nil {
 				roots = append(roots, *root)
@@ -210,6 +210,51 @@ func (d *GRPCGatewayDetector) handleCall(call *tree_sitter.Node, file boundary.P
 	}
 	root.ID = boundaryroot.StableID(root)
 	return &root, symbol.Diagnostic{}
+}
+
+func gatewayCallsFromStatement(stmt *tree_sitter.Node) []*tree_sitter.Node {
+	if stmt == nil {
+		return nil
+	}
+	if call := callExpressionFromStatement(stmt); call != nil {
+		return []*tree_sitter.Node{call}
+	}
+
+	var calls []*tree_sitter.Node
+	appendCalls := func(list *tree_sitter.Node) {
+		for _, item := range expressionItems(list) {
+			if item != nil && item.Kind() == "call_expression" {
+				calls = append(calls, item)
+			}
+		}
+	}
+
+	switch stmt.Kind() {
+	case "short_var_declaration", "short_variable_declaration", "assignment_statement":
+		right := stmt.ChildByFieldName("right")
+		if right == nil && stmt.NamedChildCount() >= 2 {
+			right = stmt.NamedChild(1)
+		}
+		appendCalls(right)
+	case "var_declaration":
+		for i := 0; i < int(stmt.NamedChildCount()); i++ {
+			spec := stmt.NamedChild(uint(i))
+			if spec == nil || spec.Kind() != "var_spec" {
+				continue
+			}
+			appendCalls(spec.ChildByFieldName("value"))
+		}
+	case "declaration_statement":
+		for i := 0; i < int(stmt.NamedChildCount()); i++ {
+			child := stmt.NamedChild(uint(i))
+			if child != nil && child.Kind() == "var_declaration" {
+				for _, call := range gatewayCallsFromStatement(child) {
+					calls = append(calls, call)
+				}
+			}
+		}
+	}
+	return calls
 }
 
 func gatewayRegisterName(fn *tree_sitter.Node, content []byte) string {

@@ -97,6 +97,23 @@ type semanticEdgeScore struct {
 	nodeID     string
 }
 
+const (
+	semanticBeamWidth = 3
+	semanticMaxDepth  = 4
+)
+
+type semanticBeam struct {
+	current string
+	path    []graph.Edge
+	score   int
+	seen    map[string]bool
+}
+
+type semanticSearchResult struct {
+	path           []graph.Edge
+	blockedByNoise bool
+}
+
 func (s Service) walkSemanticSpine(root entrypoint.Root, idx *snapshotIndex) (flow.Chain, map[string]bool, bool) {
 	chain := newChain(root)
 	visited := map[string]bool{root.NodeID: true}
@@ -104,7 +121,6 @@ func (s Service) walkSemanticSpine(root entrypoint.Root, idx *snapshotIndex) (fl
 	entryMode := idx.rootEntryMode(root.NodeID)
 
 	current := root.NodeID
-	mainlineVisited := map[string]bool{current: true}
 
 	if entryMode == EntryModeEndpointRoot {
 		registerEdge, ok := idx.bestEdgeByKind(root.NodeID, graph.EdgeRegistersBoundary)
@@ -113,26 +129,25 @@ func (s Service) walkSemanticSpine(root entrypoint.Root, idx *snapshotIndex) (fl
 		}
 		appendSemanticStep(&chain, registerEdge, current, idx, visited, seenEdgeIDs)
 		current = registerEdge.To
-		mainlineVisited[current] = true
 	} else if !idx.hasEligibleSemanticEdge(root.NodeID) {
 		return flow.Chain{}, visited, false
 	}
 
-	for {
-		selected, sideEdges := idx.selectSemanticNext(current)
-		if selected == nil {
-			appendSemanticSideSteps(&chain, sideEdges, current, idx, visited, seenEdgeIDs)
-			break
-		}
-		if mainlineVisited[selected.To] {
-			break
-		}
+	if returnsEdge, ok := idx.bestEdgeByKind(current, graph.EdgeReturnsHandler); ok {
+		appendSemanticStep(&chain, returnsEdge, current, idx, visited, seenEdgeIDs)
+		appendNodeSideSteps(&chain, current, idx, visited, seenEdgeIDs)
+		current = returnsEdge.To
+	}
 
-		appendSemanticStep(&chain, *selected, current, idx, visited, seenEdgeIDs)
-		appendSemanticSideSteps(&chain, sideEdges, current, idx, visited, seenEdgeIDs)
-
-		current = selected.To
-		mainlineVisited[current] = true
+	search := idx.searchCallBeam(current)
+	if len(search.path) == 0 {
+		appendNodeSideSteps(&chain, current, idx, visited, seenEdgeIDs)
+	}
+	fromNodeID := current
+	for _, edge := range search.path {
+		appendSemanticStep(&chain, edge, fromNodeID, idx, visited, seenEdgeIDs)
+		appendNodeSideSteps(&chain, fromNodeID, idx, visited, seenEdgeIDs)
+		fromNodeID = edge.To
 	}
 
 	if s.shouldFallbackToLegacy(root, entryMode, chain, idx) {
@@ -154,6 +169,10 @@ func appendSemanticSideSteps(chain *flow.Chain, edges []graph.Edge, fromNodeID s
 	for _, edge := range edges {
 		appendSemanticStep(chain, edge, fromNodeID, idx, visited, seenEdgeIDs)
 	}
+}
+
+func appendNodeSideSteps(chain *flow.Chain, fromNodeID string, idx *snapshotIndex, visited map[string]bool, seenEdgeIDs map[string]bool) {
+	appendSemanticSideSteps(chain, idx.sideEdges(fromNodeID), fromNodeID, idx, visited, seenEdgeIDs)
 }
 
 func (s Service) shouldFallbackToLegacy(root entrypoint.Root, entryMode EntryMode, chain flow.Chain, idx *snapshotIndex) bool {
@@ -233,7 +252,7 @@ func (idx *snapshotIndex) buildRootAudit(root entrypoint.Root, chain flow.Chain)
 		}
 	}
 
-	businessCalls, warnings := idx.firstBusinessCalls(bodyNodeID)
+	businessCalls, warnings := idx.firstBusinessCalls(handlerNodeID, bodyNodeID)
 	audit.FirstBusinessCalls = businessCalls
 	audit.Warnings = append(audit.Warnings, warnings...)
 
@@ -248,61 +267,27 @@ func (idx *snapshotIndex) buildRootAudit(root entrypoint.Root, chain flow.Chain)
 	return audit
 }
 
-func (idx *snapshotIndex) firstBusinessCalls(startNodeID string) ([]SemanticAuditEdgeRef, []SemanticAuditWarning) {
+func (idx *snapshotIndex) firstBusinessCalls(handlerNodeID, startNodeID string) ([]SemanticAuditEdgeRef, []SemanticAuditWarning) {
 	calls := []SemanticAuditEdgeRef{}
 	warnings := []SemanticAuditWarning{}
-	if startNodeID == "" {
+	search := idx.refinedAuditBusinessSearch(handlerNodeID, startNodeID)
+	anchorNodeID := startNodeID
+	if anchorNodeID == "" {
+		anchorNodeID = handlerNodeID
+	}
+	calls = idx.collectFirstBusinessCalls(anchorNodeID, search.path, 3)
+	if len(search.path) == 0 {
+		if len(calls) == 0 {
+			warnings = append(warnings, SemanticAuditWarning{
+				Kind:    "no_business_call_after_handler",
+				Message: "no promoted business call was found after the handler entry",
+			})
+		}
 		return calls, warnings
 	}
 
-	current := startNodeID
-	seen := map[string]bool{current: true}
-	supportBudget := 3
-	blockedByNoise := false
-
-	for len(calls) < 3 {
-		callEdges := idx.outgoingByKind(current, graph.EdgeCalls)
-		if len(callEdges) == 0 {
-			break
-		}
-
-		selected, ok := idx.bestSemanticEdge(current, callEdges)
-		if !ok {
-			break
-		}
-
-		switch idx.targetBucket(selected) {
-		case targetBucketStrongBusiness:
-			calls = append(calls, idx.auditEdgeRef(selected))
-			if seen[selected.To] {
-				return calls, warnings
-			}
-			current = selected.To
-			seen[current] = true
-		case targetBucketSetup, targetBucketNeutral:
-			if supportBudget == 0 || seen[selected.To] {
-				current = ""
-				break
-			}
-			supportBudget--
-			current = selected.To
-			seen[current] = true
-		case targetBucketWrapperNoise, targetBucketObservabilityNoise:
-			if len(calls) == 0 {
-				blockedByNoise = true
-			}
-			current = ""
-		default:
-			current = ""
-		}
-
-		if current == "" {
-			break
-		}
-	}
-
 	if len(calls) == 0 {
-		if blockedByNoise {
+		if search.blockedByNoise {
 			warnings = append(warnings, SemanticAuditWarning{
 				Kind:    "business_frontier_blocked_by_noise",
 				Message: "semantic recovery reached only demoted noise/support calls after the handler entry",
@@ -315,6 +300,56 @@ func (idx *snapshotIndex) firstBusinessCalls(startNodeID string) ([]SemanticAudi
 		}
 	}
 	return calls, warnings
+}
+
+func (idx *snapshotIndex) collectFirstBusinessCalls(anchorNodeID string, path []graph.Edge, limit int) []SemanticAuditEdgeRef {
+	if limit <= 0 {
+		return nil
+	}
+
+	refs := make([]SemanticAuditEdgeRef, 0, limit)
+	seen := map[string]bool{}
+	appendEdge := func(edge graph.Edge) {
+		if seen[edge.ID] || idx.targetBucket(edge) != targetBucketStrongBusiness {
+			return
+		}
+		seen[edge.ID] = true
+		refs = append(refs, idx.auditEdgeRef(edge))
+	}
+
+	for _, edge := range idx.anchorBusinessEdges(anchorNodeID) {
+		appendEdge(edge)
+		if len(refs) == limit {
+			return refs
+		}
+	}
+
+	for _, edge := range path {
+		appendEdge(edge)
+		if len(refs) == limit {
+			return refs
+		}
+	}
+
+	return refs
+}
+
+func (idx *snapshotIndex) anchorBusinessEdges(nodeID string) []graph.Edge {
+	if nodeID == "" {
+		return nil
+	}
+	edges := filterEdgesByKind(idx.outgoingSemantic(nodeID), graph.EdgeCalls)
+	sort.SliceStable(edges, func(i, j int) bool {
+		return idx.compareSemanticEdgeTie(edges[i], edges[j])
+	})
+
+	business := make([]graph.Edge, 0, len(edges))
+	for _, edge := range edges {
+		if idx.targetBucket(edge) == targetBucketStrongBusiness {
+			business = append(business, edge)
+		}
+	}
+	return business
 }
 
 func (idx *snapshotIndex) rootEntryMode(rootNodeID string) EntryMode {
@@ -361,6 +396,219 @@ func (idx *snapshotIndex) outgoingByKind(nodeID string, kind graph.EdgeKind) []g
 
 func (idx *snapshotIndex) bestEdgeByKind(nodeID string, kind graph.EdgeKind) (graph.Edge, bool) {
 	return idx.bestSemanticEdge(nodeID, idx.outgoingByKind(nodeID, kind))
+}
+
+func (idx *snapshotIndex) refinedAuditBusinessSearch(handlerNodeID, bodyNodeID string) semanticSearchResult {
+	primary := idx.searchCallBeam(bodyNodeID)
+	if idx.pathHasBusiness(primary.path) {
+		return primary
+	}
+	if handlerNodeID == "" || handlerNodeID == bodyNodeID {
+		return primary
+	}
+
+	anchor := handlerNodeID
+	if edge, ok := idx.bestEdgeByKind(handlerNodeID, graph.EdgeReturnsHandler); ok {
+		anchor = edge.To
+	}
+	fallback := idx.searchCallBeam(anchor)
+	if idx.pathHasBusiness(fallback.path) && !idx.pathHasBusiness(primary.path) {
+		return fallback
+	}
+	if len(fallback.path) > len(primary.path) && primary.blockedByNoise {
+		return fallback
+	}
+	return primary
+}
+
+func (idx *snapshotIndex) searchCallBeam(startNodeID string) semanticSearchResult {
+	if startNodeID == "" {
+		return semanticSearchResult{}
+	}
+
+	beams := []semanticBeam{{
+		current: startNodeID,
+		seen:    map[string]bool{startNodeID: true},
+	}}
+	var best semanticBeam
+	hasBest := false
+
+	for depth := 0; depth < semanticMaxDepth; depth++ {
+		var next []semanticBeam
+		for _, beam := range beams {
+			callEdges := idx.sortSemanticEdges(filterEdgesByKind(idx.outgoingSemantic(beam.current), graph.EdgeCalls))
+			if len(callEdges) == 0 {
+				if len(beam.path) > 0 && (!hasBest || idx.compareSemanticBeams(beam, best)) {
+					best = beam
+					hasBest = true
+				}
+				continue
+			}
+
+			limit := minInt(len(callEdges), semanticBeamWidth)
+			for i := 0; i < limit; i++ {
+				candidate, ok := idx.extendSemanticBeam(beam, callEdges[i])
+				if !ok {
+					continue
+				}
+				if !hasBest || idx.compareSemanticBeams(candidate, best) {
+					best = candidate
+					hasBest = true
+				}
+				next = append(next, candidate)
+			}
+		}
+
+		if len(next) == 0 {
+			break
+		}
+
+		sort.SliceStable(next, func(i, j int) bool {
+			return idx.compareSemanticBeams(next[i], next[j])
+		})
+		beams = idx.trimSemanticBeams(next, semanticBeamWidth)
+	}
+
+	if !hasBest {
+		return semanticSearchResult{}
+	}
+	return semanticSearchResult{
+		path:           best.path,
+		blockedByNoise: idx.pathBlockedByNoise(best.path),
+	}
+}
+
+func (idx *snapshotIndex) extendSemanticBeam(beam semanticBeam, edge graph.Edge) (semanticBeam, bool) {
+	if beam.seen[edge.To] {
+		return semanticBeam{}, false
+	}
+	nextSeen := make(map[string]bool, len(beam.seen)+1)
+	for nodeID := range beam.seen {
+		nextSeen[nodeID] = true
+	}
+	nextSeen[edge.To] = true
+
+	nextPath := append(append([]graph.Edge(nil), beam.path...), edge)
+	return semanticBeam{
+		current: edge.To,
+		path:    nextPath,
+		score:   beam.score + idx.callBeamEdgeScore(edge),
+		seen:    nextSeen,
+	}, true
+}
+
+func (idx *snapshotIndex) trimSemanticBeams(candidates []semanticBeam, limit int) []semanticBeam {
+	trimmed := make([]semanticBeam, 0, minInt(len(candidates), limit))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		key := idx.semanticBeamKey(candidate)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		trimmed = append(trimmed, candidate)
+		if len(trimmed) == limit {
+			break
+		}
+	}
+	return trimmed
+}
+
+func (idx *snapshotIndex) semanticBeamKey(beam semanticBeam) string {
+	if len(beam.path) == 0 {
+		return beam.current
+	}
+	parts := make([]string, 0, len(beam.path)+1)
+	parts = append(parts, beam.current)
+	for _, edge := range beam.path {
+		parts = append(parts, edge.ID)
+	}
+	return strings.Join(parts, "|")
+}
+
+func (idx *snapshotIndex) compareSemanticBeams(left, right semanticBeam) bool {
+	switch {
+	case left.score != right.score:
+		return left.score > right.score
+	case idx.compareSemanticBeamPath(left.path, right.path):
+		return true
+	case idx.compareSemanticBeamPath(right.path, left.path):
+		return false
+	case len(left.path) != len(right.path):
+		return len(left.path) < len(right.path)
+	default:
+		return left.current < right.current
+	}
+}
+
+func (idx *snapshotIndex) compareSemanticBeamPath(left, right []graph.Edge) bool {
+	limit := minInt(len(left), len(right))
+	for i := 0; i < limit; i++ {
+		if left[i].ID == right[i].ID {
+			continue
+		}
+		return idx.compareSemanticEdgeTie(left[i], right[i])
+	}
+	return len(left) < len(right)
+}
+
+func (idx *snapshotIndex) compareSemanticEdgeTie(left, right graph.Edge) bool {
+	ls := idx.semanticEdgeScore(left)
+	rs := idx.semanticEdgeScore(right)
+
+	switch {
+	case ls.hasOrder && rs.hasOrder && ls.orderIndex != rs.orderIndex:
+		return ls.orderIndex < rs.orderIndex
+	case ls.hasOrder != rs.hasOrder:
+		return ls.hasOrder
+	case ls.confirmed != rs.confirmed:
+		return ls.confirmed
+	case ls.canonical != rs.canonical:
+		return ls.canonical < rs.canonical
+	default:
+		return ls.nodeID < rs.nodeID
+	}
+}
+
+func (idx *snapshotIndex) callBeamEdgeScore(edge graph.Edge) int {
+	score := idx.semanticEdgeScore(edge).total - idx.edgeBaseWeight(edge.Kind)
+	switch idx.targetBucket(edge) {
+	case targetBucketStrongBusiness:
+		score += 120
+	case targetBucketSetup:
+		score += 20
+	case targetBucketWrapperNoise, targetBucketObservabilityNoise:
+		score -= 120
+	}
+	if idx.isUnresolvedNode(edge.To) {
+		score -= 60
+	}
+	return score
+}
+
+func (idx *snapshotIndex) pathHasBusiness(path []graph.Edge) bool {
+	for _, edge := range path {
+		if idx.targetBucket(edge) == targetBucketStrongBusiness {
+			return true
+		}
+	}
+	return false
+}
+
+func (idx *snapshotIndex) pathBlockedByNoise(path []graph.Edge) bool {
+	for _, edge := range path {
+		switch idx.targetBucket(edge) {
+		case targetBucketStrongBusiness:
+			return false
+		case targetBucketWrapperNoise, targetBucketObservabilityNoise:
+			return true
+		}
+	}
+	return false
+}
+
+func (idx *snapshotIndex) sideEdges(nodeID string) []graph.Edge {
+	return idx.sortSemanticEdges(filterSideEdges(idx.outgoingSemantic(nodeID)))
 }
 
 func (idx *snapshotIndex) selectSemanticNext(nodeID string) (*graph.Edge, []graph.Edge) {
@@ -586,7 +834,6 @@ func (idx *snapshotIndex) targetTokens(nodeID string) []string {
 
 	values := []string{
 		node.CanonicalName,
-		node.FilePath,
 		node.Properties["name"],
 		node.Properties["kind"],
 		node.Properties["receiver"],
@@ -721,4 +968,11 @@ func (idx *snapshotIndex) edgeByID(edgeID string) (graph.Edge, bool) {
 		}
 	}
 	return graph.Edge{}, false
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }

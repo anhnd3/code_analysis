@@ -200,7 +200,7 @@ func (d *GinDetector) resolvePreparedHandlerBindingExpression(expr *tree_sitter.
 			return handlerBinding{}, false
 		}
 		return handlerBinding{
-			packageToken: file.PackageName,
+			packageToken: targetref.NormalizePackageToken(file.PackageName),
 			receiverType: typeName,
 		}, true
 	case "unary_expression":
@@ -232,8 +232,13 @@ func (d *GinDetector) resolvePreparedHandlerBindingExpression(expr *tree_sitter.
 		}
 		methodName := nodeText(field, file.Content)
 
-		if importAliasMatchesFunc(imports, nodeText(operand, file.Content), func(string) bool { return true }) && looksLikeHandlerConstructor(methodName) {
-			return handlerBinding{packageToken: nodeText(operand, file.Content)}, true
+		if importAliasMatchesFunc(imports, nodeText(operand, file.Content), func(string) bool { return true }) {
+			if binding, ok := d.importedHandlerFunction(nodeText(operand, file.Content), methodName); ok {
+				return binding, true
+			}
+			if looksLikeHandlerConstructor(methodName) {
+				return handlerBinding{packageToken: targetref.NormalizePackageToken(nodeText(operand, file.Content))}, true
+			}
 		}
 
 		if providerDepth >= 1 || state == nil {
@@ -303,6 +308,34 @@ func (s *ginPackageState) handlerMethodProvider(receiverType, methodName string)
 	}
 	binding, ok := methods[methodName]
 	return binding, ok
+}
+
+func (d *GinDetector) importedHandlerFunction(packageToken, functionName string) (handlerBinding, bool) {
+	packageToken = targetref.NormalizePackageToken(packageToken)
+	if packageToken == "" || functionName == "" {
+		return handlerBinding{}, false
+	}
+
+	var found handlerBinding
+	var foundAny bool
+	for _, state := range d.packageStates {
+		if state == nil || state.packageToken != packageToken {
+			continue
+		}
+		binding, ok := state.handlerFunction(functionName)
+		if !ok {
+			continue
+		}
+		if !foundAny {
+			found = binding
+			foundAny = true
+			continue
+		}
+		if found != binding {
+			return handlerBinding{}, false
+		}
+	}
+	return found, foundAny
 }
 
 func (s *ginPackageState) uniqueFunction(name string) (symbol.Symbol, bool) {
@@ -400,12 +433,16 @@ func (d *GinDetector) resolveGinSelectorTarget(selector *tree_sitter.Node, file 
 	if !ok || binding.packageToken == "" {
 		return "", targetref.KindUnknown
 	}
-	if binding.receiverType != "" && binding.packageToken == file.PackageName {
+	if binding.receiverType != "" && targetref.NormalizePackageToken(binding.packageToken) == targetref.NormalizePackageToken(file.PackageName) {
 		if sym, ok := state.uniqueMethod(binding.receiverType, methodName); ok {
 			return sym.CanonicalName, targetref.KindExactCanonical
 		}
 	}
-	return binding.packageToken + "." + methodName, targetref.KindPackageMethodHint
+	hint := targetref.BuildPackageMethodHint(binding.packageToken, methodName)
+	if hint == "" {
+		return "", targetref.KindUnknown
+	}
+	return hint, targetref.KindPackageMethodHint
 }
 
 func ginLocalReceiverType(expr *tree_sitter.Node, content []byte, currentPackage string, handlerEnv map[string]handlerBinding, receiverEnv map[string]string) (string, bool) {
@@ -419,7 +456,7 @@ func ginLocalReceiverType(expr *tree_sitter.Node, content []byte, currentPackage
 		if receiverType, ok := receiverEnv[name]; ok {
 			return receiverType, true
 		}
-		if binding, ok := handlerEnv[name]; ok && binding.packageToken == currentPackage && binding.receiverType != "" {
+		if binding, ok := handlerEnv[name]; ok && targetref.NormalizePackageToken(binding.packageToken) == targetref.NormalizePackageToken(currentPackage) && binding.receiverType != "" {
 			return binding.receiverType, true
 		}
 	case "composite_literal":

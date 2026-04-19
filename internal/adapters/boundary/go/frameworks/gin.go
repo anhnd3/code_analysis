@@ -28,6 +28,7 @@ type handlerBinding struct {
 }
 
 type ginPackageState struct {
+	packageToken           string
 	fieldContexts          map[string]map[string]ginContext
 	methodProviders        map[string]map[string]ginContext
 	functions              map[string]ginContext
@@ -64,6 +65,7 @@ func (d *GinDetector) PreparePackage(files []boundary.ParsedGoFile, symbols []sy
 	}
 
 	state := newGinPackageState()
+	state.packageToken = filePackageToken(files[0])
 	indexGinPackageSymbols(state, symbols)
 	for iteration := 0; iteration < 3; iteration++ {
 		changed := false
@@ -655,6 +657,10 @@ func newGinPackageState() *ginPackageState {
 		packageFunctions:       map[string][]symbol.Symbol{},
 		packageMethods:         map[string]map[string][]symbol.Symbol{},
 	}
+}
+
+func filePackageToken(file boundary.ParsedGoFile) string {
+	return normalizeTypeName(file.PackageName)
 }
 
 func (s *ginPackageState) fieldContext(receiverType, fieldName string) (ginContext, bool) {

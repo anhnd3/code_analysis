@@ -314,6 +314,97 @@ func TestBuild_HTTPRootUsesSemanticSpineAndPreservesSideEdges(t *testing.T) {
 	}
 }
 
+func TestBuild_HTTPRootPeelsReturnsHandlerBeforeSearchingCalls(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			endpointNode("endpoint_orders", "GET /orders"),
+			testSymbolNode("handler_factory", "api.MakeOrdersHandler", "function"),
+			testSymbolNode("handler_closure", "api.MakeOrdersHandler.$closure_return_0", "function"),
+			testSymbolNode("factory_helper", "svc.FactoryHelper", "function"),
+			testSymbolNode("service_target", "svc.OrderService", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_orders", To: "handler_factory", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_return", Kind: graph.EdgeReturnsHandler, From: "handler_factory", To: "handler_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_factory_helper", Kind: graph.EdgeCalls, From: "handler_factory", To: "factory_helper", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_service", Kind: graph.EdgeCalls, From: "handler_closure", To: "service_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_orders",
+			CanonicalName: "GET /orders",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := New().Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Chains) != 1 {
+		t.Fatalf("expected 1 chain, got %d", len(bundle.Chains))
+	}
+	steps := bundle.Chains[0].Steps
+	if len(steps) < 3 {
+		t.Fatalf("expected boundary, peel, and business call, got %+v", steps)
+	}
+	if steps[1].ToNodeID != "handler_closure" {
+		t.Fatalf("expected RETURNS_HANDLER peel before call search, got %+v", steps)
+	}
+	if steps[2].ToNodeID != "service_target" {
+		t.Fatalf("expected business call from closure to win after peel, got %+v", steps)
+	}
+}
+
+func TestBuild_HTTPRootBeamSearchUsesDeterministicTieBreaks(t *testing.T) {
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			testSymbolNode("handler_root", "api.HandleOrders", string(symbol.KindRouteHandler)),
+			testSymbolNode("service_b", "svc.BillingService", "function"),
+			testSymbolNode("service_a", "svc.AccountService", "function"),
+		},
+		Edges: []graph.Edge{
+			{
+				ID:         "e_billing",
+				Kind:       graph.EdgeCalls,
+				From:       "handler_root",
+				To:         "service_b",
+				Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1},
+				Properties: map[string]string{"order_index": "2"},
+			},
+			{
+				ID:         "e_account",
+				Kind:       graph.EdgeCalls,
+				From:       "handler_root",
+				To:         "service_a",
+				Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1},
+				Properties: map[string]string{"order_index": "1"},
+			},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "handler_root",
+			CanonicalName: "api.HandleOrders",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := New().Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Chains) != 1 || len(bundle.Chains[0].Steps) != 1 {
+		t.Fatalf("expected one selected semantic step, got %+v", bundle.Chains)
+	}
+	if got := bundle.Chains[0].Steps[0].ToNodeID; got != "service_a" {
+		t.Fatalf("expected lower order_index edge to win deterministic tie-break, got %s", got)
+	}
+}
+
 func TestBuild_HTTPFallbackRootAllowsInferredEligibleBusinessCall(t *testing.T) {
 	snapshot := graph.GraphSnapshot{
 		Nodes: []graph.Node{
@@ -421,6 +512,60 @@ func TestBuildAudit_ClassifiesBusinessWarnings(t *testing.T) {
 		}
 		assertAuditWarningKind(t, audit.Roots[0].Warnings, "no_business_call_after_handler")
 	})
+}
+
+func TestBuildAudit_CollectsSiblingBusinessCallsBeforeDeeperPath(t *testing.T) {
+	service := New()
+	snapshot := graph.GraphSnapshot{
+		WorkspaceID: "ws_business",
+		ID:          "snap_business",
+		Nodes: []graph.Node{
+			endpointNode("endpoint_detect", "POST /detect"),
+			testSymbolNode("handler_root", "api.HandleDetect", "function"),
+			testSymbolNode("session_target", "session.SessionService.GetSessionByZlpToken", "function"),
+			testSymbolNode("repo_target", "repo.CameraRepo.DetectQR", "function"),
+			testSymbolNode("helper_target", "repo.detectQR", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_detect", To: "handler_root", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_repo", Kind: graph.EdgeCalls, From: "handler_root", To: "repo_target", Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.82}, Properties: map[string]string{"resolution_basis": "package_method_hint"}},
+			{ID: "e_session", Kind: graph.EdgeCalls, From: "handler_root", To: "session_target", Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.82}, Properties: map[string]string{"resolution_basis": "package_method_hint"}},
+			{ID: "e_helper", Kind: graph.EdgeCalls, From: "repo_target", To: "helper_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"resolution_basis": "exact_canonical"}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_detect",
+			CanonicalName: "POST /detect",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := service.BuildAudit(snapshot, roots, bundle)
+	if len(audit.Roots) != 1 {
+		t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+	}
+	got := audit.Roots[0].FirstBusinessCalls
+	if len(got) != 3 {
+		t.Fatalf("expected three business calls from sibling + deeper path, got %+v", got)
+	}
+	if got[0].ToNodeID != "repo_target" && got[0].ToNodeID != "session_target" {
+		t.Fatalf("expected sibling business call first, got %+v", got)
+	}
+	if got[1].ToNodeID != "repo_target" && got[1].ToNodeID != "session_target" {
+		t.Fatalf("expected both sibling business calls to be preserved, got %+v", got)
+	}
+	if got[0].ToNodeID == got[1].ToNodeID {
+		t.Fatalf("expected distinct sibling business calls, got %+v", got)
+	}
+	if got[2].ToNodeID != "helper_target" {
+		t.Fatalf("expected deeper business call after sibling calls, got %+v", got)
+	}
 }
 
 func TestBuildAudit_FlagsExternalGatewayProxyTarget(t *testing.T) {

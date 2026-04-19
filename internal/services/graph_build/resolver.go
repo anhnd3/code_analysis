@@ -15,9 +15,6 @@ const (
 	resolutionBasisExactSymbolID     resolutionBasis = "exact_symbol_id"
 	resolutionBasisExactCanonical    resolutionBasis = "exact_canonical"
 	resolutionBasisLocalExport       resolutionBasis = "local_export"
-	resolutionBasisSameFileName      resolutionBasis = "same_file_name"
-	resolutionBasisSamePackageName   resolutionBasis = "same_package_name"
-	resolutionBasisRepoExactName     resolutionBasis = "repo_exact_name"
 	resolutionBasisPackageMethodHint resolutionBasis = "package_method_hint"
 )
 
@@ -85,12 +82,6 @@ func (r targetResolver) ResolveBoundary(root boundaryroot.Root) (symbol.Symbol, 
 		rawTarget:  root.HandlerTarget,
 		targetKind: root.HandlerTargetKind,
 	}
-	if root.HandlerTargetKind == targetref.KindUnknown {
-		if name := boundaryTargetName(root.HandlerTarget); name != "" {
-			req.targetFilePath = root.SourceFile
-			req.targetExport = name
-		}
-	}
 	return r.resolve(req)
 }
 
@@ -117,12 +108,6 @@ func (r targetResolver) resolve(req targetLookupRequest) (symbol.Symbol, graph.C
 				}
 			}
 		}
-		if fileSymbols := r.executableByFileAndName[req.targetFilePath]; fileSymbols != nil {
-			candidates := fileSymbols[req.targetExport]
-			if len(candidates) == 1 {
-				return candidates[0], graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 0.9}, resolutionBasisSameFileName, true
-			}
-		}
 	}
 
 	if req.targetKind == targetref.KindPackageMethodHint {
@@ -137,24 +122,9 @@ func (r targetResolver) resolve(req targetLookupRequest) (symbol.Symbol, graph.C
 		return symbol.Symbol{}, graph.Confidence{}, "", false
 	}
 
-	if pkgToken, methodName, ok := parsePackageMethodHint(raw); ok {
-		if resolved, confidence, basis, ok := r.resolvePackageMethodHintWithParts(req.repoID, pkgToken, methodName); ok {
+	if ref, ok := targetref.ParsePackageMethodHint(raw); ok {
+		if resolved, confidence, basis, ok := r.resolvePackageMethodHintWithParts(req.repoID, ref.PackageToken, ref.MethodName); ok {
 			return resolved, confidence, basis, true
-		}
-	}
-
-	if isExactNameOnly(raw) {
-		if packageName := r.packageByFile[req.sourceFile]; packageName != "" {
-			candidates := r.executableByPackageAndName[packageSymbolsKey(req.repoID, packageName)][raw]
-			if len(candidates) == 1 {
-				return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.8}, resolutionBasisSamePackageName, true
-			}
-		}
-		if repoSymbols := r.executableByRepoAndName[req.repoID]; repoSymbols != nil {
-			candidates := repoSymbols[raw]
-			if len(candidates) == 1 {
-				return candidates[0], graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.6}, resolutionBasisRepoExactName, true
-			}
 		}
 	}
 
@@ -162,15 +132,15 @@ func (r targetResolver) resolve(req targetLookupRequest) (symbol.Symbol, graph.C
 }
 
 func (r targetResolver) resolvePackageMethodHint(repoID, raw string) (symbol.Symbol, graph.Confidence, resolutionBasis, bool) {
-	pkgToken, methodName, ok := parsePackageMethodHint(raw)
+	ref, ok := targetref.ParsePackageMethodHint(raw)
 	if !ok {
 		return symbol.Symbol{}, graph.Confidence{}, "", false
 	}
-	return r.resolvePackageMethodHintWithParts(repoID, pkgToken, methodName)
+	return r.resolvePackageMethodHintWithParts(repoID, ref.PackageToken, ref.MethodName)
 }
 
 func (r targetResolver) resolvePackageMethodHintWithParts(repoID, pkgToken, methodName string) (symbol.Symbol, graph.Confidence, resolutionBasis, bool) {
-	packageKey := packageSymbolsKey(repoID, pkgToken)
+	packageKey := packageSymbolsKey(repoID, targetref.NormalizePackageToken(pkgToken))
 	candidates := append([]symbol.Symbol(nil), r.executableMethodsByPackageAndName[packageKey][methodName]...)
 	candidates = filterPreferredMethodCandidates(candidates)
 	if len(candidates) != 1 {
@@ -200,24 +170,4 @@ func isExecutableSymbol(sym symbol.Symbol) bool {
 	default:
 		return false
 	}
-}
-
-func parsePackageMethodHint(raw string) (string, string, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || strings.Contains(raw, "/") {
-		return "", "", false
-	}
-	if strings.Count(raw, ".") != 1 {
-		return "", "", false
-	}
-	idx := strings.LastIndex(raw, ".")
-	if idx <= 0 || idx >= len(raw)-1 {
-		return "", "", false
-	}
-	return raw[:idx], raw[idx+1:], true
-}
-
-func isExactNameOnly(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	return raw != "" && !strings.Contains(raw, ".") && !strings.Contains(raw, "/")
 }

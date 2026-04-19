@@ -33,13 +33,22 @@ func RegisterLocalHandler(ctx context.Context, mux *gwruntime.ServeMux, conn int
 	return nil
 }
 
-func configure(ctx context.Context, s *server, conn interface{}) {
+func (s *server) configure(ctx context.Context, conn interface{}) {
 	mux := gwruntime.NewServeMux()
 	alias := mux
 
 	RegisterUsersHandlerFromEndpoint(ctx, alias, "localhost:8080")
 	RegisterLocalHandler(ctx, mux, conn)
 	RegisterFieldHandler(ctx, s.mux, conn)
+	shortErr := RegisterShortVarHandler(ctx, mux, conn)
+	_ = shortErr
+
+	var specErr = RegisterVarSpecHandler(ctx, mux, conn)
+	_ = specErr
+
+	var assignErr error
+	assignErr = RegisterAssignedHandler(ctx, mux, conn)
+	_ = assignErr
 
 	local := localServer{}
 	RegisterShadowHandler(ctx, local.mux, conn)
@@ -55,8 +64,8 @@ func configure(ctx context.Context, s *server, conn interface{}) {
 	}
 
 	roots, diags := detector.DetectBoundaries(files[0], nil)
-	if len(roots) != 3 {
-		t.Fatalf("expected 3 grpc-gateway roots, got %d: %+v", len(roots), roots)
+	if len(roots) != 6 {
+		t.Fatalf("expected 6 grpc-gateway roots, got %d: %+v", len(roots), roots)
 	}
 
 	users := rootByCanonicalName(t, roots, "PROXY RegisterUsersHandlerFromEndpoint")
@@ -75,6 +84,21 @@ func configure(ctx context.Context, s *server, conn interface{}) {
 	field := rootByCanonicalName(t, roots, "PROXY RegisterFieldHandler")
 	if field.ID == "" || field.ID != boundaryroot.StableID(field) {
 		t.Fatalf("expected stable root ID for %+v", field)
+	}
+
+	shortVar := rootByCanonicalName(t, roots, "PROXY RegisterShortVarHandler")
+	if shortVar.HandlerTarget != "RegisterShortVarHandler" {
+		t.Fatalf("expected short-var registration handler target, got %q", shortVar.HandlerTarget)
+	}
+
+	varSpec := rootByCanonicalName(t, roots, "PROXY RegisterVarSpecHandler")
+	if varSpec.HandlerTarget != "RegisterVarSpecHandler" {
+		t.Fatalf("expected var-spec registration handler target, got %q", varSpec.HandlerTarget)
+	}
+
+	assigned := rootByCanonicalName(t, roots, "PROXY RegisterAssignedHandler")
+	if assigned.HandlerTarget != "RegisterAssignedHandler" {
+		t.Fatalf("expected assignment registration handler target, got %q", assigned.HandlerTarget)
 	}
 
 	diagCategories := collectDiagnosticCategories(diags)

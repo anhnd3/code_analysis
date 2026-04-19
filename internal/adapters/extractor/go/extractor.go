@@ -18,7 +18,8 @@ import (
 )
 
 type Extractor struct {
-	parser *treesitter.GoParser
+	parser              *treesitter.GoParser
+	packageTypeEnvCache map[string]goFileTypeEnv
 }
 
 type scope struct {
@@ -129,7 +130,10 @@ func isInNestedFuncLiteral(root, node *tree_sitter.Node) bool {
 }
 
 func New() extractorport.SymbolExtractor {
-	return &Extractor{parser: treesitter.NewGoParser()}
+	return &Extractor{
+		parser:              treesitter.NewGoParser(),
+		packageTypeEnvCache: map[string]goFileTypeEnv{},
+	}
 }
 
 func (e *Extractor) Supports(lang string) bool {
@@ -155,7 +159,6 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 	}
 	importAliases := map[string]string{}
 	importBindingsByAlias := map[string]symbol.ImportBinding{}
-	typeEnv := goFileTypeEnv{structFields: map[string]map[string]goFieldRef{}}
 	modulePath := readGoModulePath(file.RepositoryRoot)
 	walk(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
@@ -184,10 +187,9 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 				importBindingsByAlias[alias] = binding
 				result.ImportBindings = append(result.ImportBindings, binding)
 			}
-		case "type_spec":
-			collectGoStructFields(node, content, result.PackageName, &typeEnv)
 		}
 	})
+	typeEnv := e.packageTypeEnv(file, result.PackageName, root, content)
 	walk(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
 		case "function_declaration", "method_declaration":
@@ -231,12 +233,12 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 				syntheticIndex.Add(inner, synth)
 			})
 
-				// Semantic extraction runs after synthetic symbol creation so hints can bind to exact IDs.
-				result.Hints = append(result.Hints, orderedHints(
-					extractClosureHints(body, content, sym, syntheticIndex),
-					extractAsyncHints(body, content, sym, callEnv, syntheticIndex),
-					extractControlHints(body, content, sym),
-				)...)
+			// Semantic extraction runs after synthetic symbol creation so hints can bind to exact IDs.
+			result.Hints = append(result.Hints, orderedHints(
+				extractClosureHints(body, content, sym, syntheticIndex),
+				extractAsyncHints(body, content, sym, callEnv, syntheticIndex),
+				extractControlHints(body, content, sym),
+			)...)
 
 			// Second pass: extract calls with nearest scope affiliation
 			walk(body, func(inner *tree_sitter.Node) {
@@ -289,6 +291,104 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 		}
 	})
 	return result, nil
+}
+
+func newGoFileTypeEnv() goFileTypeEnv {
+	return goFileTypeEnv{structFields: map[string]map[string]goFieldRef{}}
+}
+
+func cloneGoFileTypeEnv(env goFileTypeEnv) goFileTypeEnv {
+	cloned := newGoFileTypeEnv()
+	for structName, fields := range env.structFields {
+		fieldCopy := make(map[string]goFieldRef, len(fields))
+		for fieldName, fieldRef := range fields {
+			fieldCopy[fieldName] = fieldRef
+		}
+		cloned.structFields[structName] = fieldCopy
+	}
+	return cloned
+}
+
+func (e *Extractor) packageTypeEnv(file symbol.FileRef, packageName string, root *tree_sitter.Node, content []byte) goFileTypeEnv {
+	env := newGoFileTypeEnv()
+	collectTypeSpecsFromRoot(root, content, packageName, &env)
+
+	if file.RepositoryRoot == "" || packageName == "" {
+		return env
+	}
+
+	cacheKey := packageTypeEnvCacheKey(file, packageName)
+	if cached, ok := e.packageTypeEnvCache[cacheKey]; ok {
+		return cloneGoFileTypeEnv(cached)
+	}
+
+	dir := filepath.Join(file.RepositoryRoot, filepath.Dir(file.RelativePath))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		e.packageTypeEnvCache[cacheKey] = cloneGoFileTypeEnv(env)
+		return env
+	}
+
+	currentPath := filepath.Clean(file.AbsolutePath)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+
+		absPath := filepath.Join(dir, name)
+		if filepath.Clean(absPath) == currentPath {
+			continue
+		}
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			continue
+		}
+		tree, err := e.parser.Parse(data)
+		if err != nil {
+			continue
+		}
+		if packageNameForRoot(tree.RootNode(), data) != packageName {
+			tree.Close()
+			continue
+		}
+		collectTypeSpecsFromRoot(tree.RootNode(), data, packageName, &env)
+		tree.Close()
+	}
+
+	e.packageTypeEnvCache[cacheKey] = cloneGoFileTypeEnv(env)
+	return env
+}
+
+func packageTypeEnvCacheKey(file symbol.FileRef, packageName string) string {
+	return filepath.ToSlash(filepath.Join(file.RepositoryRoot, filepath.Dir(file.RelativePath))) + "|" + packageName
+}
+
+func collectTypeSpecsFromRoot(root *tree_sitter.Node, content []byte, packageName string, env *goFileTypeEnv) {
+	walk(root, func(node *tree_sitter.Node) {
+		if node != nil && node.Kind() == "type_spec" {
+			collectGoStructFields(node, content, packageName, env)
+		}
+	})
+}
+
+func packageNameForRoot(root *tree_sitter.Node, content []byte) string {
+	if root == nil {
+		return ""
+	}
+	for i := uint(0); i < root.NamedChildCount(); i++ {
+		child := root.NamedChild(i)
+		if child == nil || child.Kind() != "package_clause" {
+			continue
+		}
+		if name := packageClauseName(child); name != nil {
+			return name.Utf8Text(content)
+		}
+	}
+	return ""
 }
 
 func packageClauseName(node *tree_sitter.Node) *tree_sitter.Node {
@@ -391,8 +491,12 @@ func resolveCallTarget(node *tree_sitter.Node, content []byte, env goCallEnv) sy
 			}
 		}
 		if packageToken, ok := env.receiverFieldPackageToken(operand, content); ok {
+			hint := targetref.BuildPackageMethodHint(packageToken, right)
+			if hint == "" {
+				return symbol.RelationCandidate{}
+			}
 			return symbol.RelationCandidate{
-				TargetCanonicalName: canonicalName(packageToken, "", right),
+				TargetCanonicalName: hint,
 				TargetKind:          targetref.KindPackageMethodHint,
 				EvidenceType:        "receiver_field_selector",
 				ConfidenceScore:     0.7,
@@ -491,7 +595,7 @@ func collectGoStructFields(typeSpec *tree_sitter.Node, content []byte, packageNa
 		}
 		fieldRef := goFieldRef{
 			DeclaredType: strings.TrimSpace(fieldType.Utf8Text(content)),
-			PackageToken: goTypePackageToken(fieldType, content, packageName),
+			PackageToken: targetref.PackageTokenFromTypeText(fieldType.Utf8Text(content), packageName),
 		}
 		for _, fieldName := range goFieldDeclarationNames(node, fieldType, content) {
 			env.structFields[structName][fieldName] = fieldRef
@@ -603,9 +707,9 @@ func (e goCallEnv) receiverFieldPackageToken(expr *tree_sitter.Node, content []b
 		return "", false
 	}
 	if fieldRef.PackageToken != "" {
-		return fieldRef.PackageToken, true
+		return targetref.NormalizePackageToken(fieldRef.PackageToken), true
 	}
-	return e.packageName, true
+	return "", false
 }
 
 func unwrapGoParens(node *tree_sitter.Node) *tree_sitter.Node {

@@ -124,6 +124,43 @@ func TestTargetResolverPrefersConcreteMethodsOverInterfaceSymbols(t *testing.T) 
 	}
 }
 
+func TestTargetResolverResolvesExtractorProvidedExportMetadata(t *testing.T) {
+	target := testSymbol("sym_repo", "repo1", "repo.go", "camerarepo", "cameraRepo", "DetectQR", symbol.KindMethod)
+	resolver := testTargetResolver(target)
+	resolver.exportCanonicalByFile["repo.go"] = map[string]string{
+		"DetectQR": target.CanonicalName,
+	}
+
+	resolved, confidence, basis, ok := resolver.ResolveRelation("repo1", "handler.go", symbol.RelationCandidate{
+		TargetFilePath:   "repo.go",
+		TargetExportName: "DetectQR",
+	})
+	if !ok {
+		t.Fatal("expected extractor-provided file/export metadata to resolve")
+	}
+	if resolved.CanonicalName != target.CanonicalName {
+		t.Fatalf("expected %s, got %+v", target.CanonicalName, resolved)
+	}
+	if basis != resolutionBasisLocalExport {
+		t.Fatalf("expected local export basis, got %s", basis)
+	}
+	if confidence.Tier != "confirmed" {
+		t.Fatalf("expected confirmed confidence, got %+v", confidence)
+	}
+}
+
+func TestTargetResolverDoesNotGuessExactNameOnly(t *testing.T) {
+	target := testSymbol("sym_repo", "repo1", "repo.go", "camerarepo", "cameraRepo", "DetectQR", symbol.KindMethod)
+	resolver := testTargetResolver(target)
+
+	_, _, _, ok := resolver.ResolveRelation("repo1", "handler.go", symbol.RelationCandidate{
+		TargetCanonicalName: "DetectQR",
+	})
+	if ok {
+		t.Fatal("expected exact-name-only target to stay unresolved")
+	}
+}
+
 func testSymbol(id, repoID, filePath, pkg, receiver, name string, kind symbol.Kind) symbol.Symbol {
 	return symbol.Symbol{
 		ID:            symbol.ID(id),

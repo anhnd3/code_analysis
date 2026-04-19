@@ -134,6 +134,41 @@ func (h *handler) Handle() {
 	assertRelationTarget(t, result.Relations, "fmt.Println", "fmt.Println", targetref.KindExactCanonical, "import_selector")
 }
 
+func TestExtractorUsesSiblingPackageTypeInfoForReceiverFieldSelectors(t *testing.T) {
+	extractor := New()
+	workspace := t.TempDir()
+
+	writeTestFile(t, filepath.Join(workspace, "go.mod"), []byte("module example.com/demo\n\ngo 1.22\n"))
+	writeTestFile(t, filepath.Join(workspace, "repo", "repo.go"), []byte("package repo\n\ntype CameraRepo interface{}\n"))
+	writeTestFile(t, filepath.Join(workspace, "handler", "types.go"), []byte(`package handler
+
+import "example.com/demo/repo"
+
+type handler struct {
+	repo repo.CameraRepo
+}
+`))
+	writeTestFile(t, filepath.Join(workspace, "handler", "logic.go"), []byte(`package handler
+
+func (h *handler) Handle() {
+	h.repo.DetectQR()
+}
+`))
+
+	result, err := extractor.ExtractFile(symbol.FileRef{
+		RepositoryID:   "demo",
+		RepositoryRoot: workspace,
+		AbsolutePath:   filepath.Join(workspace, "handler", "logic.go"),
+		RelativePath:   "handler/logic.go",
+		Language:       "go",
+	})
+	if err != nil {
+		t.Fatalf("extract file: %v", err)
+	}
+
+	assertRelationTarget(t, result.Relations, "h.repo.DetectQR", "repo.DetectQR", targetref.KindPackageMethodHint, "receiver_field_selector")
+}
+
 func assertRelationTarget(t *testing.T, relations []symbol.RelationCandidate, evidenceSource, target string, kind targetref.Kind, evidenceType string) {
 	t.Helper()
 	for _, relation := range relations {

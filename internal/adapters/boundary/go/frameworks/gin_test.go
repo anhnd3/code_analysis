@@ -308,7 +308,8 @@ func makeDeepHandler() cameraHandler {
 	return makeHandler()
 }
 
-func register(engine *gin.Engine) {
+func register() {
+	engine := gin.New()
 	handlers := camerahandler.NewCameraHandler()
 	alias := handlers
 	fromFactory := makeHandler()
@@ -343,6 +344,54 @@ func register(engine *gin.Engine) {
 
 	if !slices.Contains(collectDiagnosticCategories(diags), "boundary_unresolved_handler_target") {
 		t.Fatalf("expected unresolved diagnostic for deeper factory chain, got %+v", diags)
+	}
+}
+
+func TestGinDetectorResolvesImportedProviderWrapperSelectors(t *testing.T) {
+	imported := parseGinFiles(t, map[string][]byte{
+		"service/camera_v2/camera_v2.go": []byte(`package camera_v2
+
+import handler_v2 "example.com/demo/service/camera_v2/handler"
+
+func InitCameraV2() handler_v2.CameraV2Handler {
+	return handler_v2.NewCameraHandler()
+}`),
+	})
+	router := parseGinFiles(t, map[string][]byte{
+		"cmd/router.go": []byte(`package cmd
+
+import (
+	"github.com/gin-gonic/gin"
+
+	camera_v2 "example.com/demo/service/camera_v2"
+)
+
+func register() {
+	engine := gin.New()
+	handlersV2 := camera_v2.InitCameraV2()
+	engine.POST("/detect-qr", handlersV2.DetectQR)
+}`),
+	})
+
+	detector := NewGinDetector()
+	if diags := detector.PreparePackage(imported, nil); len(diags) != 0 {
+		t.Fatalf("expected imported package prep diagnostics to stay empty, got %+v", diags)
+	}
+	if diags := detector.PreparePackage(router, nil); len(diags) != 0 {
+		t.Fatalf("expected router package prep diagnostics to stay empty, got %+v", diags)
+	}
+
+	roots, diags := detector.DetectBoundaries(router[0], nil)
+	if len(roots) != 1 {
+		t.Fatalf("expected one route, got %d: %+v", len(roots), roots)
+	}
+
+	root := rootByCanonicalName(t, roots, "POST /detect-qr")
+	if root.HandlerTarget != "handler_v2.DetectQR" {
+		t.Fatalf("expected imported wrapper selector to resolve against handler_v2, got %+v", root)
+	}
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics for supported imported wrapper, got %+v", diags)
 	}
 }
 

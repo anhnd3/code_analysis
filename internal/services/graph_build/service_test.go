@@ -65,7 +65,7 @@ func TestBuildCreatesCallAndTestEdges(t *testing.T) {
 	}
 }
 
-func TestBuildResolvesBoundaryHandlerTargetFromSameFileShortName(t *testing.T) {
+func TestBuildLeavesBoundaryHandlerTargetUnresolvedForSameFileShortName(t *testing.T) {
 	builder := New(progress.NoopReporter{})
 	inventory := repository.Inventory{
 		WorkspaceID: "ws_demo",
@@ -103,15 +103,15 @@ func TestBuildResolvesBoundaryHandlerTargetFromSameFileShortName(t *testing.T) {
 
 	result := builder.Build("ws1", "snap1", inventory, extraction, []boundaryroot.Root{root})
 	edge := findEdgeByKind(t, result.Snapshot.Edges, graph.EdgeRegistersBoundary)
-	if edge.To != idsForSymbol("sym_handle") {
-		t.Fatalf("expected boundary edge to resolve same-file short name, got %+v", edge)
+	if edge.To != "unresolved_Handle" {
+		t.Fatalf("expected boundary edge to stay unresolved for short-name target, got %+v", edge)
 	}
-	if edge.Confidence.Tier != graph.ConfidenceConfirmed {
-		t.Fatalf("expected confirmed boundary target resolution, got %+v", edge.Confidence)
+	if edge.Confidence.Tier != graph.ConfidenceInferred {
+		t.Fatalf("expected unresolved boundary target to remain inferred, got %+v", edge.Confidence)
 	}
 }
 
-func TestBuildResolvesBoundaryHandlerTargetFromSamePackageShortName(t *testing.T) {
+func TestBuildLeavesBoundaryHandlerTargetUnresolvedForSamePackageShortName(t *testing.T) {
 	builder := New(progress.NoopReporter{})
 	inventory := repository.Inventory{
 		WorkspaceID: "ws_demo",
@@ -155,11 +155,11 @@ func TestBuildResolvesBoundaryHandlerTargetFromSamePackageShortName(t *testing.T
 
 	result := builder.Build("ws1", "snap1", inventory, extraction, []boundaryroot.Root{root})
 	edge := findEdgeByKind(t, result.Snapshot.Edges, graph.EdgeRegistersBoundary)
-	if edge.To != idsForSymbol("sym_handle") {
-		t.Fatalf("expected boundary edge to resolve same-package short name, got %+v", edge)
+	if edge.To != "unresolved_Handle" {
+		t.Fatalf("expected boundary edge to stay unresolved for same-package short name, got %+v", edge)
 	}
 	if edge.Confidence.Tier != graph.ConfidenceInferred {
-		t.Fatalf("expected inferred same-package boundary target resolution, got %+v", edge.Confidence)
+		t.Fatalf("expected unresolved boundary target to remain inferred, got %+v", edge.Confidence)
 	}
 }
 

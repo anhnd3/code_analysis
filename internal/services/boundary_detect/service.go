@@ -95,10 +95,6 @@ func (s Service) detectGoRepo(repo repository.Manifest, allSymbols []symbol.Symb
 
 	for _, key := range packageKeys {
 		pkg := packages[key]
-		if !pkg.hasTarget {
-			continue
-		}
-
 		files := make([]boundary.ParsedGoFile, 0, len(pkg.files))
 		packageSymbols := make([]symbol.Symbol, 0)
 		seenSymbols := map[string]symbol.Symbol{}
@@ -118,6 +114,13 @@ func (s Service) detectGoRepo(repo repository.Manifest, allSymbols []symbol.Symb
 		}
 
 		result.Diagnostics = append(result.Diagnostics, s.goRegistry.PreparePackage(files, packageSymbols)...)
+	}
+
+	for _, key := range packageKeys {
+		pkg := packages[key]
+		if !pkg.hasTarget {
+			continue
+		}
 
 		sort.Slice(pkg.files, func(i, j int) bool {
 			return pkg.files[i].file.Path < pkg.files[j].file.Path

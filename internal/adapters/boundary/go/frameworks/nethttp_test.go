@@ -35,7 +35,7 @@ func makeUsersHandler() http.HandlerFunc {
 	return func(http.ResponseWriter, *http.Request) {}
 }
 
-func register(s *server) {
+func (s *server) register() {
 	http.HandleFunc("/users", listUsers)
 
 	mux := http.NewServeMux()
