@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_3cb27b71785d",
+    "root_node_id": "boundary_d14b98395450",
     "canonical_name": "GET /async",
-    "slug": "get-async__7b71785d",
+    "slug": "get-async__98395450",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_gin_route_async_9c01ab7b1fd0",
+        "workspace_id": "ws_gin_route_async_a430fd2561cf",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_gin_route_async_9c01ab7b1fd0",
+        "workspace_id": "ws_gin_route_async_a430fd2561cf",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_gin_route_async_9c01ab7b1fd0",
+        "workspace_id": "ws_gin_route_async_a430fd2561cf",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_gin_route_async_9c01ab7b1fd0",
+        "workspace_id": "ws_gin_route_async_a430fd2561cf",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_gin_route_async_9c01ab7b1fd0",
+        "workspace_id": "ws_gin_route_async_a430fd2561cf",
         "path": "diagram_http.mmd"
       }
     ]

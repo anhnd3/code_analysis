@@ -99,7 +99,7 @@ func TestEmit_CrossProjectGRPC(t *testing.T) {
     participant server as OrderServer
 
     note over client: subset-compatible link
-    client->>+server: CreateOrder [compatible_subset]
+    client-)server: CreateOrder [compatible_subset]
 `
 
 	if output != golden {
@@ -126,8 +126,8 @@ func TestEmit_AsyncFanout(t *testing.T) {
 	}
 
 	assertContains(t, output, "sequenceDiagram")
-	assertContains(t, output, "producer->>+consumer1: OrderCreated")
-	assertContains(t, output, "producer->>+consumer2: OrderCreated")
+	assertContains(t, output, "producer-)consumer1: OrderCreated")
+	assertContains(t, output, "producer-)consumer2: OrderCreated")
 }
 
 func TestEmit_ExternalParticipant(t *testing.T) {
@@ -202,7 +202,7 @@ func TestEmit_ReturnMessage(t *testing.T) {
 	}
 
 	assertContains(t, output, "a->>b: call")
-	assertContains(t, output, "b-->>-a: response")
+	assertContains(t, output, "b-->>a: response")
 }
 
 func TestEmit_SanitizeSpecialChars(t *testing.T) {

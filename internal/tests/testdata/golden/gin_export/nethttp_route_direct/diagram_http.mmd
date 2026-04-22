@@ -1,11 +1,11 @@
 sequenceDiagram
     title http flow
-    participant review_participant_11e14528455d as ANY /users
-    participant review_participant_d5d049abd96e as ListUsers [external]
+    participant review_participant_cad0e851d84a as ANY /users
+    participant review_participant_80a1f1d5a56a as ListUsers [external]
 
-    note over review_participant_11e14528455d: Stage: Boundary Entry
-    review_participant_11e14528455d->>review_participant_d5d049abd96e: dispatch request
-    note over review_participant_11e14528455d: Stage: Response
-    review_participant_d5d049abd96e-->>-review_participant_11e14528455d: return response
-    note over review_participant_11e14528455d: external-only boundary (no inbound match)
-    note over review_participant_11e14528455d: no promoted business call was found after the handler entry
+    note over review_participant_80a1f1d5a56a: Stage: Boundary Entry
+    review_participant_cad0e851d84a->>review_participant_80a1f1d5a56a: dispatch request
+    note over review_participant_80a1f1d5a56a: Stage: Response
+    review_participant_80a1f1d5a56a-->>review_participant_cad0e851d84a: return response
+    note over review_participant_cad0e851d84a: no promoted business call was found after the handler entry
+    note over review_participant_cad0e851d84a: external-only boundary (no inbound match)

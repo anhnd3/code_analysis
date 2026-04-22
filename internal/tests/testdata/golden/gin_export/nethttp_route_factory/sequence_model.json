@@ -2,12 +2,12 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "review_participant_434716cf59c4",
+      "id": "review_participant_5627d781a62b",
       "label": "ANY /users/factory",
       "short_name": "ANY /users/factory"
     },
     {
-      "id": "review_participant_a4f2147eb57a",
+      "id": "review_participant_aba4bcdf3e96",
       "label": "MakeUsersHandler",
       "short_name": "MakeUsersHandler",
       "is_external": true
@@ -16,42 +16,42 @@
   "elements": [
     {
       "note": {
-        "over_id": "review_participant_434716cf59c4",
+        "over_id": "review_participant_5627d781a62b",
         "text": "Stage: Boundary Entry"
       }
     },
     {
       "message": {
-        "from_id": "review_participant_434716cf59c4",
-        "to_id": "review_participant_a4f2147eb57a",
+        "from_id": "review_participant_5627d781a62b",
+        "to_id": "review_participant_aba4bcdf3e96",
         "label": "dispatch request",
         "kind": "sync"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_434716cf59c4",
+        "over_id": "review_participant_5627d781a62b",
         "text": "Stage: Response"
       }
     },
     {
       "message": {
-        "from_id": "review_participant_a4f2147eb57a",
-        "to_id": "review_participant_434716cf59c4",
+        "from_id": "review_participant_aba4bcdf3e96",
+        "to_id": "review_participant_5627d781a62b",
         "label": "return response",
         "kind": "return"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_434716cf59c4",
-        "text": "no promoted business call was found after the handler entry"
+        "over_id": "review_participant_5627d781a62b",
+        "text": "external-only boundary (no inbound match)"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_434716cf59c4",
-        "text": "external-only boundary (no inbound match)"
+        "over_id": "review_participant_5627d781a62b",
+        "text": "no promoted business call was found after the handler entry"
       }
     }
   ]

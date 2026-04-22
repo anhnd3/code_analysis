@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_717f7eb5ed69",
+    "root_node_id": "boundary_2e6203acd4b9",
     "canonical_name": "GET /closure",
-    "slug": "get-closure__7eb5ed69",
+    "slug": "get-closure__03acd4b9",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "workspace_id": "ws_gin_route_closure_bc038c15b354",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "workspace_id": "ws_gin_route_closure_bc038c15b354",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "workspace_id": "ws_gin_route_closure_bc038c15b354",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "workspace_id": "ws_gin_route_closure_bc038c15b354",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_gin_route_closure_a361c1ee56cf",
+        "workspace_id": "ws_gin_route_closure_bc038c15b354",
         "path": "diagram_http.mmd"
       }
     ]

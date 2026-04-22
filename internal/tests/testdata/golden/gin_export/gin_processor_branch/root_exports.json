@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_1928d477d1bb",
+    "root_node_id": "boundary_298da922e44f",
     "canonical_name": "POST /process",
-    "slug": "post-process__d477d1bb",
+    "slug": "post-process__a922e44f",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_gin_processor_branch_06aa865e067c",
+        "workspace_id": "ws_gin_processor_branch_e6879466a39f",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_gin_processor_branch_06aa865e067c",
+        "workspace_id": "ws_gin_processor_branch_e6879466a39f",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_gin_processor_branch_06aa865e067c",
+        "workspace_id": "ws_gin_processor_branch_e6879466a39f",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_gin_processor_branch_06aa865e067c",
+        "workspace_id": "ws_gin_processor_branch_e6879466a39f",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_gin_processor_branch_06aa865e067c",
+        "workspace_id": "ws_gin_processor_branch_e6879466a39f",
         "path": "diagram_http.mmd"
       }
     ]

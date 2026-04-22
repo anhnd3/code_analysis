@@ -1,5 +1,5 @@
 {
-  "root_node_id": "boundary_42b01092f1bd",
+  "root_node_id": "boundary_cde9d833def8",
   "nodes": [
     {
       "id": "",
@@ -8,16 +8,16 @@
       "role": "remote"
     },
     {
-      "id": "boundary_42b01092f1bd",
+      "id": "boundary_cde9d833def8",
       "canonical_name": "PROXY RegisterUsersHandlerFromEndpoint",
       "short_name": "PROXY RegisterUsersHandlerFromEndpoint",
       "role": "root",
-      "repository_id": "repo_9ae3ede5bf87"
+      "repository_id": "repo_ff56248da423"
     }
   ],
   "edges": [
     {
-      "from_id": "boundary_42b01092f1bd",
+      "from_id": "boundary_cde9d833def8",
       "to_id": "unresolved_RegisterUsersHandlerFromEndpoint",
       "label": "RegisterUsersHandlerFromEndpoint",
       "inferred": true,

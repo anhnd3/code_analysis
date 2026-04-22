@@ -1,19 +1,19 @@
 {
-  "id": "reviewflow_39581252c115",
-  "root_node_id": "boundary_42b01092f1bd",
+  "id": "reviewflow_849aba779efe",
+  "root_node_id": "boundary_cde9d833def8",
   "canonical_name": "PROXY RegisterUsersHandlerFromEndpoint",
   "participants": [
     {
-      "id": "review_participant_3cf3434ffe65",
+      "id": "review_participant_9b2b733cb95c",
       "kind": "boundary",
       "label": "Gateway Proxy",
       "role": "boundary",
       "source_node_ids": [
-        "boundary_42b01092f1bd"
+        "boundary_cde9d833def8"
       ]
     },
     {
-      "id": "review_participant_be83147d3956",
+      "id": "review_participant_09c26e86502a",
       "kind": "gateway_client",
       "label": "Gateway Client",
       "role": "remote",
@@ -25,42 +25,42 @@
   ],
   "stages": [
     {
-      "id": "review_stage_a5dbdcacece0",
+      "id": "review_stage_5d8d73b5ffd8",
       "kind": "boundary_entry",
       "label": "Boundary Entry",
       "participant_ids": [
-        "review_participant_3cf3434ffe65",
-        "review_participant_be83147d3956"
+        "review_participant_09c26e86502a",
+        "review_participant_9b2b733cb95c"
       ],
       "messages": [
         {
-          "id": "review_msg_9c9d6df1423a",
-          "from_participant_id": "review_participant_3cf3434ffe65",
-          "to_participant_id": "review_participant_be83147d3956",
+          "id": "review_msg_def8f9c2e3b0",
+          "from_participant_id": "review_participant_9b2b733cb95c",
+          "to_participant_id": "review_participant_09c26e86502a",
           "label": "dispatch proxy request",
           "kind": "sync",
           "source_edge_ids": [
-            "edge_9fcaeaea2dc3"
+            "audit_edge_7eb7a4241815"
           ]
         }
       ],
       "source_edge_ids": [
-        "edge_9fcaeaea2dc3"
+        "audit_edge_7eb7a4241815"
       ]
     },
     {
-      "id": "review_stage_3895433e57e8",
+      "id": "review_stage_b716cbff30f4",
       "kind": "response",
       "label": "Response",
       "participant_ids": [
-        "review_participant_3cf3434ffe65",
-        "review_participant_be83147d3956"
+        "review_participant_09c26e86502a",
+        "review_participant_9b2b733cb95c"
       ],
       "messages": [
         {
-          "id": "review_msg_0d07b8565c47",
-          "from_participant_id": "review_participant_be83147d3956",
-          "to_participant_id": "review_participant_3cf3434ffe65",
+          "id": "review_msg_cbc5ee03a6da",
+          "from_participant_id": "review_participant_09c26e86502a",
+          "to_participant_id": "review_participant_9b2b733cb95c",
           "label": "proxy response",
           "kind": "return"
         }
@@ -69,20 +69,20 @@
   ],
   "notes": [
     {
-      "id": "review_note_8672708a4215",
-      "over_participant_id": "review_participant_3cf3434ffe65",
+      "id": "review_note_0ee567436f47",
+      "over_participant_id": "review_participant_9b2b733cb95c",
       "text": "gateway registration target could not be resolved to an in-repo symbol",
       "kind": "gateway_proxy_external"
     },
     {
-      "id": "review_note_aa92afd9b4b7",
-      "over_participant_id": "review_participant_3cf3434ffe65",
+      "id": "review_note_643e96492a56",
+      "over_participant_id": "review_participant_9b2b733cb95c",
       "text": "no promoted business call was found after the handler entry",
       "kind": "no_business_call_after_handler"
     },
     {
-      "id": "review_note_ca4cb62d97fa",
-      "over_participant_id": "review_participant_3cf3434ffe65",
+      "id": "review_note_6c7c2ad12576",
+      "over_participant_id": "review_participant_9b2b733cb95c",
       "text": "external-only boundary (no inbound match)",
       "kind": "candidate",
       "source_node_ids": [
@@ -94,7 +94,7 @@
   "source_evidence": "framework adapter: grpc-gateway",
   "metadata": {
     "candidate_kind": "compact_review",
-    "signature": "boundary_42b01092f1bd|PROXY RegisterUsersHandlerFromEndpoint|http|compact_review|grpc-gateway|p:boundary:Gateway Proxy|p:gateway_client:Gateway Client|s:boundary_entry|m:review_participant_3cf3434ffe65:review_participant_be83147d3956:sync:dispatch proxy request|s:response|m:review_participant_be83147d3956:review_participant_3cf3434ffe65:return:proxy response|n:gateway_proxy_external:gateway registration target could not be resolved to an in-repo symbol|n:no_business_call_after_handler:no promoted business call was found after the handler entry|n:candidate:external-only boundary (no inbound match)",
+    "signature": "boundary_cde9d833def8|PROXY RegisterUsersHandlerFromEndpoint|http|compact_review|grpc-gateway|p:boundary:Gateway Proxy|p:gateway_client:Gateway Client|s:boundary_entry|m:review_participant_9b2b733cb95c:review_participant_09c26e86502a:sync:dispatch proxy request|s:response|m:review_participant_09c26e86502a:review_participant_9b2b733cb95c:return:proxy response|n:gateway_proxy_external:gateway registration target could not be resolved to an in-repo symbol|n:no_business_call_after_handler:no promoted business call was found after the handler entry|n:candidate:external-only boundary (no inbound match)",
     "score": 10,
     "root_framework": "grpc-gateway"
   }

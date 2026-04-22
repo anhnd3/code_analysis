@@ -191,6 +191,12 @@ func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (r
 
 	boundary := participants.ensureBoundary()
 	handler, hasHandler := s.resolveHandlerParticipant(ctx, participants)
+	auditLeading := ctx.audit.LeadingCalls
+	auditBusiness := ctx.audit.BusinessHandoff
+	auditDrilldown := ctx.audit.DrilldownCalls
+	if len(auditLeading) == 0 && len(auditBusiness) == 0 && len(auditDrilldown) == 0 && len(ctx.audit.FirstBusinessCalls) > 0 {
+		auditBusiness = ctx.audit.FirstBusinessCalls
+	}
 	if hasHandler {
 		msg := reviewflow.Message{
 			ID:                ids.Stable("review_msg", ctx.root.NodeID, "boundary_entry", boundary.Participant.ID, handler.Participant.ID, string(settings.kind)),
@@ -201,6 +207,21 @@ func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (r
 			SourceEdgeIDs:     collectEntrySourceEdgeIDs(ctx.audit),
 		}
 		stages[stageBoundaryEntry].add(msg)
+	}
+
+	for _, auditEdge := range boundedAuditEdges(auditLeading, 4) {
+		msg, stageKind, ok := s.auditMessage(ctx.root, auditEdge, participants, boundary, handler, hasHandler, settings)
+		if !ok {
+			continue
+		}
+		stages[stageKind].add(msg)
+	}
+	for _, auditEdge := range orderedAuditEdges(auditBusiness) {
+		msg, stageKind, ok := s.auditMessage(ctx.root, auditEdge, participants, boundary, handler, hasHandler, settings)
+		if !ok {
+			continue
+		}
+		stages[stageKind].add(msg)
 	}
 
 	for _, edge := range orderedReducedEdges(ctx.chain.Edges) {
@@ -220,24 +241,18 @@ func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (r
 		stages[stageKind].add(msg)
 	}
 
-	for _, auditEdge := range orderedAuditEdges(ctx.audit.FirstBusinessCalls) {
-		from := handler
-		if !hasHandler {
-			from = boundary
+	drilldownAdded := false
+	for _, auditEdge := range boundedAuditEdges(auditDrilldown, 6) {
+		msg, stageKind, ok := s.auditMessage(ctx.root, auditEdge, participants, boundary, handler, hasHandler, settings)
+		if !ok {
+			continue
 		}
-		to := participants.ensure(auditEdge.ToNodeID, auditEdge.Label)
-		msg := reviewflow.Message{
-			ID:                ids.Stable("review_msg", ctx.root.NodeID, "audit", auditEdge.EdgeID, string(settings.kind)),
-			FromParticipantID: from.Participant.ID,
-			ToParticipantID:   to.Participant.ID,
-			Label:             summarizeBusinessLabel(auditEdge.Label, to.Participant.Label, settings),
-			Kind:              messageKindFromProfiles(from, to, true),
-			SourceEdgeIDs:     []string{auditEdge.EdgeID},
-		}
-		stages[stageBusinessCore].add(msg)
+		stages[stageKind].add(msg)
+		drilldownAdded = true
 	}
 
 	blocks := s.buildBlocks(ctx, participants, settings, hasHandler, handler.Participant.ID)
+	blocks = append(blocks, s.buildGuardBlocks(ctx, boundary, handler, hasHandler)...)
 	for _, block := range blocks {
 		if block.StageID == "" {
 			continue
@@ -269,6 +284,10 @@ func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (r
 	}
 
 	notes := buildReviewNotes(ctx, participants)
+	if note, ok := s.buildDrilldownSummaryNote(ctx, participants, drilldownAdded, auditDrilldown); ok {
+		notes = append(notes, note)
+		sort.Slice(notes, func(i, j int) bool { return notes[i].ID < notes[j].ID })
+	}
 	stageList := make([]reviewflow.Stage, 0, len(stageOrder))
 	for _, kind := range stageOrder {
 		stage := stages[kind].build(ctx.root.NodeID)
@@ -507,6 +526,9 @@ func (s Service) resolveHandlerParticipant(ctx buildContext, participants *parti
 }
 
 func (s Service) edgeMessage(root entrypoint.Root, edge reduced.Edge, from, to participantView, settings candidateSettings) (reviewflow.Message, bool) {
+	if isRawReviewControlText(edge.Label) {
+		return reviewflow.Message{}, false
+	}
 	if settings.compactHelpers && from.Participant.ID == to.Participant.ID {
 		return reviewflow.Message{}, false
 	}
@@ -523,6 +545,30 @@ func (s Service) edgeMessage(root entrypoint.Root, edge reduced.Edge, from, to p
 		Kind:              messageKindFromEdge(edge, to),
 		SourceEdgeIDs:     []string{edgeRef(edge)},
 	}, true
+}
+
+func (s Service) auditMessage(root entrypoint.Root, auditEdge flow_stitch.SemanticAuditEdgeRef, participants *participantState, boundary, handler participantView, hasHandler bool, settings candidateSettings) (reviewflow.Message, string, bool) {
+	from := boundary
+	if hasHandler {
+		from = handler
+	}
+	if auditEdge.FromNodeID != "" && auditEdge.FromNodeID != root.NodeID {
+		from = participants.ensure(auditEdge.FromNodeID, "")
+	}
+	to := participants.ensure(auditEdge.ToNodeID, auditEdge.Label)
+	label := abstractEdgeLabel(root, reduced.Edge{Label: auditEdge.Label, OrderIndex: auditEdge.OrderIndex}, from, to, settings)
+	if label == "" {
+		return reviewflow.Message{}, "", false
+	}
+	msg := reviewflow.Message{
+		ID:                ids.Stable("review_msg", root.NodeID, "audit", auditEdgeStableRef(auditEdge), string(settings.kind)),
+		FromParticipantID: from.Participant.ID,
+		ToParticipantID:   to.Participant.ID,
+		Label:             label,
+		Kind:              messageKindFromProfiles(from, to, true),
+		SourceEdgeIDs:     []string{auditEdgeStableRef(auditEdge)},
+	}
+	return msg, stageForMessage(msg.Label, from, to), true
 }
 
 func (s Service) buildBlocks(ctx buildContext, participants *participantState, settings candidateSettings, hasHandler bool, handlerID string) []reviewflow.Block {
@@ -575,6 +621,62 @@ func (s Service) buildBlocks(ctx buildContext, participants *participantState, s
 		blocks = append(blocks, rfBlock)
 	}
 	return blocks
+}
+
+func (s Service) buildGuardBlocks(ctx buildContext, boundary, handler participantView, hasHandler bool) []reviewflow.Block {
+	if len(ctx.audit.GuardSummaries) == 0 {
+		return nil
+	}
+	blocks := make([]reviewflow.Block, 0, minInt(len(ctx.audit.GuardSummaries), 3))
+	fromID := boundary.Participant.ID
+	if hasHandler {
+		fromID = handler.Participant.ID
+	}
+	for _, guard := range boundedAuditGuards(ctx.audit.GuardSummaries, 3) {
+		if fromID == "" || boundary.Participant.ID == "" {
+			continue
+		}
+		stageID := guard.StageKind
+		if stageID == "" {
+			stageID = stageRequestPreparation
+		}
+		blocks = append(blocks, reviewflow.Block{
+			ID:      ids.Stable("review_guard", ctx.root.NodeID, guard.Kind, fmt.Sprintf("%d", guard.OrderIndex)),
+			Kind:    reviewflow.BlockAlt,
+			Label:   guard.Condition,
+			StageID: stageID,
+			Sections: []reviewflow.BlockSection{{
+				Label: guard.Condition,
+				Messages: []reviewflow.Message{{
+					ID:                ids.Stable("review_guard_msg", ctx.root.NodeID, guard.Kind, guard.Outcome),
+					FromParticipantID: fromID,
+					ToParticipantID:   boundary.Participant.ID,
+					Label:             guard.Outcome,
+					Kind:              reviewflow.MessageReturn,
+				}},
+			}},
+		})
+	}
+	return blocks
+}
+
+func (s Service) buildDrilldownSummaryNote(ctx buildContext, participants *participantState, drilldownAdded bool, drilldown []flow_stitch.SemanticAuditEdgeRef) (reviewflow.Note, bool) {
+	if drilldownAdded || len(drilldown) <= 6 {
+		return reviewflow.Note{}, false
+	}
+	overID := ""
+	if boundary, ok := participants.firstByKind(string(participant_classify.BucketBoundary)); ok {
+		overID = boundary.ID
+	}
+	if overID == "" {
+		return reviewflow.Note{}, false
+	}
+	return reviewflow.Note{
+		ID:                ids.Stable("review_note", ctx.root.NodeID, "drilldown_summary"),
+		OverParticipantID: overID,
+		Text:              "Additional lower-level business processing is summarized",
+		Kind:              "drilldown_summary",
+	}, true
 }
 
 func buildReviewNotes(ctx buildContext, participants *participantState) []reviewflow.Note {
@@ -770,16 +872,53 @@ func orderedReducedBlocks(blocks []reduced.Block) []reduced.Block {
 
 func orderedAuditEdges(edges []flow_stitch.SemanticAuditEdgeRef) []flow_stitch.SemanticAuditEdgeRef {
 	out := append([]flow_stitch.SemanticAuditEdgeRef(nil), edges...)
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].EdgeID != out[j].EdgeID {
-			return out[i].EdgeID < out[j].EdgeID
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].OrderIndex != out[j].OrderIndex {
+			return out[i].OrderIndex < out[j].OrderIndex
+		}
+		if out[i].FromNodeID != out[j].FromNodeID {
+			return out[i].FromNodeID < out[j].FromNodeID
 		}
 		if out[i].ToNodeID != out[j].ToNodeID {
 			return out[i].ToNodeID < out[j].ToNodeID
 		}
-		return out[i].Label < out[j].Label
+		if out[i].Label != out[j].Label {
+			return out[i].Label < out[j].Label
+		}
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		if out[i].ResolutionBasis != out[j].ResolutionBasis {
+			return out[i].ResolutionBasis < out[j].ResolutionBasis
+		}
+		if out[i].Inferred != out[j].Inferred {
+			return !out[i].Inferred && out[j].Inferred
+		}
+		return out[i].EdgeID < out[j].EdgeID
 	})
 	return out
+}
+
+func boundedAuditEdges(edges []flow_stitch.SemanticAuditEdgeRef, limit int) []flow_stitch.SemanticAuditEdgeRef {
+	ordered := orderedAuditEdges(edges)
+	if limit <= 0 || len(ordered) <= limit {
+		return ordered
+	}
+	return ordered[:limit]
+}
+
+func boundedAuditGuards(guards []flow_stitch.SemanticAuditGuard, limit int) []flow_stitch.SemanticAuditGuard {
+	out := append([]flow_stitch.SemanticAuditGuard(nil), guards...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].OrderIndex != out[j].OrderIndex {
+			return out[i].OrderIndex < out[j].OrderIndex
+		}
+		return out[i].Kind < out[j].Kind
+	})
+	if limit <= 0 || len(out) <= limit {
+		return out
+	}
+	return out[:limit]
 }
 
 func normalizeRoot(root entrypoint.Root) entrypoint.Root {
@@ -857,6 +996,9 @@ func cleanReviewLabel(raw string) string {
 	if raw == "" {
 		return ""
 	}
+	if isRawReviewControlText(raw) {
+		return ""
+	}
 	raw = strings.TrimPrefix(raw, "unresolved_")
 	raw = strings.ReplaceAll(raw, "$inline_handler_0", "handler")
 	raw = strings.ReplaceAll(raw, "$closure_return_0", "handler")
@@ -886,7 +1028,7 @@ func participant_classifyHumanize(raw string) string {
 			}
 		}
 		switch r {
-		case '/', '.', '_', '-', ' ':
+		case '/', '.', '_', '-', ' ', '(', ')', '{', '}', '[', ']', ':', ',', ';', '"', '\'':
 			normalized.WriteByte(' ')
 		default:
 			normalized.WriteRune(r)
@@ -921,6 +1063,14 @@ func containsReviewTokens(value string, tokens ...string) bool {
 func isNoisyReviewLabel(label string) bool {
 	lower := strings.ToLower(label)
 	return containsReviewTokens(lower, "$closure", "$inline", "goroutine", "helper", "wrapper")
+}
+
+func isRawReviewControlText(value string) bool {
+	lower := strings.ToLower(value)
+	if containsReviewTokens(lower, "go func", "defer func", "func()", "func (", "<-", "select {", "chan ") {
+		return true
+	}
+	return strings.ContainsAny(value, "{}")
 }
 
 func isGenericLabel(label string) bool {
@@ -993,13 +1143,26 @@ func blockStage(block reduced.Block) string {
 func collectEntrySourceEdgeIDs(audit flow_stitch.SemanticAuditRoot) []string {
 	var refs []string
 	if audit.RegistersBoundaryEdge != nil && audit.RegistersBoundaryEdge.EdgeID != "" {
-		refs = append(refs, audit.RegistersBoundaryEdge.EdgeID)
+		refs = append(refs, auditEdgeStableRef(*audit.RegistersBoundaryEdge))
 	}
 	if audit.ReturnsHandlerEdge != nil && audit.ReturnsHandlerEdge.EdgeID != "" {
-		refs = append(refs, audit.ReturnsHandlerEdge.EdgeID)
+		refs = append(refs, auditEdgeStableRef(*audit.ReturnsHandlerEdge))
 	}
 	sort.Strings(refs)
 	return refs
+}
+
+func auditEdgeStableRef(edge flow_stitch.SemanticAuditEdgeRef) string {
+	return ids.Stable(
+		"audit_edge",
+		edge.Kind,
+		edge.FromNodeID,
+		edge.ToNodeID,
+		edge.Label,
+		fmt.Sprintf("%d", edge.OrderIndex),
+		edge.ResolutionBasis,
+		fmt.Sprintf("%t", edge.Inferred),
+	)
 }
 
 func edgeRef(edge reduced.Edge) string {
@@ -1051,6 +1214,13 @@ func indexGraphNodes(nodes []graph.Node) map[string]graph.Node {
 		index[node.ID] = node
 	}
 	return index
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func sortedKeys[K comparable](set map[K]bool) []K {

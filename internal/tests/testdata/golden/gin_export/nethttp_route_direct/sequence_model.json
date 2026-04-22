@@ -2,12 +2,12 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "review_participant_11e14528455d",
+      "id": "review_participant_cad0e851d84a",
       "label": "ANY /users",
       "short_name": "ANY /users"
     },
     {
-      "id": "review_participant_d5d049abd96e",
+      "id": "review_participant_80a1f1d5a56a",
       "label": "ListUsers",
       "short_name": "ListUsers",
       "is_external": true
@@ -16,42 +16,42 @@
   "elements": [
     {
       "note": {
-        "over_id": "review_participant_11e14528455d",
+        "over_id": "review_participant_80a1f1d5a56a",
         "text": "Stage: Boundary Entry"
       }
     },
     {
       "message": {
-        "from_id": "review_participant_11e14528455d",
-        "to_id": "review_participant_d5d049abd96e",
+        "from_id": "review_participant_cad0e851d84a",
+        "to_id": "review_participant_80a1f1d5a56a",
         "label": "dispatch request",
         "kind": "sync"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_11e14528455d",
+        "over_id": "review_participant_80a1f1d5a56a",
         "text": "Stage: Response"
       }
     },
     {
       "message": {
-        "from_id": "review_participant_d5d049abd96e",
-        "to_id": "review_participant_11e14528455d",
+        "from_id": "review_participant_80a1f1d5a56a",
+        "to_id": "review_participant_cad0e851d84a",
         "label": "return response",
         "kind": "return"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_11e14528455d",
-        "text": "external-only boundary (no inbound match)"
+        "over_id": "review_participant_cad0e851d84a",
+        "text": "no promoted business call was found after the handler entry"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_11e14528455d",
-        "text": "no promoted business call was found after the handler entry"
+        "over_id": "review_participant_cad0e851d84a",
+        "text": "external-only boundary (no inbound match)"
       }
     }
   ]

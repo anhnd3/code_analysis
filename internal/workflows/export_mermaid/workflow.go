@@ -2,6 +2,7 @@ package export_mermaid
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,6 +58,46 @@ const (
 	RenderModeReducedDebug RenderMode = "reduced_debug"
 )
 
+type UsedRenderer string
+
+const (
+	UsedRendererReviewFlow   UsedRenderer = "reviewflow"
+	UsedRendererReducedChain UsedRenderer = "reduced_chain"
+)
+
+type ReviewFallbackReason string
+
+const (
+	ReviewFallbackReasonNone                      ReviewFallbackReason = ""
+	ReviewFallbackReasonNoSelectedCandidate       ReviewFallbackReason = "no_selected_candidate"
+	ReviewFallbackReasonIncompleteReviewArtifacts ReviewFallbackReason = "incomplete_review_artifacts"
+	ReviewFallbackReasonReviewValidationFailed    ReviewFallbackReason = "review_validation_failed"
+	ReviewFallbackReasonReviewBuildEmpty          ReviewFallbackReason = "review_build_empty"
+	ReviewFallbackReasonReviewRenderError         ReviewFallbackReason = "review_render_error"
+)
+
+// RootRenderDecision records which renderer path was attempted and which one produced output.
+type RootRenderDecision struct {
+	RootNodeID             string               `json:"root_node_id"`
+	CanonicalName          string               `json:"canonical_name"`
+	Slug                   string               `json:"slug"`
+	RequestedMode          RenderMode           `json:"requested_mode"`
+	EffectiveMode          RenderMode           `json:"effective_mode"`
+	UsedRenderer           UsedRenderer         `json:"used_renderer"`
+	ReviewAttempted        bool                 `json:"review_attempted"`
+	ReviewSelected         bool                 `json:"review_selected"`
+	FallbackUsed           bool                 `json:"fallback_used"`
+	FallbackReason         ReviewFallbackReason `json:"fallback_reason"`
+	SelectedCandidateID    string               `json:"selected_candidate_id"`
+	SelectedCandidateKind  string               `json:"selected_candidate_kind"`
+	SelectedSignature      string               `json:"selected_signature"`
+	CandidateCount         int                  `json:"candidate_count"`
+	ReviewFlowPresent      bool                 `json:"review_flow_present"`
+	ReviewFlowBuildPresent bool                 `json:"review_flow_build_present"`
+	SequenceModelPresent   bool                 `json:"sequence_model_present"`
+	MermaidPresent         bool                 `json:"mermaid_present"`
+}
+
 // RootExport records the render outcome for a single resolved root.
 type RootExport struct {
 	RootNodeID    string           `json:"root_node_id"`
@@ -74,6 +115,7 @@ type Request struct {
 	RootType          RootTypeFilter `json:"root_type"`
 	RootSelector      string         `json:"root_selector,omitempty"`
 	RenderMode        RenderMode     `json:"render_mode,omitempty"`
+	ReviewStrict      bool           `json:"review_strict,omitempty"`
 	MaxDepth          int            `json:"max_depth,omitempty"`
 	MaxBranches       int            `json:"max_branches,omitempty"`
 	CollapseMode      string         `json:"collapse_mode,omitempty"`
@@ -92,6 +134,10 @@ type Result struct {
 	MermaidCode  string                     `json:"mermaid_code,omitempty"`
 }
 
+type reviewFlowBuilder interface {
+	Build(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot) (reviewflow_build.BuildResult, error)
+}
+
 // Workflow orchestrates the full Mermaid export pipeline.
 type Workflow struct {
 	artifactStore     artifactstoreport.Store
@@ -102,7 +148,7 @@ type Workflow struct {
 	sequenceModel     sequence_model_build.Service
 	mermaidEmit       mermaid_emit.Service
 	boundaryDetect    boundary_detect.Service
-	reviewFlow        reviewflow_build.Service
+	reviewFlow        reviewFlowBuilder
 }
 
 // New creates the export_mermaid workflow.
@@ -218,25 +264,27 @@ func (w Workflow) runSingleRootExport(req Request, snapshot graph.GraphSnapshot,
 	}
 
 	auditRoot, _ := semanticAuditRootByNodeID(debug.semanticAudit, root.NodeID)
-	rendered, err := w.renderRoot(req, snapshot, root, reducedChain, auditRoot, sequence_model_build.Options{
+	renderedRoot, decision, err := w.renderRoot(req, snapshot, root, reducedChain, auditRoot, sequence_model_build.Options{
 		Title:            diagramTitle(req),
 		ServiceShortName: req.ServiceShortName,
 	})
-	debug.sequenceModel = &rendered.diagram
-	debug.reviewFlow = rendered.reviewFlow
-	debug.reviewFlowBuild = rendered.reviewFlowBuild
+	debug.renderDecision = &decision
+	debug.rootRenderDecisions = []RootRenderDecision{decision}
+	debug.sequenceModel = debugSequenceDiagram(renderedRoot.diagram)
+	debug.reviewFlow = renderedRoot.reviewFlow
+	debug.reviewFlowBuild = renderedRoot.reviewFlowBuild
+	debug.mermaidCode = renderedRoot.mermaidCode
 	if err != nil {
 		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: render root: %w", err)
 	}
-	diagram := rendered.diagram
+	diagram := renderedRoot.diagram
 	if err := ensureNonEmptySequence(diagram); err != nil {
 		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: %w", err)
 	}
 
-	mermaidCode := rendered.mermaidCode
-	debug.mermaidCode = mermaidCode
+	mermaidCode := renderedRoot.mermaidCode
 
 	var artifactRefs []artifact.Ref
 	if ref, err := w.artifactStore.SaveJSON(req.WorkspaceID, req.SnapshotID, "flow_bundle.json", artifact.TypeFlowBundle, bundle); err == nil {
@@ -252,7 +300,7 @@ func (w Workflow) runSingleRootExport(req Request, snapshot graph.GraphSnapshot,
 		Slug:          rootExportSlug(root),
 		Status:        RootExportRendered,
 	}
-	rootArtifactRefs, err := w.saveSingleRenderArtifacts(req, reducedChain, rendered.reviewFlow, rendered.reviewFlowBuild, diagram, mermaidCode)
+	rootArtifactRefs, err := w.saveSingleRenderArtifacts(req, reducedChain, renderedRoot.reviewFlow, renderedRoot.reviewFlowBuild, diagram, mermaidCode)
 	if err != nil {
 		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: save render artifacts: %w", err)
@@ -320,11 +368,27 @@ func (w Workflow) runPerRootHTTPExports(req Request, snapshot graph.GraphSnapsho
 		}
 
 		auditRoot, _ := semanticAuditRootByNodeID(debug.semanticAudit, root.NodeID)
-		rendered, err := w.renderRoot(req, snapshot, root, reducedChain, auditRoot, sequence_model_build.Options{
+		rendered, decision, err := w.renderRoot(req, snapshot, root, reducedChain, auditRoot, sequence_model_build.Options{
 			Title:            diagramTitleForRoot(req, root),
 			ServiceShortName: req.ServiceShortName,
 		})
+		debug.rootRenderDecisions = append(debug.rootRenderDecisions, decision)
 		if err != nil {
+			debug.rootRenderOutputs = append(debug.rootRenderOutputs, rootRenderDebug{
+				Slug:            export.Slug,
+				ReducedChain:    &reducedChain,
+				ReviewFlow:      rendered.reviewFlow,
+				ReviewFlowBuild: rendered.reviewFlowBuild,
+				Sequence:        debugSequenceDiagram(rendered.diagram),
+				MermaidCode:     rendered.mermaidCode,
+				RenderDecision:  &decision,
+			})
+			if auditRoot, ok := semanticAuditRootByNodeID(debug.semanticAudit, root.NodeID); ok {
+				debug.rootSemanticAudits = append(debug.rootSemanticAudits, rootSemanticAuditDebug{
+					Slug:  export.Slug,
+					Audit: auditRoot,
+				})
+			}
 			_ = debug.write()
 			return Result{}, fmt.Errorf("export_mermaid: render root for %s: %w", root.CanonicalName, err)
 		}
@@ -345,6 +409,7 @@ func (w Workflow) runPerRootHTTPExports(req Request, snapshot graph.GraphSnapsho
 			reviewFlowBuild: rendered.reviewFlowBuild,
 			sequence:        diagram,
 			mermaidCode:     rendered.mermaidCode,
+			renderDecision:  decision,
 		})
 	}
 
@@ -380,6 +445,7 @@ func (w Workflow) runPerRootHTTPExports(req Request, snapshot graph.GraphSnapsho
 			ReviewFlowBuild: output.reviewFlowBuild,
 			Sequence:        &output.sequence,
 			MermaidCode:     output.mermaidCode,
+			RenderDecision:  &output.renderDecision,
 		})
 		if auditRoot, ok := semanticAuditRootByNodeID(debug.semanticAudit, export.RootNodeID); ok {
 			debug.rootSemanticAudits = append(debug.rootSemanticAudits, rootSemanticAuditDebug{
@@ -530,44 +596,65 @@ type renderedRoot struct {
 	mermaidCode     string
 }
 
-func (w Workflow) renderRoot(req Request, snapshot graph.GraphSnapshot, root entrypoint.Root, reducedChain reduced.Chain, audit flow_stitch.SemanticAuditRoot, opts sequence_model_build.Options) (renderedRoot, error) {
+func (w Workflow) renderRoot(req Request, snapshot graph.GraphSnapshot, root entrypoint.Root, reducedChain reduced.Chain, audit flow_stitch.SemanticAuditRoot, opts sequence_model_build.Options) (renderedRoot, RootRenderDecision, error) {
 	mode := w.renderModeForRoot(req, root)
+	decision := newRootRenderDecision(req, root, mode)
 	if mode == RenderModeReview {
+		decision.ReviewAttempted = true
+
 		buildResult, err := w.reviewFlow.Build(snapshot, root, reducedChain, audit)
 		if err != nil {
-			return renderedRoot{}, err
+			return w.handleReviewFailure(req, reducedChain, opts, renderedRoot{}, decision, ReviewFallbackReasonReviewRenderError, fmt.Errorf("build reviewflow: %w", err))
 		}
-		if buildResult.Selected.RootNodeID != "" {
-			diagram, err := w.sequenceModel.BuildFromReviewFlow(buildResult.Selected, opts)
-			if err != nil {
-				return renderedRoot{}, err
-			}
-			mermaidCode, err := w.mermaidEmit.Emit(diagram)
-			if err != nil {
-				return renderedRoot{}, err
-			}
-			selected := buildResult.Selected
-			return renderedRoot{
-				reviewFlow:      &selected,
-				reviewFlowBuild: &buildResult,
-				diagram:         diagram,
-				mermaidCode:     mermaidCode,
-			}, nil
+
+		rendered := renderedRoot{reviewFlowBuild: &buildResult}
+		decision.ReviewFlowBuildPresent = true
+		populateSelectedDecisionMetadata(&decision, buildResult)
+		decision.ReviewSelected = buildResult.SelectedID != "" || buildResult.Selected.RootNodeID != "" || buildResult.Selected.ID != ""
+
+		if len(buildResult.Candidates) == 0 {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonReviewBuildEmpty, nil)
 		}
+		if buildResult.SelectedID == "" && buildResult.Selected.RootNodeID == "" && buildResult.Selected.ID == "" {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonNoSelectedCandidate, nil)
+		}
+		if buildResult.SelectedID != "" && buildResult.Selected.RootNodeID == "" {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonIncompleteReviewArtifacts, nil)
+		}
+
+		selected := buildResult.Selected
+		rendered.reviewFlow = &selected
+		decision.ReviewFlowPresent = true
+
+		if err := reviewflow_build.ValidateSelectedBuildResult(buildResult); err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, reviewFallbackReasonForValidation(err), err)
+		}
+
+		diagram, err := w.sequenceModel.BuildFromReviewFlow(selected, opts)
+		if err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonReviewRenderError, fmt.Errorf("build review sequence: %w", err))
+		}
+		rendered.diagram = diagram
+		decision.SequenceModelPresent = hasRenderableSequence(diagram)
+		if !decision.SequenceModelPresent {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonIncompleteReviewArtifacts, nil)
+		}
+
+		mermaidCode, err := w.mermaidEmit.Emit(diagram)
+		if err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonReviewRenderError, fmt.Errorf("emit review mermaid: %w", err))
+		}
+		rendered.mermaidCode = mermaidCode
+		decision.MermaidPresent = strings.TrimSpace(mermaidCode) != ""
+		if !decision.MermaidPresent {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonIncompleteReviewArtifacts, nil)
+		}
+
+		decision.UsedRenderer = UsedRendererReviewFlow
+		return rendered, decision, nil
 	}
 
-	diagram, err := w.sequenceModel.Build(reducedChain, opts)
-	if err != nil {
-		return renderedRoot{}, err
-	}
-	mermaidCode, err := w.mermaidEmit.Emit(diagram)
-	if err != nil {
-		return renderedRoot{}, err
-	}
-	return renderedRoot{
-		diagram:     diagram,
-		mermaidCode: mermaidCode,
-	}, nil
+	return w.renderReducedRoot(reducedChain, opts, renderedRoot{}, decision)
 }
 
 func (w Workflow) renderModeForRoot(req Request, root entrypoint.Root) RenderMode {
@@ -687,12 +774,14 @@ type debugBundle struct {
 	flowBundle          *flow.Bundle
 	boundaryBundle      *boundary.Bundle
 	rootExports         []RootExport
+	rootRenderDecisions []RootRenderDecision
 	semanticAudit       *flow_stitch.SemanticAudit
 	reducedChain        *reduced.Chain
 	reviewFlow          *reviewflow.Flow
 	reviewFlowBuild     *reviewflow_build.BuildResult
 	sequenceModel       *sequence.Diagram
 	mermaidCode         string
+	renderDecision      *RootRenderDecision
 	rootRenderOutputs   []rootRenderDebug
 	rootSemanticAudits  []rootSemanticAuditDebug
 }
@@ -704,6 +793,7 @@ type rootRenderDebug struct {
 	ReviewFlowBuild *reviewflow_build.BuildResult
 	Sequence        *sequence.Diagram
 	MermaidCode     string
+	RenderDecision  *RootRenderDecision
 }
 
 type rootSemanticAuditDebug struct {
@@ -767,6 +857,19 @@ func (d debugBundle) write() error {
 		return err
 	}
 
+	rootRenderDecisions := d.rootRenderDecisions
+	if rootRenderDecisions == nil {
+		rootRenderDecisions = []RootRenderDecision{}
+	}
+	if err := saveDebugJSON(filepath.Join(d.dir, "root_render_decisions.json"), rootRenderDecisions); err != nil {
+		return err
+	}
+	if d.renderDecision != nil {
+		if err := saveDebugJSON(filepath.Join(d.dir, "render_decision.json"), d.renderDecision); err != nil {
+			return err
+		}
+	}
+
 	if d.reducedChain != nil {
 		if err := saveDebugJSON(filepath.Join(d.dir, "reduced_chain.json"), d.reducedChain); err != nil {
 			return err
@@ -818,6 +921,11 @@ func (d debugBundle) write() error {
 		}
 		if rootDebug.Sequence != nil {
 			if err := saveDebugJSON(filepath.Join(rootDir, "sequence_model.json"), rootDebug.Sequence); err != nil {
+				return err
+			}
+		}
+		if rootDebug.RenderDecision != nil {
+			if err := saveDebugJSON(filepath.Join(rootDir, "render_decision.json"), rootDebug.RenderDecision); err != nil {
 				return err
 			}
 		}
@@ -985,6 +1093,101 @@ type rootRenderOutput struct {
 	reviewFlowBuild *reviewflow_build.BuildResult
 	sequence        sequence.Diagram
 	mermaidCode     string
+	renderDecision  RootRenderDecision
+}
+
+func (w Workflow) handleReviewFailure(req Request, reducedChain reduced.Chain, opts sequence_model_build.Options, rendered renderedRoot, decision RootRenderDecision, reason ReviewFallbackReason, cause error) (renderedRoot, RootRenderDecision, error) {
+	decision.FallbackReason = reason
+	if req.ReviewStrict {
+		return rendered, decision, strictReviewError(reason, cause)
+	}
+	decision.FallbackUsed = true
+	return w.renderReducedRoot(reducedChain, opts, renderedRoot{}, decision)
+}
+
+func (w Workflow) renderReducedRoot(reducedChain reduced.Chain, opts sequence_model_build.Options, rendered renderedRoot, decision RootRenderDecision) (renderedRoot, RootRenderDecision, error) {
+	diagram, err := w.sequenceModel.Build(reducedChain, opts)
+	if err != nil {
+		return rendered, decision, err
+	}
+	rendered.diagram = diagram
+	decision.SequenceModelPresent = hasRenderableSequence(diagram)
+
+	mermaidCode, err := w.mermaidEmit.Emit(diagram)
+	if err != nil {
+		return rendered, decision, err
+	}
+	rendered.mermaidCode = mermaidCode
+	decision.MermaidPresent = strings.TrimSpace(mermaidCode) != ""
+	decision.UsedRenderer = UsedRendererReducedChain
+	return rendered, decision, nil
+}
+
+func newRootRenderDecision(req Request, root entrypoint.Root, effectiveMode RenderMode) RootRenderDecision {
+	return RootRenderDecision{
+		RootNodeID:    root.NodeID,
+		CanonicalName: root.CanonicalName,
+		Slug:          rootExportSlug(root),
+		RequestedMode: requestedRenderMode(req),
+		EffectiveMode: effectiveMode,
+	}
+}
+
+func requestedRenderMode(req Request) RenderMode {
+	if req.RenderMode == "" {
+		return RenderModeAuto
+	}
+	return req.RenderMode
+}
+
+func populateSelectedDecisionMetadata(decision *RootRenderDecision, build reviewflow_build.BuildResult) {
+	decision.CandidateCount = len(build.Candidates)
+	decision.SelectedCandidateID = build.SelectedID
+	decision.SelectedSignature = build.Signature
+	if build.Selected.Metadata.CandidateKind != "" {
+		decision.SelectedCandidateKind = build.Selected.Metadata.CandidateKind
+	}
+	if decision.SelectedCandidateKind == "" {
+		for _, candidate := range build.Candidates {
+			if candidate.ID == build.SelectedID {
+				decision.SelectedCandidateKind = candidate.Metadata.CandidateKind
+				if decision.SelectedSignature == "" {
+					decision.SelectedSignature = candidate.Metadata.Signature
+				}
+				break
+			}
+		}
+	}
+}
+
+func reviewFallbackReasonForValidation(err error) ReviewFallbackReason {
+	switch {
+	case errors.Is(err, reviewflow_build.ErrBuildEmpty):
+		return ReviewFallbackReasonReviewBuildEmpty
+	case errors.Is(err, reviewflow_build.ErrNoSelectedCandidate):
+		return ReviewFallbackReasonNoSelectedCandidate
+	default:
+		return ReviewFallbackReasonReviewValidationFailed
+	}
+}
+
+func strictReviewError(reason ReviewFallbackReason, cause error) error {
+	if cause == nil {
+		return fmt.Errorf("review strict mode rejected review rendering: %s", reason)
+	}
+	return fmt.Errorf("review strict mode rejected review rendering: %s: %w", reason, cause)
+}
+
+func hasRenderableSequence(diagram sequence.Diagram) bool {
+	return len(diagram.Participants) != 0 || len(diagram.Elements) != 0
+}
+
+func debugSequenceDiagram(diagram sequence.Diagram) *sequence.Diagram {
+	if diagram.Title == "" && len(diagram.Participants) == 0 && len(diagram.Elements) == 0 {
+		return nil
+	}
+	clone := diagram
+	return &clone
 }
 
 func rootExportSlug(root entrypoint.Root) string {

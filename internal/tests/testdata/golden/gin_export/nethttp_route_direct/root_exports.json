@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_88ca4952aeae",
+    "root_node_id": "boundary_38262f81e65e",
     "canonical_name": "ANY /users",
-    "slug": "any-users__4952aeae",
+    "slug": "any-users__2f81e65e",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "workspace_id": "ws_nethttp_route_direct_42ff94e6a5f4",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "workspace_id": "ws_nethttp_route_direct_42ff94e6a5f4",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "workspace_id": "ws_nethttp_route_direct_42ff94e6a5f4",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "workspace_id": "ws_nethttp_route_direct_42ff94e6a5f4",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_nethttp_route_direct_a190c4b8597a",
+        "workspace_id": "ws_nethttp_route_direct_42ff94e6a5f4",
         "path": "diagram_http.mmd"
       }
     ]

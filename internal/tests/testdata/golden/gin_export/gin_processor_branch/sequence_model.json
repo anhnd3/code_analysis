@@ -2,12 +2,12 @@
   "title": "http flow",
   "participants": [
     {
-      "id": "review_participant_e9a88ebace05",
+      "id": "review_participant_adc1c47aa052",
       "label": "POST /process",
       "short_name": "POST /process"
     },
     {
-      "id": "review_participant_d82358b7df55",
+      "id": "review_participant_f4b1d558ffa4",
       "label": "Handler",
       "short_name": "Handler"
     }
@@ -15,35 +15,35 @@
   "elements": [
     {
       "note": {
-        "over_id": "review_participant_d82358b7df55",
+        "over_id": "review_participant_adc1c47aa052",
         "text": "Stage: Boundary Entry"
       }
     },
     {
       "message": {
-        "from_id": "review_participant_e9a88ebace05",
-        "to_id": "review_participant_d82358b7df55",
+        "from_id": "review_participant_adc1c47aa052",
+        "to_id": "review_participant_f4b1d558ffa4",
         "label": "dispatch request",
         "kind": "sync"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_d82358b7df55",
+        "over_id": "review_participant_adc1c47aa052",
         "text": "Stage: Response"
       }
     },
     {
       "message": {
-        "from_id": "review_participant_d82358b7df55",
-        "to_id": "review_participant_e9a88ebace05",
+        "from_id": "review_participant_f4b1d558ffa4",
+        "to_id": "review_participant_adc1c47aa052",
         "label": "return response",
         "kind": "return"
       }
     },
     {
       "note": {
-        "over_id": "review_participant_e9a88ebace05",
+        "over_id": "review_participant_adc1c47aa052",
         "text": "no promoted business call was found after the handler entry"
       }
     }

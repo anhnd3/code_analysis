@@ -1,10 +1,10 @@
 sequenceDiagram
     title http flow
-    participant review_participant_e9a88ebace05 as POST /process
-    participant review_participant_d82358b7df55 as Handler
+    participant review_participant_adc1c47aa052 as POST /process
+    participant review_participant_f4b1d558ffa4 as Handler
 
-    note over review_participant_d82358b7df55: Stage: Boundary Entry
-    review_participant_e9a88ebace05->>review_participant_d82358b7df55: dispatch request
-    note over review_participant_d82358b7df55: Stage: Response
-    review_participant_d82358b7df55-->>-review_participant_e9a88ebace05: return response
-    note over review_participant_e9a88ebace05: no promoted business call was found after the handler entry
+    note over review_participant_adc1c47aa052: Stage: Boundary Entry
+    review_participant_adc1c47aa052->>review_participant_f4b1d558ffa4: dispatch request
+    note over review_participant_adc1c47aa052: Stage: Response
+    review_participant_f4b1d558ffa4-->>review_participant_adc1c47aa052: return response
+    note over review_participant_adc1c47aa052: no promoted business call was found after the handler entry

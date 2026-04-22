@@ -1,25 +1,25 @@
 {
-  "root_node_id": "boundary_0d91223701f8",
+  "root_node_id": "boundary_3a21e0ce6854",
   "nodes": [
     {
-      "id": "boundary_0d91223701f8",
+      "id": "boundary_3a21e0ce6854",
       "canonical_name": "GET /ping",
       "short_name": "GET /ping",
       "role": "root",
-      "repository_id": "repo_dee2c77c1496"
+      "repository_id": "repo_e2420f1094b8"
     },
     {
-      "id": "node_f1bd8661830a",
+      "id": "node_85d75e76a326",
       "canonical_name": "main.directHandler",
       "short_name": "directHandler",
       "role": "boundary",
-      "repository_id": "repo_dee2c77c1496"
+      "repository_id": "repo_e2420f1094b8"
     }
   ],
   "edges": [
     {
-      "from_id": "boundary_0d91223701f8",
-      "to_id": "node_f1bd8661830a",
+      "from_id": "boundary_3a21e0ce6854",
+      "to_id": "node_85d75e76a326",
       "label": "directHandler"
     }
   ],

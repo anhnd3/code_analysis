@@ -240,7 +240,8 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 				extractControlHints(body, content, sym),
 			)...)
 
-			// Second pass: extract calls with nearest scope affiliation
+			// Second pass: extract calls with nearest scope affiliation and stable per-symbol source order.
+			callOrderBySymbol := map[symbol.ID]int{}
 			walk(body, func(inner *tree_sitter.Node) {
 				if inner == nil || inner.Kind() != "call_expression" {
 					return
@@ -262,7 +263,9 @@ func (e *Extractor) ExtractFile(file symbol.FileRef) (symbol.FileExtractionResul
 					activeSym = tightest.sym
 				}
 
-				candidate := buildCallCandidate(activeSym.ID, inner, content, callEnv)
+				orderIndex := callOrderBySymbol[activeSym.ID]
+				callOrderBySymbol[activeSym.ID] = orderIndex + 1
+				candidate := buildCallCandidate(activeSym.ID, inner, content, callEnv, orderIndex)
 				if candidate.TargetCanonicalName != "" {
 					result.Relations = append(result.Relations, candidate)
 				}
@@ -435,7 +438,7 @@ func buildSymbol(file symbol.FileRef, pkg string, node *tree_sitter.Node, conten
 	}
 }
 
-func buildCallCandidate(source symbol.ID, node *tree_sitter.Node, content []byte, env goCallEnv) symbol.RelationCandidate {
+func buildCallCandidate(source symbol.ID, node *tree_sitter.Node, content []byte, env goCallEnv, orderIndex int) symbol.RelationCandidate {
 	fnNode := node.ChildByFieldName("function")
 	if fnNode == nil {
 		return symbol.RelationCandidate{}
@@ -445,6 +448,7 @@ func buildCallCandidate(source symbol.ID, node *tree_sitter.Node, content []byte
 	candidate.Relationship = "calls"
 	candidate.EvidenceSource = strings.TrimSpace(fnNode.Utf8Text(content))
 	candidate.ExtractionMethod = "tree-sitter-go"
+	candidate.OrderIndex = orderIndex
 	return candidate
 }
 

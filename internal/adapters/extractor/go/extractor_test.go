@@ -132,6 +132,10 @@ func (h *handler) Handle() {
 	assertRelationTarget(t, result.Relations, "h.repo.DetectQR", "repo.DetectQR", targetref.KindPackageMethodHint, "receiver_field_selector")
 	assertRelationTarget(t, result.Relations, "h.session.GetSessionByZlpToken", "session.GetSessionByZlpToken", targetref.KindPackageMethodHint, "receiver_field_selector")
 	assertRelationTarget(t, result.Relations, "fmt.Println", "fmt.Println", targetref.KindExactCanonical, "import_selector")
+	assertRelationOrder(t, result.Relations, "h.helper", 0)
+	assertRelationOrder(t, result.Relations, "h.repo.DetectQR", 1)
+	assertRelationOrder(t, result.Relations, "h.session.GetSessionByZlpToken", 2)
+	assertRelationOrder(t, result.Relations, "fmt.Println", 3)
 }
 
 func TestExtractorUsesSiblingPackageTypeInfoForReceiverFieldSelectors(t *testing.T) {
@@ -183,6 +187,20 @@ func assertRelationTarget(t *testing.T, relations []symbol.RelationCandidate, ev
 		}
 		if relation.EvidenceType != evidenceType {
 			t.Fatalf("expected evidence type %q for %s, got %+v", evidenceType, evidenceSource, relation)
+		}
+		return
+	}
+	t.Fatalf("missing relation for %s in %+v", evidenceSource, relations)
+}
+
+func assertRelationOrder(t *testing.T, relations []symbol.RelationCandidate, evidenceSource string, orderIndex int) {
+	t.Helper()
+	for _, relation := range relations {
+		if relation.EvidenceSource != evidenceSource {
+			continue
+		}
+		if relation.OrderIndex != orderIndex {
+			t.Fatalf("expected order index %d for %s, got %+v", orderIndex, evidenceSource, relation)
 		}
 		return
 	}

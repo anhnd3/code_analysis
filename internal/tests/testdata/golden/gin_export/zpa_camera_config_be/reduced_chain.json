@@ -1,25 +1,25 @@
 {
-  "root_node_id": "boundary_88620620b9a0",
+  "root_node_id": "boundary_e39520d2052c",
   "nodes": [
     {
-      "id": "boundary_88620620b9a0",
+      "id": "boundary_e39520d2052c",
       "canonical_name": "GET /api/v1/camera/config",
       "short_name": "GET /api/v1/camera/config",
       "role": "root",
-      "repository_id": "repo_fd3d4c19ea25"
+      "repository_id": "repo_cab3c197dc37"
     },
     {
-      "id": "node_a735dc66f1de",
+      "id": "node_d8bc6063913f",
       "canonical_name": "main.CameraController.GetConfig",
       "short_name": "GetConfig",
       "role": "boundary",
-      "repository_id": "repo_fd3d4c19ea25"
+      "repository_id": "repo_cab3c197dc37"
     }
   ],
   "edges": [
     {
-      "from_id": "boundary_88620620b9a0",
-      "to_id": "node_a735dc66f1de",
+      "from_id": "boundary_e39520d2052c",
+      "to_id": "node_d8bc6063913f",
       "label": "GetConfig"
     }
   ],

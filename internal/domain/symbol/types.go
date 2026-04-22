@@ -91,6 +91,7 @@ type RelationCandidate struct {
 	EvidenceSource      string         `json:"evidence_source"`
 	ExtractionMethod    string         `json:"extraction_method"`
 	ConfidenceScore     float64        `json:"confidence_score"`
+	OrderIndex          int            `json:"order_index,omitempty"`
 }
 
 type FileExtractionResult struct {

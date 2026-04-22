@@ -1,13 +1,13 @@
 {
   "chains": [
     {
-      "root_node_id": "boundary_42b01092f1bd",
-      "repository_id": "repo_9ae3ede5bf87",
+      "root_node_id": "boundary_cde9d833def8",
+      "repository_id": "repo_ff56248da423",
       "steps": [
         {
-          "from_node_id": "boundary_42b01092f1bd",
+          "from_node_id": "boundary_cde9d833def8",
           "to_node_id": "unresolved_RegisterUsersHandlerFromEndpoint",
-          "edge_id": "edge_9fcaeaea2dc3",
+          "edge_id": "edge_7b3ebab6e22b",
           "kind": "boundary",
           "label": "RegisterUsersHandlerFromEndpoint",
           "inferred": true

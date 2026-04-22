@@ -64,9 +64,9 @@ func writeMessage(b *strings.Builder, msg sequence.Message, indent int) {
 
 	switch msg.Kind {
 	case sequence.MessageAsync:
-		b.WriteString(fmt.Sprintf("%s%s->>+%s: %s\n", padding, from, to, label))
+		b.WriteString(fmt.Sprintf("%s%s-)%s: %s\n", padding, from, to, label))
 	case sequence.MessageReturn:
-		b.WriteString(fmt.Sprintf("%s%s-->>-%s: %s\n", padding, from, to, label))
+		b.WriteString(fmt.Sprintf("%s%s-->>%s: %s\n", padding, from, to, label))
 	default: // sync
 		b.WriteString(fmt.Sprintf("%s%s->>%s: %s\n", padding, from, to, label))
 	}

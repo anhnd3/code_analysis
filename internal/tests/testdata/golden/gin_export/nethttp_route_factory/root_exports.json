@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_3c65b3ef7651",
+    "root_node_id": "boundary_744394b16efc",
     "canonical_name": "ANY /users/factory",
-    "slug": "any-users-factory__b3ef7651",
+    "slug": "any-users-factory__94b16efc",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_nethttp_route_factory_9a9aa066d950",
+        "workspace_id": "ws_nethttp_route_factory_1286fed7d82f",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_nethttp_route_factory_9a9aa066d950",
+        "workspace_id": "ws_nethttp_route_factory_1286fed7d82f",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_nethttp_route_factory_9a9aa066d950",
+        "workspace_id": "ws_nethttp_route_factory_1286fed7d82f",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_nethttp_route_factory_9a9aa066d950",
+        "workspace_id": "ws_nethttp_route_factory_1286fed7d82f",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_nethttp_route_factory_9a9aa066d950",
+        "workspace_id": "ws_nethttp_route_factory_1286fed7d82f",
         "path": "diagram_http.mmd"
       }
     ]

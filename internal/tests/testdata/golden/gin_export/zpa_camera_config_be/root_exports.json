@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_88620620b9a0",
+    "root_node_id": "boundary_e39520d2052c",
     "canonical_name": "GET /api/v1/camera/config",
-    "slug": "get-api-v1-camera-config__0620b9a0",
+    "slug": "get-api-v1-camera-config__20d2052c",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "workspace_id": "ws_zpa_camera_config_be_cab3c197dc37",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "workspace_id": "ws_zpa_camera_config_be_cab3c197dc37",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "workspace_id": "ws_zpa_camera_config_be_cab3c197dc37",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "workspace_id": "ws_zpa_camera_config_be_cab3c197dc37",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_zpa_camera_config_be_fd3d4c19ea25",
+        "workspace_id": "ws_zpa_camera_config_be_cab3c197dc37",
         "path": "diagram_http.mmd"
       }
     ]

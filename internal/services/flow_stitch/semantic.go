@@ -32,7 +32,11 @@ type SemanticAuditRoot struct {
 	HandlerTargetNode     *SemanticAuditNodeRef  `json:"handler_target_node,omitempty"`
 	ReturnsHandlerEdge    *SemanticAuditEdgeRef  `json:"returns_handler_edge,omitempty"`
 	ClosureBodyNode       *SemanticAuditNodeRef  `json:"closure_body_node,omitempty"`
+	LeadingCalls          []SemanticAuditEdgeRef `json:"leading_calls,omitempty"`
+	BusinessHandoff       []SemanticAuditEdgeRef `json:"business_handoff,omitempty"`
+	DrilldownCalls        []SemanticAuditEdgeRef `json:"drilldown_calls,omitempty"`
 	FirstBusinessCalls    []SemanticAuditEdgeRef `json:"first_business_calls"`
+	GuardSummaries        []SemanticAuditGuard   `json:"guard_summaries,omitempty"`
 	SideEdges             []SemanticAuditEdgeRef `json:"side_edges"`
 	Warnings              []SemanticAuditWarning `json:"warnings"`
 }
@@ -45,6 +49,7 @@ type SemanticAuditEdgeRef struct {
 	Label           string `json:"label,omitempty"`
 	Inferred        bool   `json:"inferred,omitempty"`
 	ResolutionBasis string `json:"resolution_basis,omitempty"`
+	OrderIndex      int    `json:"order_index,omitempty"`
 }
 
 type SemanticAuditNodeRef struct {
@@ -57,6 +62,14 @@ type SemanticAuditNodeRef struct {
 type SemanticAuditWarning struct {
 	Kind    string `json:"kind"`
 	Message string `json:"message"`
+}
+
+type SemanticAuditGuard struct {
+	Kind       string `json:"kind"`
+	StageKind  string `json:"stage_kind"`
+	Condition  string `json:"condition"`
+	Outcome    string `json:"outcome"`
+	OrderIndex int    `json:"order_index,omitempty"`
 }
 
 type targetBucket int
@@ -85,7 +98,7 @@ var wrapperNoiseTokens = map[string]bool{
 
 var observabilityNoiseTokens = map[string]bool{
 	"trace": true, "tracing": true, "log": true, "logger": true, "metric": true, "metrics": true,
-	"prom": true, "telemetry": true, "span": true,
+	"prom": true, "telemetry": true, "span": true, "latency": true, "duration": true, "timer": true,
 }
 
 type semanticEdgeScore struct {
@@ -256,8 +269,13 @@ func (idx *snapshotIndex) buildRootAudit(root entrypoint.Root, chain flow.Chain)
 		}
 	}
 
-	businessCalls, warnings := idx.firstBusinessCalls(handlerNodeID, bodyNodeID)
+	search, anchorNodeID := idx.auditBusinessSearch(handlerNodeID, bodyNodeID)
+	businessCalls, warnings := idx.firstBusinessCallsFromSearch(anchorNodeID, search)
+	audit.LeadingCalls = idx.leadingAuditCalls(anchorNodeID)
+	audit.BusinessHandoff = idx.auditBusinessHandoff(anchorNodeID, search.path)
+	audit.DrilldownCalls = idx.auditDrilldownCalls(audit.BusinessHandoff, search.path)
 	audit.FirstBusinessCalls = businessCalls
+	audit.GuardSummaries = idx.inferGuardSummaries(audit.LeadingCalls)
 	audit.Warnings = append(audit.Warnings, warnings...)
 
 	for _, step := range chain.Steps {
@@ -272,8 +290,11 @@ func (idx *snapshotIndex) buildRootAudit(root entrypoint.Root, chain flow.Chain)
 }
 
 func (idx *snapshotIndex) firstBusinessCalls(handlerNodeID, startNodeID string) ([]SemanticAuditEdgeRef, []SemanticAuditWarning) {
-	calls := []SemanticAuditEdgeRef{}
-	warnings := []SemanticAuditWarning{}
+	search, anchorNodeID := idx.auditBusinessSearch(handlerNodeID, startNodeID)
+	return idx.firstBusinessCallsFromSearch(anchorNodeID, search)
+}
+
+func (idx *snapshotIndex) auditBusinessSearch(handlerNodeID, startNodeID string) (semanticSearchResult, string) {
 	search := idx.refinedAuditBusinessSearch(handlerNodeID, startNodeID)
 	anchorNodeID := search.anchorNodeID
 	if anchorNodeID == "" {
@@ -282,7 +303,12 @@ func (idx *snapshotIndex) firstBusinessCalls(handlerNodeID, startNodeID string) 
 	if anchorNodeID == "" {
 		anchorNodeID = handlerNodeID
 	}
-	calls = idx.collectFirstBusinessCalls(anchorNodeID, search.path, 3)
+	return search, anchorNodeID
+}
+
+func (idx *snapshotIndex) firstBusinessCallsFromSearch(anchorNodeID string, search semanticSearchResult) ([]SemanticAuditEdgeRef, []SemanticAuditWarning) {
+	calls := idx.collectFirstBusinessCalls(anchorNodeID, search.path, 3)
+	warnings := []SemanticAuditWarning{}
 	if len(search.path) == 0 {
 		if len(calls) == 0 {
 			warnings = append(warnings, SemanticAuditWarning{
@@ -307,6 +333,113 @@ func (idx *snapshotIndex) firstBusinessCalls(handlerNodeID, startNodeID string) 
 		}
 	}
 	return calls, warnings
+}
+
+func (idx *snapshotIndex) leadingAuditCalls(anchorNodeID string) []SemanticAuditEdgeRef {
+	edges := idx.orderedAuditCalls(anchorNodeID)
+	refs := make([]SemanticAuditEdgeRef, 0, len(edges))
+	seenBusiness := false
+	for _, edge := range edges {
+		if idx.isNoiseNode(edge.To) {
+			continue
+		}
+		if idx.isLeadingAuditEdge(edge) && !seenBusiness {
+			refs = append(refs, idx.auditEdgeRef(edge))
+			continue
+		}
+		if idx.isBusinessHandoffEdge(edge) {
+			seenBusiness = true
+		}
+	}
+	return refs
+}
+
+func (idx *snapshotIndex) auditBusinessHandoff(anchorNodeID string, path []graph.Edge) []SemanticAuditEdgeRef {
+	refs := make([]SemanticAuditEdgeRef, 0, 3)
+	seen := map[string]bool{}
+	appendEdge := func(edge graph.Edge) {
+		if seen[edge.ID] || !idx.isBusinessHandoffEdge(edge) {
+			return
+		}
+		seen[edge.ID] = true
+		refs = append(refs, idx.auditEdgeRef(edge))
+	}
+	for _, edge := range idx.orderedAuditCalls(anchorNodeID) {
+		appendEdge(edge)
+		if len(refs) == 3 {
+			return refs
+		}
+	}
+	if len(refs) > 0 {
+		return refs
+	}
+	for _, edge := range path {
+		appendEdge(edge)
+		if len(refs) == 3 {
+			return refs
+		}
+	}
+	return refs
+}
+
+func (idx *snapshotIndex) auditDrilldownCalls(handoff []SemanticAuditEdgeRef, path []graph.Edge) []SemanticAuditEdgeRef {
+	if len(handoff) == 0 {
+		return nil
+	}
+	best := []SemanticAuditEdgeRef(nil)
+	for _, edgeRef := range orderedAuditRefs(handoff) {
+		refs := idx.collectDrilldownCalls(edgeRef.ToNodeID, path, 6)
+		if len(refs) == 0 {
+			continue
+		}
+		if len(best) == 0 || idx.preferDrilldownSet(refs, best) {
+			best = refs
+		}
+	}
+	return best
+}
+
+func (idx *snapshotIndex) inferGuardSummaries(leading []SemanticAuditEdgeRef) []SemanticAuditGuard {
+	guards := make([]SemanticAuditGuard, 0, 3)
+	seen := map[string]bool{}
+	for _, edge := range orderedAuditRefs(leading) {
+		lower := strings.ToLower(edge.Label + " " + idx.targetCanonical(edge.ToNodeID))
+		guard := SemanticAuditGuard{OrderIndex: edge.OrderIndex}
+		switch {
+		case containsSemanticTokens(lower, "bind", "shouldbind", "decode", "parse"):
+			guard.Kind = "bind_failed"
+			guard.StageKind = "request_preparation"
+			guard.Condition = "request invalid"
+			guard.Outcome = "return invalid request"
+		case containsSemanticTokens(lower, "validate"):
+			guard.Kind = "validation_failed"
+			guard.StageKind = "request_preparation"
+			guard.Condition = "validation failed"
+			guard.Outcome = "return invalid request"
+		case containsSemanticTokens(lower, "session", "auth", "token"):
+			guard.Kind = "session_invalid"
+			guard.StageKind = "session_context"
+			guard.Condition = "session invalid"
+			guard.Outcome = "return unauthorized"
+		default:
+			continue
+		}
+		if seen[guard.Kind] {
+			continue
+		}
+		seen[guard.Kind] = true
+		guards = append(guards, guard)
+		if len(guards) == 3 {
+			break
+		}
+	}
+	sort.SliceStable(guards, func(i, j int) bool {
+		if guards[i].OrderIndex != guards[j].OrderIndex {
+			return guards[i].OrderIndex < guards[j].OrderIndex
+		}
+		return guards[i].Kind < guards[j].Kind
+	})
+	return guards
 }
 
 func (idx *snapshotIndex) collectFirstBusinessCalls(anchorNodeID string, path []graph.Edge, limit int) []SemanticAuditEdgeRef {
@@ -341,14 +474,68 @@ func (idx *snapshotIndex) collectFirstBusinessCalls(anchorNodeID string, path []
 	return refs
 }
 
+func (idx *snapshotIndex) orderedDirectCalls(nodeID string) []graph.Edge {
+	if nodeID == "" {
+		return nil
+	}
+	edges := append([]graph.Edge(nil), filterEdgesByKind(idx.outgoingSemantic(nodeID), graph.EdgeCalls)...)
+	sort.SliceStable(edges, func(i, j int) bool {
+		return idx.compareSemanticEdgeTie(edges[i], edges[j])
+	})
+	return edges
+}
+
+func (idx *snapshotIndex) orderedAuditCalls(nodeID string) []graph.Edge {
+	if nodeID == "" {
+		return nil
+	}
+	edges := append([]graph.Edge(nil), idx.orderedDirectCalls(nodeID)...)
+	edges = append(edges, idx.promotedAsyncCalls(nodeID)...)
+	sort.SliceStable(edges, func(i, j int) bool {
+		return idx.compareSemanticEdgeTie(edges[i], edges[j])
+	})
+	return dedupeSemanticEdges(edges)
+}
+
+func (idx *snapshotIndex) isLeadingAuditEdge(edge graph.Edge) bool {
+	if idx.isNoiseNode(edge.To) {
+		return false
+	}
+	lower := strings.ToLower(stepLabel(edge, idx) + " " + idx.targetCanonical(edge.To))
+	if containsSemanticTokens(lower, "bind", "shouldbind", "validate", "session", "auth", "token") {
+		return true
+	}
+	switch idx.targetBucket(edge) {
+	case targetBucketWrapperNoise, targetBucketObservabilityNoise:
+		return false
+	default:
+		return false
+	}
+}
+
+func (idx *snapshotIndex) isBusinessHandoffEdge(edge graph.Edge) bool {
+	if idx.isNoiseNode(edge.To) || idx.isLeadingAuditEdge(edge) {
+		return false
+	}
+	return idx.targetBucket(edge) == targetBucketStrongBusiness
+}
+
+func (idx *snapshotIndex) isDrilldownAuditEdge(edge graph.Edge) bool {
+	if idx.isNoiseNode(edge.To) || idx.isLeadingAuditEdge(edge) {
+		return false
+	}
+	if idx.targetBucket(edge) == targetBucketStrongBusiness {
+		return true
+	}
+	lower := strings.ToLower(stepLabel(edge, idx) + " " + idx.targetCanonical(edge.To))
+	return containsSemanticTokens(lower, "post", "process", "sort", "merge", "classify", "select", "transform", "normalize")
+}
+
 func (idx *snapshotIndex) anchorBusinessEdges(nodeID string) []graph.Edge {
 	if nodeID == "" {
 		return nil
 	}
-	edges := filterEdgesByKind(idx.outgoingSemantic(nodeID), graph.EdgeCalls)
-	sort.SliceStable(edges, func(i, j int) bool {
-		return idx.compareSemanticEdgeTie(edges[i], edges[j])
-	})
+	edges := idx.orderedAuditCalls(nodeID)
 
 	business := make([]graph.Edge, 0, len(edges))
 	for _, edge := range edges {
@@ -357,6 +544,137 @@ func (idx *snapshotIndex) anchorBusinessEdges(nodeID string) []graph.Edge {
 		}
 	}
 	return business
+}
+
+func (idx *snapshotIndex) promotedAsyncCalls(nodeID string) []graph.Edge {
+	sideEdges := append([]graph.Edge(nil), filterEdgesByKind(idx.outgoingSemantic(nodeID), graph.EdgeSpawns)...)
+	sort.SliceStable(sideEdges, func(i, j int) bool {
+		return idx.compareSemanticEdgeTie(sideEdges[i], sideEdges[j])
+	})
+
+	promoted := make([]graph.Edge, 0, len(sideEdges))
+	for _, sideEdge := range sideEdges {
+		bodyNodeID := sideEdge.To
+		if returnEdge, ok := idx.bestEdgeByKind(bodyNodeID, graph.EdgeReturnsHandler); ok {
+			bodyNodeID = returnEdge.To
+		}
+		for _, child := range idx.orderedDirectCalls(bodyNodeID) {
+			promoted = append(promoted, idx.promoteAsyncCall(sideEdge, child))
+		}
+	}
+	return promoted
+}
+
+func (idx *snapshotIndex) promoteAsyncCall(parent, child graph.Edge) graph.Edge {
+	properties := map[string]string{}
+	for key, value := range child.Properties {
+		properties[key] = value
+	}
+	properties["order_index"] = strconv.Itoa(composeOrderIndex(parent.Properties["order_index"], child.Properties["order_index"]))
+	properties["resolution_basis"] = "spawn_promoted"
+	return graph.Edge{
+		ID:         child.ID,
+		Kind:       child.Kind,
+		From:       parent.From,
+		To:         child.To,
+		Evidence:   child.Evidence,
+		Confidence: child.Confidence,
+		Properties: properties,
+		SnapshotID: child.SnapshotID,
+	}
+}
+
+func composeOrderIndex(parentRaw, childRaw string) int {
+	parentOrder := parseOrderIndex(parentRaw)
+	childOrder := parseOrderIndex(childRaw)
+	if parentOrder == 0 && childOrder == 0 {
+		return 0
+	}
+	return parentOrder*1000 + childOrder
+}
+
+func parseOrderIndex(raw string) int {
+	if raw == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
+func dedupeSemanticEdges(edges []graph.Edge) []graph.Edge {
+	if len(edges) == 0 {
+		return nil
+	}
+	out := make([]graph.Edge, 0, len(edges))
+	seen := map[string]bool{}
+	for _, edge := range edges {
+		key := edge.ID + "|" + edge.From + "|" + edge.To + "|" + edge.Properties["order_index"]
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, edge)
+	}
+	return out
+}
+
+func (idx *snapshotIndex) collectDrilldownCalls(nodeID string, path []graph.Edge, limit int) []SemanticAuditEdgeRef {
+	if nodeID == "" || limit <= 0 {
+		return nil
+	}
+	refs := make([]SemanticAuditEdgeRef, 0, limit)
+	seen := map[string]bool{}
+	appendEdge := func(edge graph.Edge) {
+		if seen[edge.ID] || !idx.isDrilldownAuditEdge(edge) {
+			return
+		}
+		seen[edge.ID] = true
+		refs = append(refs, idx.auditEdgeRef(edge))
+	}
+	for _, edge := range idx.orderedAuditCalls(nodeID) {
+		appendEdge(edge)
+		if len(refs) == limit {
+			return refs
+		}
+	}
+	for _, edge := range path {
+		if edge.From != nodeID {
+			continue
+		}
+		appendEdge(edge)
+		if len(refs) == limit {
+			return refs
+		}
+	}
+	return refs
+}
+
+func (idx *snapshotIndex) preferDrilldownSet(left, right []SemanticAuditEdgeRef) bool {
+	switch {
+	case len(left) != len(right):
+		return len(left) > len(right)
+	default:
+		return compareAuditRefSlices(left, right)
+	}
+}
+
+func compareAuditRefSlices(left, right []SemanticAuditEdgeRef) bool {
+	limit := minInt(len(left), len(right))
+	for i := 0; i < limit; i++ {
+		if left[i].OrderIndex != right[i].OrderIndex {
+			return left[i].OrderIndex < right[i].OrderIndex
+		}
+		if left[i].ToNodeID != right[i].ToNodeID {
+			return left[i].ToNodeID < right[i].ToNodeID
+		}
+		if left[i].Label != right[i].Label {
+			return left[i].Label < right[i].Label
+		}
+	}
+	return len(left) < len(right)
 }
 
 func (idx *snapshotIndex) rootEntryMode(rootNodeID string) EntryMode {
@@ -919,7 +1237,7 @@ func (idx *snapshotIndex) isNoiseNode(nodeID string) bool {
 }
 
 func (idx *snapshotIndex) auditEdgeRef(edge graph.Edge) SemanticAuditEdgeRef {
-	return SemanticAuditEdgeRef{
+	ref := SemanticAuditEdgeRef{
 		EdgeID:          edge.ID,
 		Kind:            string(edge.Kind),
 		FromNodeID:      edge.From,
@@ -928,6 +1246,43 @@ func (idx *snapshotIndex) auditEdgeRef(edge graph.Edge) SemanticAuditEdgeRef {
 		Inferred:        edge.Confidence.Tier == graph.ConfidenceInferred,
 		ResolutionBasis: edge.Properties["resolution_basis"],
 	}
+	if edge.Properties != nil {
+		if raw := edge.Properties["order_index"]; raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil {
+				ref.OrderIndex = parsed
+			}
+		}
+	}
+	return ref
+}
+
+func orderedAuditRefs(edges []SemanticAuditEdgeRef) []SemanticAuditEdgeRef {
+	out := append([]SemanticAuditEdgeRef(nil), edges...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].OrderIndex != out[j].OrderIndex {
+			return out[i].OrderIndex < out[j].OrderIndex
+		}
+		if out[i].FromNodeID != out[j].FromNodeID {
+			return out[i].FromNodeID < out[j].FromNodeID
+		}
+		if out[i].ToNodeID != out[j].ToNodeID {
+			return out[i].ToNodeID < out[j].ToNodeID
+		}
+		if out[i].Label != out[j].Label {
+			return out[i].Label < out[j].Label
+		}
+		return out[i].EdgeID < out[j].EdgeID
+	})
+	return out
+}
+
+func containsSemanticTokens(value string, tokens ...string) bool {
+	for _, token := range tokens {
+		if strings.Contains(value, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func (idx *snapshotIndex) auditNodeRef(nodeID string) *SemanticAuditNodeRef {

@@ -102,16 +102,17 @@ func (s Service) Profile(node graph.Node, snapshot graph.GraphSnapshot) Profile 
 
 	lowerName := strings.ToLower(name)
 	lowerCanonical := strings.ToLower(node.CanonicalName)
+	validationTokens := []string{"bind", "validate", "decode", "parse", "sanitize", "verify"}
 	profile.IsClosure = profile.SyntheticKind == "closure_return" || strings.Contains(lowerName, "$closure_return_")
 	profile.IsInlineHandler = profile.SyntheticKind == "inline_handler" || strings.Contains(lowerName, "$inline_handler_")
 	profile.IsResponseHelper = containsAny(lowerName, []string{"respond", "response", "render", "writejson", "write_json", "write", "json", "wrap"}) ||
 		containsAny(lowerCanonical, []string{"respond", "response", "render", "writejson", "json", "wrap"})
-	profile.IsValidationHelper = containsAny(lowerName, []string{"bind", "validate", "decode", "parse", "sanitize", "verify", "check"}) ||
-		containsAny(lowerCanonical, []string{"bind", "validate", "decode", "parse", "sanitize", "verify", "check"})
+	profile.IsValidationHelper = containsAny(lowerName, validationTokens) ||
+		containsAny(lowerCanonical, validationTokens)
 	profile.IsSessionAuth = containsAny(lowerName, []string{"session", "auth", "token", "claims", "context"}) ||
 		containsAny(lowerCanonical, []string{"session", "auth", "token", "claims", "context"})
 	profile.IsObservability = containsAny(lowerName, []string{"trace", "tracing", "metric", "metrics", "logger", "log", "span", "telemetry"}) ||
-		containsAny(lowerCanonical, []string{"trace", "tracing", "metric", "metrics", "logger", "log", "span", "telemetry"})
+		containsAny(lowerCanonical, []string{"trace", "tracing", "metric", "metrics", "logger", "log", "span", "telemetry", "instrument"})
 	profile.IsAsyncLike = containsAny(lowerName, []string{"worker", "async", "background", "goroutine", "job"}) ||
 		containsAny(lowerCanonical, []string{"worker", "async", "background", "goroutine", "job"})
 
@@ -132,11 +133,16 @@ func (s Service) Profile(node graph.Node, snapshot graph.GraphSnapshot) Profile 
 	}
 
 	if profile.Role == reduced.RoleHelper {
-		if s.isConstructorName(name) {
-			profile.Role = reduced.RoleConstructor
-		} else if strings.HasSuffix(lowerName, "repository") || strings.HasSuffix(lowerName, "repo") {
+		switch {
+		case looksLikeRepositoryReceiver(profile.ReceiverToken, lowerCanonical):
 			profile.Role = reduced.RoleRepository
-		} else if strings.HasSuffix(lowerName, "service") {
+		case looksLikeServiceReceiver(profile.ReceiverToken, lowerCanonical):
+			profile.Role = reduced.RoleService
+		case s.isConstructorName(name):
+			profile.Role = reduced.RoleConstructor
+		case strings.HasSuffix(lowerName, "repository") || strings.HasSuffix(lowerName, "repo"):
+			profile.Role = reduced.RoleRepository
+		case strings.HasSuffix(lowerName, "service"):
 			profile.Role = reduced.RoleService
 		}
 	}
@@ -147,6 +153,9 @@ func (s Service) Profile(node graph.Node, snapshot graph.GraphSnapshot) Profile 
 	case profile.IsResponseHelper:
 		profile.Bucket = BucketResponse
 		profile.DisplayLabel = "Response"
+	case profile.IsObservability:
+		profile.Bucket = BucketHelper
+		profile.DisplayLabel = "Observability"
 	case profile.IsValidationHelper:
 		profile.Bucket = BucketValidation
 		profile.DisplayLabel = "Validation"
@@ -291,6 +300,25 @@ func receiverToken(canonical string) string {
 		return ""
 	}
 	return strings.ToLower(parts[len(parts)-1])
+}
+
+func looksLikeRepositoryReceiver(receiver, canonical string) bool {
+	receiver = strings.ToLower(receiver)
+	return strings.Contains(receiver, "repo") || strings.Contains(receiver, "repository") || strings.Contains(canonical, ".repo.")
+}
+
+func looksLikeServiceReceiver(receiver, canonical string) bool {
+	receiver = strings.ToLower(receiver)
+	switch {
+	case receiver == "":
+		return false
+	case strings.Contains(receiver, "service"):
+		return true
+	case strings.Contains(receiver, "client"), strings.Contains(receiver, "gateway"), strings.Contains(receiver, "proxy"):
+		return true
+	default:
+		return strings.Contains(canonical, ".service.") || strings.Contains(canonical, ".client.")
+	}
 }
 
 func tokenizeTokens(raw string) []string {

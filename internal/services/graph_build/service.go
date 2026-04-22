@@ -285,8 +285,11 @@ func (s Service) Build(workspaceID, snapshotID string, inventory repository.Inve
 				if basis != "" {
 					properties["resolution_basis"] = string(basis)
 				}
+				if relation.OrderIndex >= 0 {
+					properties["order_index"] = strconv.Itoa(relation.OrderIndex)
+				}
 				edge := graph.Edge{
-					ID:   ids.Stable("edge", snapshotID, fromNode.ID, toNode.ID, string(graph.EdgeCalls), relation.EvidenceSource),
+					ID:   ids.Stable("edge", snapshotID, fromNode.ID, toNode.ID, string(graph.EdgeCalls), relation.EvidenceSource, strconv.Itoa(relation.OrderIndex)),
 					Kind: graph.EdgeCalls,
 					From: fromNode.ID,
 					To:   toNode.ID,

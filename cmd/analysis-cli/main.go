@@ -153,6 +153,7 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	rootType := fs.String("root-type", "master", "root type: bootstrap|http|worker|symbol|master")
 	rootSelector := fs.String("root-selector", "", "target canonical name or node id")
 	renderMode := fs.String("render-mode", "auto", "render mode: auto|review|reduced_debug")
+	reviewStrict := fs.Bool("review-strict", false, "fail review mode instead of silently falling back")
 	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
 	maxBranches := fs.Int("max-branches", 5, "max branch limit")
 	collapseMode := fs.String("collapse-mode", "default", "collapse mode: default|none|aggressive")
@@ -210,6 +211,7 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 		RootType:          export_mermaid.RootTypeFilter(*rootType),
 		RootSelector:      *rootSelector,
 		RenderMode:        export_mermaid.RenderMode(*renderMode),
+		ReviewStrict:      *reviewStrict,
 		MaxDepth:          *maxDepth,
 		MaxBranches:       *maxBranches,
 		CollapseMode:      *collapseMode,

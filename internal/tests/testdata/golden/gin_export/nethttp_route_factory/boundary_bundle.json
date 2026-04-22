@@ -1,11 +1,11 @@
 {
   "links": [
     {
-      "outbound_node_id": "boundary_3c65b3ef7651",
+      "outbound_node_id": "boundary_744394b16efc",
       "inbound_node_id": "unresolved_makeUsersHandler",
       "protocol": "rest",
       "status": "external_only",
-      "outbound_repo_id": "repo_9a9aa066d950",
+      "outbound_repo_id": "repo_1286fed7d82f",
       "inbound_repo_id": "",
       "evidence": "unresolved boundary handler target"
     }

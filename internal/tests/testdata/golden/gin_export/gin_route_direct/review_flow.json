@@ -1,65 +1,65 @@
 {
-  "id": "reviewflow_2103ae5ffa78",
-  "root_node_id": "boundary_0d91223701f8",
+  "id": "reviewflow_004d5d5bc5ae",
+  "root_node_id": "boundary_3a21e0ce6854",
   "canonical_name": "GET /ping",
   "participants": [
     {
-      "id": "review_participant_a9a31d298149",
+      "id": "review_participant_ec4f9591f6d8",
       "kind": "boundary",
       "label": "GET /ping",
       "role": "boundary",
       "source_node_ids": [
-        "boundary_0d91223701f8"
+        "boundary_3a21e0ce6854"
       ]
     },
     {
-      "id": "review_participant_afe927d82f94",
+      "id": "review_participant_515ddef04302",
       "kind": "handler",
       "label": "Handler",
       "role": "handler",
       "source_node_ids": [
-        "node_f1bd8661830a"
+        "node_85d75e76a326"
       ]
     }
   ],
   "stages": [
     {
-      "id": "review_stage_2a7a6699d6c3",
+      "id": "review_stage_d31601d6364c",
       "kind": "boundary_entry",
       "label": "Boundary Entry",
       "participant_ids": [
-        "review_participant_a9a31d298149",
-        "review_participant_afe927d82f94"
+        "review_participant_515ddef04302",
+        "review_participant_ec4f9591f6d8"
       ],
       "messages": [
         {
-          "id": "review_msg_2feafcc34b9c",
-          "from_participant_id": "review_participant_a9a31d298149",
-          "to_participant_id": "review_participant_afe927d82f94",
+          "id": "review_msg_1926cdd20956",
+          "from_participant_id": "review_participant_ec4f9591f6d8",
+          "to_participant_id": "review_participant_515ddef04302",
           "label": "dispatch request",
           "kind": "sync",
           "source_edge_ids": [
-            "edge_f44f284295b4"
+            "audit_edge_c8af8efe0f02"
           ]
         }
       ],
       "source_edge_ids": [
-        "edge_f44f284295b4"
+        "audit_edge_c8af8efe0f02"
       ]
     },
     {
-      "id": "review_stage_e6abd1695824",
+      "id": "review_stage_70fa9e5d9f5c",
       "kind": "response",
       "label": "Response",
       "participant_ids": [
-        "review_participant_a9a31d298149",
-        "review_participant_afe927d82f94"
+        "review_participant_515ddef04302",
+        "review_participant_ec4f9591f6d8"
       ],
       "messages": [
         {
-          "id": "review_msg_5150fc7bb8ea",
-          "from_participant_id": "review_participant_afe927d82f94",
-          "to_participant_id": "review_participant_a9a31d298149",
+          "id": "review_msg_d7f9c7977f26",
+          "from_participant_id": "review_participant_515ddef04302",
+          "to_participant_id": "review_participant_ec4f9591f6d8",
           "label": "return response",
           "kind": "return"
         }
@@ -68,8 +68,8 @@
   ],
   "notes": [
     {
-      "id": "review_note_77c9a8825fe1",
-      "over_participant_id": "review_participant_a9a31d298149",
+      "id": "review_note_d341ab37b73e",
+      "over_participant_id": "review_participant_ec4f9591f6d8",
       "text": "no promoted business call was found after the handler entry",
       "kind": "no_business_call_after_handler"
     }
@@ -78,7 +78,7 @@
   "source_evidence": "framework adapter: gin",
   "metadata": {
     "candidate_kind": "compact_review",
-    "signature": "boundary_0d91223701f8|GET /ping|http|compact_review|gin|p:boundary:GET /ping|p:handler:Handler|s:boundary_entry|m:review_participant_a9a31d298149:review_participant_afe927d82f94:sync:dispatch request|s:response|m:review_participant_afe927d82f94:review_participant_a9a31d298149:return:return response|n:no_business_call_after_handler:no promoted business call was found after the handler entry",
+    "signature": "boundary_3a21e0ce6854|GET /ping|http|compact_review|gin|p:boundary:GET /ping|p:handler:Handler|s:boundary_entry|m:review_participant_ec4f9591f6d8:review_participant_515ddef04302:sync:dispatch request|s:response|m:review_participant_515ddef04302:review_participant_ec4f9591f6d8:return:return response|n:no_business_call_after_handler:no promoted business call was found after the handler entry",
     "score": 7,
     "root_framework": "gin"
   }

@@ -395,6 +395,74 @@ func register() {
 	}
 }
 
+func TestGinDetectorExpandsSamePackageHelpersWithScopedGinParameters(t *testing.T) {
+	imported := parseGinFiles(t, map[string][]byte{
+		"internal/handler/handler.go": []byte(`package handler
+
+import "github.com/gin-gonic/gin"
+
+type Handler interface {
+	PredictBase64(*gin.Context)
+}
+
+type handler struct{}
+
+func NewHandler() Handler {
+	return &handler{}
+}
+
+func (h *handler) PredictBase64(*gin.Context) {}
+`),
+	})
+	router := parseGinFiles(t, map[string][]byte{
+		"cmd/router.go": []byte(`package cmd
+
+import (
+	"github.com/gin-gonic/gin"
+
+	handler "example.com/demo/internal/handler"
+)
+
+func registerRoot(router *gin.Engine) {
+	v1 := router.Group("/scan360/v1")
+	registerPredictRoutes(v1)
+}
+
+func registerPredictRoutes(group gin.IRoutes) {
+	h := handler.NewHandler()
+	group.POST("/predict-base64", h.PredictBase64)
+}
+
+func main() {
+	engine := gin.New()
+	registerRoot(engine)
+	registerRoot(engine)
+}
+`),
+	})
+
+	detector := NewGinDetector()
+	if diags := detector.PreparePackage(imported, nil); len(diags) != 0 {
+		t.Fatalf("expected imported package prep diagnostics to stay empty, got %+v", diags)
+	}
+	if diags := detector.PreparePackage(router, nil); len(diags) != 0 {
+		t.Fatalf("expected router package prep diagnostics to stay empty, got %+v", diags)
+	}
+
+	roots, diags := detector.DetectBoundaries(router[0], nil)
+	if len(roots) != 1 {
+		t.Fatalf("expected helper-expanded routes to dedupe to one root, got %d: %+v", len(roots), roots)
+	}
+
+	root := rootByCanonicalName(t, roots, "POST /scan360/v1/predict-base64")
+	if root.HandlerTarget != "handler.PredictBase64" {
+		t.Fatalf("expected helper-expanded imported constructor route to resolve concrete package-method hint, got %+v", root)
+	}
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics for supported helper-expanded route, got %+v", diags)
+	}
+}
+
 func parseGinFiles(t *testing.T, files map[string][]byte) []boundary.ParsedGoFile {
 	t.Helper()
 

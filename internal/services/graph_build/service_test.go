@@ -65,6 +65,56 @@ func TestBuildCreatesCallAndTestEdges(t *testing.T) {
 	}
 }
 
+func TestBuildCarriesRelationOrderIndexOntoCallEdges(t *testing.T) {
+	builder := New(progress.NoopReporter{})
+	inventory := repository.Inventory{
+		WorkspaceID: "ws_demo",
+		Repositories: []repository.Manifest{{
+			ID:                "repo_demo",
+			Name:              "demo",
+			RootPath:          "/demo",
+			Role:              repository.RoleService,
+			CandidateServices: []service.Manifest{{ID: "svc_demo", Name: "demo"}},
+		}},
+	}
+	extraction := symbol_index.Result{
+		Repositories: []symbol_index.RepositoryExtraction{{
+			Repository: inventory.Repositories[0],
+			Files: []symbol.FileExtractionResult{{
+				FilePath:    "service.go",
+				PackageName: "demo",
+				Symbols: []symbol.Symbol{
+					{ID: "sym_handle", RepositoryID: "repo_demo", FilePath: "service.go", PackageName: "demo", Name: "Handle", CanonicalName: "demo.Handle", Kind: symbol.KindFunction},
+					{ID: "sym_bind", RepositoryID: "repo_demo", FilePath: "service.go", PackageName: "demo", Name: "Bind", CanonicalName: "demo.Bind", Kind: symbol.KindFunction},
+				},
+				Relations: []symbol.RelationCandidate{
+					{
+						SourceSymbolID:      "sym_handle",
+						TargetCanonicalName: "demo.Bind",
+						Relationship:        "calls",
+						EvidenceSource:      "Bind",
+						ExtractionMethod:    "unit",
+						EvidenceType:        "identifier",
+						OrderIndex:          2,
+					},
+				},
+			}},
+		}},
+	}
+
+	result := builder.Build("ws1", "snap1", inventory, extraction, nil)
+	for _, edge := range result.Snapshot.Edges {
+		if edge.Kind != graph.EdgeCalls {
+			continue
+		}
+		if edge.Properties["order_index"] != "2" {
+			t.Fatalf("expected propagated order_index 2, got %+v", edge)
+		}
+		return
+	}
+	t.Fatal("expected CALLS edge with order_index")
+}
+
 func TestBuildLeavesBoundaryHandlerTargetUnresolvedForSameFileShortName(t *testing.T) {
 	builder := New(progress.NoopReporter{})
 	inventory := repository.Inventory{

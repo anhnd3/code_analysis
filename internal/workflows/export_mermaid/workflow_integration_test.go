@@ -39,6 +39,10 @@ func TestWorkflowFailsOnEmptyRootsAndWritesDebugBundle(t *testing.T) {
 			t.Fatalf("expected debug artifact %s on empty-root failure: %v", name, statErr)
 		}
 	}
+	decisions := readRootRenderDecisionsFile(t, filepath.Join(debugDir, "root_render_decisions.json"))
+	if len(decisions) != 0 {
+		t.Fatalf("expected empty render decisions on empty-root failure, got %+v", decisions)
+	}
 	if _, statErr := os.Stat(filepath.Join(debugDir, "flow_bundle.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected flow_bundle.json to be absent before flow stitching, got %v", statErr)
 	}
@@ -72,7 +76,7 @@ func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
 		t.Fatalf("expected multi-root per-root exports, got %+v", result.RootExports)
 	}
 
-	for _, name := range []string{"boundary_roots.json", "boundary_diagnostics.json", "resolved_roots.json", "flow_bundle.json", "boundary_bundle.json", "root_exports.json", "semantic_audit.json"} {
+	for _, name := range []string{"boundary_roots.json", "boundary_diagnostics.json", "resolved_roots.json", "flow_bundle.json", "boundary_bundle.json", "root_exports.json", "root_render_decisions.json", "semantic_audit.json"} {
 		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
 			t.Fatalf("expected debug artifact %s after successful export: %v", name, statErr)
 		}
@@ -84,6 +88,7 @@ func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
 	}
 
 	rootExports := readRootExportsFile(t, filepath.Join(debugDir, "root_exports.json"))
+	renderDecisions := readRootRenderDecisionsFile(t, filepath.Join(debugDir, "root_render_decisions.json"))
 	if len(rootExports) != len(result.RootExports) {
 		t.Fatalf("expected debug root export manifest to mirror result, got %d vs %d", len(rootExports), len(result.RootExports))
 	}
@@ -99,14 +104,21 @@ func TestWorkflowProducesNonEmptyArtifactsForAccessorFixture(t *testing.T) {
 			t.Fatalf("expected rendered or skipped accessor root export, got %+v", rootExport)
 		}
 		rendered++
-		for _, name := range []string{"reduced_chain.json", "review_flow.json", "review_flow_build.json", "sequence_model.json", "diagram.mmd", "semantic_audit.json"} {
+		for _, name := range []string{"reduced_chain.json", "review_flow.json", "review_flow_build.json", "sequence_model.json", "diagram.mmd", "render_decision.json", "semantic_audit.json"} {
 			if _, statErr := os.Stat(filepath.Join(debugDir, "roots", rootExport.Slug, name)); statErr != nil {
 				t.Fatalf("expected per-root debug artifact %s for %s: %v", name, rootExport.Slug, statErr)
 			}
 		}
+		renderDecision := readRenderDecisionFile(t, filepath.Join(debugDir, "roots", rootExport.Slug, "render_decision.json"))
+		if renderDecision.Slug != rootExport.Slug || renderDecision.UsedRenderer != export_mermaid.UsedRendererReviewFlow {
+			t.Fatalf("unexpected per-root render decision for %s: %+v", rootExport.Slug, renderDecision)
+		}
 	}
 	if rendered == 0 {
 		t.Fatal("expected at least one rendered root export")
+	}
+	if len(renderDecisions) != rendered {
+		t.Fatalf("expected %d root render decisions, got %d", rendered, len(renderDecisions))
 	}
 }
 
@@ -138,10 +150,14 @@ func TestWorkflowPreservesSingleRootSelectorBehavior(t *testing.T) {
 	if len(result.RootExports) != 1 || result.RootExports[0].CanonicalName != "GET /health" {
 		t.Fatalf("expected one selected root export, got %+v", result.RootExports)
 	}
-	for _, name := range []string{"reduced_chain.json", "review_flow.json", "review_flow_build.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "semantic_audit.json"} {
+	for _, name := range []string{"reduced_chain.json", "review_flow.json", "review_flow_build.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "root_render_decisions.json", "render_decision.json", "semantic_audit.json"} {
 		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
 			t.Fatalf("expected single-root debug artifact %s: %v", name, statErr)
 		}
+	}
+	decision := readRenderDecisionFile(t, filepath.Join(debugDir, "render_decision.json"))
+	if decision.UsedRenderer != export_mermaid.UsedRendererReviewFlow || decision.FallbackUsed {
+		t.Fatalf("expected single-root selector run to use reviewflow, got %+v", decision)
 	}
 	if _, statErr := os.Stat(filepath.Join(debugDir, "roots")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no per-root debug directory in single-root mode, got %v", statErr)
@@ -172,7 +188,7 @@ func TestWorkflowSupportsExplicitReducedDebugMode(t *testing.T) {
 		t.Fatalf("export mermaid in reduced_debug mode: %v", err)
 	}
 
-	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "semantic_audit.json"} {
+	for _, name := range []string{"reduced_chain.json", "sequence_model.json", "diagram.mmd", "root_exports.json", "root_render_decisions.json", "render_decision.json", "semantic_audit.json"} {
 		if _, statErr := os.Stat(filepath.Join(debugDir, name)); statErr != nil {
 			t.Fatalf("expected reduced_debug artifact %s: %v", name, statErr)
 		}
@@ -181,6 +197,10 @@ func TestWorkflowSupportsExplicitReducedDebugMode(t *testing.T) {
 		if _, statErr := os.Stat(filepath.Join(debugDir, unexpected)); !os.IsNotExist(statErr) {
 			t.Fatalf("expected reduced_debug mode to skip %s, got %v", unexpected, statErr)
 		}
+	}
+	decision := readRenderDecisionFile(t, filepath.Join(debugDir, "render_decision.json"))
+	if decision.UsedRenderer != export_mermaid.UsedRendererReducedChain || decision.FallbackUsed {
+		t.Fatalf("expected reduced_debug render decision, got %+v", decision)
 	}
 }
 
@@ -246,4 +266,32 @@ func readRootExportsFile(t *testing.T, path string) []export_mermaid.RootExport 
 		t.Fatalf("unmarshal %s: %v", path, err)
 	}
 	return exports
+}
+
+func readRootRenderDecisionsFile(t *testing.T, path string) []export_mermaid.RootRenderDecision {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var decisions []export_mermaid.RootRenderDecision
+	if err := json.Unmarshal(data, &decisions); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	return decisions
+}
+
+func readRenderDecisionFile(t *testing.T, path string) export_mermaid.RootRenderDecision {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var decision export_mermaid.RootRenderDecision
+	if err := json.Unmarshal(data, &decision); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	return decision
 }

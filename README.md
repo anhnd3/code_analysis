@@ -60,6 +60,9 @@ analysis-cli export-mermaid --snapshot ./artifacts/snapshot.json --root-type htt
 
 # Generate a debug bundle for flow analysis
 analysis-cli export-mermaid --workspace . --emit-debug-bundle --debug-out ./debug-flow/
+
+# Fail loudly if review rendering cannot produce a valid review output
+analysis-cli export-mermaid --workspace . --root-type http --render-mode review --review-strict
 ```
 
 #### Debug Bundles
@@ -67,8 +70,19 @@ When `--emit-debug-bundle` is used, the following files are produced in the outp
 - `boundary_roots.json`: Discovered framework entrypoints (Gin, net/http, etc.)
 - `flow_bundle.json`: Raw stitched call chains
 - `reduced_chain.json`: Chains after control-flow reduction and helper collapsing
+- `review_flow.json`: Selected reviewflow when review rendering wins
+- `review_flow_build.json`: Candidate set and deterministic selection metadata
 - `sequence_model.json`: The final ordered participant/message model
 - `diagram.mmd`: The Mermaid source code
+- `root_render_decisions.json`: Root-level render path decisions for every rendered root
+- `render_decision.json`: Single-root render decision details
+- `roots/<slug>/render_decision.json`: Per-root render decision details for multi-root HTTP exports
+
+`--review-strict` makes review-mode runs fail instead of silently falling back to reduced rendering.
+
+Render decisions use:
+- `used_renderer`: `reviewflow` or `reduced_chain`
+- `fallback_reason`: `no_selected_candidate`, `incomplete_review_artifacts`, `review_validation_failed`, `review_build_empty`, or `review_render_error`
 
 #### Tips for Multi-Framework Services
 - Use `--service-name <name>` to label the main participant in the diagram.

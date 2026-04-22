@@ -611,6 +611,163 @@ func TestBuildAudit_CollectsSiblingBusinessCallsBeforeDeeperPath(t *testing.T) {
 	}
 }
 
+func TestBuildAudit_RecoversOrderedLeadingCallsAndDrilldown(t *testing.T) {
+	service := New()
+	snapshot := graph.GraphSnapshot{
+		WorkspaceID: "ws_ordered_audit",
+		ID:          "snap_ordered_audit",
+		Nodes: []graph.Node{
+			endpointNode("endpoint_detect", "POST /detect"),
+			testSymbolNode("handler_root", "api.HandleDetect", "function"),
+			testSymbolNode("bind_target", "gin.Context.Bind", "function"),
+			testSymbolNode("session_target", "session.SessionService.GetSessionByZlpToken", "function"),
+			testSymbolNode("validate_target", "model.Request.ValidateRequest", "function"),
+			testSymbolNode("repo_target", "repo.CameraRepo.DetectQR", "function"),
+			testSymbolNode("post_target", "repo.postProcessingQRResults", "function"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_detect", To: "handler_root", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_bind", Kind: graph.EdgeCalls, From: "handler_root", To: "bind_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "0"}},
+			{ID: "e_session", Kind: graph.EdgeCalls, From: "handler_root", To: "session_target", Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.82}, Properties: map[string]string{"order_index": "1", "resolution_basis": "package_method_hint"}},
+			{ID: "e_validate", Kind: graph.EdgeCalls, From: "handler_root", To: "validate_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "2"}},
+			{ID: "e_repo", Kind: graph.EdgeCalls, From: "handler_root", To: "repo_target", Confidence: graph.Confidence{Tier: graph.ConfidenceInferred, Score: 0.82}, Properties: map[string]string{"order_index": "3", "resolution_basis": "package_method_hint"}},
+			{ID: "e_post", Kind: graph.EdgeCalls, From: "repo_target", To: "post_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "0"}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_detect",
+			CanonicalName: "POST /detect",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := service.BuildAudit(snapshot, roots, bundle)
+	if len(audit.Roots) != 1 {
+		t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+	}
+
+	root := audit.Roots[0]
+	if got := edgeTargets(root.LeadingCalls); len(got) != 3 || got[0] != "bind_target" || got[1] != "session_target" || got[2] != "validate_target" {
+		t.Fatalf("expected ordered leading calls bind -> session -> validate, got %+v", root.LeadingCalls)
+	}
+	if got := edgeTargets(root.BusinessHandoff); len(got) != 1 || got[0] != "repo_target" {
+		t.Fatalf("expected repo handoff, got %+v", root.BusinessHandoff)
+	}
+	if got := edgeTargets(root.DrilldownCalls); len(got) != 1 || got[0] != "post_target" {
+		t.Fatalf("expected one lower-layer drilldown call, got %+v", root.DrilldownCalls)
+	}
+	if len(root.GuardSummaries) != 3 {
+		t.Fatalf("expected inferred bind/session/validation guards, got %+v", root.GuardSummaries)
+	}
+	if root.LeadingCalls[1].OrderIndex >= root.BusinessHandoff[0].OrderIndex {
+		t.Fatalf("expected session leading call to stay ordered before business handoff, got %+v vs %+v", root.LeadingCalls, root.BusinessHandoff)
+	}
+}
+
+func TestBuildAudit_PromotesSpawnedBusinessCallsAndChoosesDominantDrilldown(t *testing.T) {
+	service := New()
+	snapshot := graph.GraphSnapshot{
+		WorkspaceID: "ws_async_audit",
+		ID:          "snap_async_audit",
+		Nodes: []graph.Node{
+			endpointNode("endpoint_predict", "POST /predict"),
+			testSymbolNode("handler_root", "handler.Predict", string(symbol.KindRouteHandler)),
+			{
+				ID:            "blacklist_closure",
+				Kind:          graph.NodeSymbol,
+				CanonicalName: "handler.Predict.$inline_handler_0",
+				Properties: map[string]string{
+					"name":           "$inline_handler_0",
+					"synthetic":      "true",
+					"synthetic_kind": "inline_handler",
+				},
+			},
+			{
+				ID:            "predict_closure",
+				Kind:          graph.NodeSymbol,
+				CanonicalName: "handler.Predict.$inline_handler_1",
+				Properties: map[string]string{
+					"name":           "$inline_handler_1",
+					"synthetic":      "true",
+					"synthetic_kind": "inline_handler",
+				},
+			},
+			testSymbolNode("blacklist_service", "service.Service.CheckImageInBlacklist", "service"),
+			testSymbolNode("predict_service", "service.Service.Predict", "service"),
+			{
+				ID:            "vlm_closure",
+				Kind:          graph.NodeSymbol,
+				CanonicalName: "service.Service.Predict.$inline_handler_2",
+				Properties: map[string]string{
+					"name":           "$inline_handler_2",
+					"synthetic":      "true",
+					"synthetic_kind": "inline_handler",
+				},
+			},
+			{
+				ID:            "coreml_closure",
+				Kind:          graph.NodeSymbol,
+				CanonicalName: "service.Service.Predict.$inline_handler_3",
+				Properties: map[string]string{
+					"name":           "$inline_handler_3",
+					"synthetic":      "true",
+					"synthetic_kind": "inline_handler",
+				},
+			},
+			testSymbolNode("vlm_target", "service.Service.detectVLM", "function"),
+			testSymbolNode("coreml_target", "clients.ScanCoreMLService.Predict", "service"),
+		},
+		Edges: []graph.Edge{
+			{ID: "e_register", Kind: graph.EdgeRegistersBoundary, From: "endpoint_predict", To: "handler_root", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}},
+			{ID: "e_spawn_blacklist", Kind: graph.EdgeSpawns, From: "handler_root", To: "blacklist_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "2"}},
+			{ID: "e_spawn_predict", Kind: graph.EdgeSpawns, From: "handler_root", To: "predict_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "3"}},
+			{ID: "e_blacklist_call", Kind: graph.EdgeCalls, From: "blacklist_closure", To: "blacklist_service", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "1"}},
+			{ID: "e_predict_call", Kind: graph.EdgeCalls, From: "predict_closure", To: "predict_service", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "1"}},
+			{ID: "e_spawn_vlm", Kind: graph.EdgeSpawns, From: "predict_service", To: "vlm_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "1"}},
+			{ID: "e_spawn_coreml", Kind: graph.EdgeSpawns, From: "predict_service", To: "coreml_closure", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "2"}},
+			{ID: "e_vlm_call", Kind: graph.EdgeCalls, From: "vlm_closure", To: "vlm_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "1"}},
+			{ID: "e_coreml_call", Kind: graph.EdgeCalls, From: "coreml_closure", To: "coreml_target", Confidence: graph.Confidence{Tier: graph.ConfidenceConfirmed, Score: 1}, Properties: map[string]string{"order_index": "1"}},
+		},
+	}
+	roots := entrypoint.Result{
+		Roots: []entrypoint.Root{{
+			NodeID:        "endpoint_predict",
+			CanonicalName: "POST /predict",
+			RootType:      entrypoint.RootHTTP,
+			RepositoryID:  "repo1",
+		}},
+	}
+
+	bundle, err := service.Build(snapshot, roots, repository.Inventory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := service.BuildAudit(snapshot, roots, bundle)
+	if len(audit.Roots) != 1 {
+		t.Fatalf("expected 1 audit root, got %+v", audit.Roots)
+	}
+
+	root := audit.Roots[0]
+	if got := edgeTargets(root.BusinessHandoff); len(got) != 2 || got[0] != "blacklist_service" || got[1] != "predict_service" {
+		t.Fatalf("expected promoted spawned business handoffs in handler order, got %+v", root.BusinessHandoff)
+	}
+	if root.BusinessHandoff[0].FromNodeID != "handler_root" || root.BusinessHandoff[1].FromNodeID != "handler_root" {
+		t.Fatalf("expected promoted business handoffs to retain handler sender, got %+v", root.BusinessHandoff)
+	}
+	if got := edgeTargets(root.DrilldownCalls); len(got) != 2 || got[0] != "vlm_target" || got[1] != "coreml_target" {
+		t.Fatalf("expected dominant predict service drilldown to win, got %+v", root.DrilldownCalls)
+	}
+	if root.DrilldownCalls[0].FromNodeID != "predict_service" || root.DrilldownCalls[1].FromNodeID != "predict_service" {
+		t.Fatalf("expected promoted drilldown calls to retain service sender, got %+v", root.DrilldownCalls)
+	}
+}
+
 func TestBuildAudit_FunctionAnchorRefinementDoesNotChangeMainline(t *testing.T) {
 	service := New()
 	snapshot := graph.GraphSnapshot{
@@ -742,6 +899,14 @@ func endpointNode(id, canonical string) graph.Node {
 			"boundary_kind": "http",
 		},
 	}
+}
+
+func edgeTargets(edges []SemanticAuditEdgeRef) []string {
+	out := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		out = append(out, edge.ToNodeID)
+	}
+	return out
 }
 
 func assertAuditWarningKind(t *testing.T, warnings []SemanticAuditWarning, kind string) {

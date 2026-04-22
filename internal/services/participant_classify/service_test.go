@@ -107,3 +107,63 @@ func TestProfile_ResponseHelperMapsToResponseBucket(t *testing.T) {
 		t.Fatalf("expected Response display label, got %q", profile.DisplayLabel)
 	}
 }
+
+func TestProfile_ServiceReceiverMethodMapsToServiceBucket(t *testing.T) {
+	s := New()
+	node := graph.Node{
+		ID:            "n3",
+		CanonicalName: "service.service.Predict",
+		Properties: map[string]string{
+			"name": "Predict",
+			"kind": "method",
+		},
+	}
+
+	profile := s.Profile(node, graph.GraphSnapshot{})
+	if profile.Role != reduced.RoleService {
+		t.Fatalf("expected service role, got %s", profile.Role)
+	}
+	if profile.Bucket != BucketService {
+		t.Fatalf("expected service bucket, got %s", profile.Bucket)
+	}
+}
+
+func TestProfile_CheckImageInBlacklistIsBusinessNotValidation(t *testing.T) {
+	s := New()
+	node := graph.Node{
+		ID:            "n4",
+		CanonicalName: "service.service.CheckImageInBlacklist",
+		Properties: map[string]string{
+			"name": "CheckImageInBlacklist",
+			"kind": "method",
+		},
+	}
+
+	profile := s.Profile(node, graph.GraphSnapshot{})
+	if profile.IsValidationHelper {
+		t.Fatal("expected blacklist service method to avoid validation-helper classification")
+	}
+	if profile.Bucket != BucketService {
+		t.Fatalf("expected blacklist service method to map to service bucket, got %s", profile.Bucket)
+	}
+}
+
+func TestProfile_InstrumentingRecordMethodMapsToHelper(t *testing.T) {
+	s := New()
+	node := graph.Node{
+		ID:            "n5",
+		CanonicalName: "utils.InstrumentingServices.RecordPredictBlacklistResult",
+		Properties: map[string]string{
+			"name": "RecordPredictBlacklistResult",
+			"kind": "method",
+		},
+	}
+
+	profile := s.Profile(node, graph.GraphSnapshot{})
+	if !profile.IsObservability {
+		t.Fatal("expected instrumenting service record method to be observability")
+	}
+	if profile.Bucket != BucketHelper {
+		t.Fatalf("expected instrumenting service record method to stay helper, got %s", profile.Bucket)
+	}
+}

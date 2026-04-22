@@ -1,33 +1,33 @@
 [
   {
-    "root_node_id": "boundary_0d91223701f8",
+    "root_node_id": "boundary_3a21e0ce6854",
     "canonical_name": "GET /ping",
-    "slug": "get-ping__223701f8",
+    "slug": "get-ping__e0ce6854",
     "status": "rendered",
     "artifact_refs": [
       {
         "type": "reduced_chain",
-        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "workspace_id": "ws_gin_route_direct_e2420f1094b8",
         "path": "reduced_chain.json"
       },
       {
         "type": "review_flow",
-        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "workspace_id": "ws_gin_route_direct_e2420f1094b8",
         "path": "review_flow.json"
       },
       {
         "type": "review_flow_build",
-        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "workspace_id": "ws_gin_route_direct_e2420f1094b8",
         "path": "review_flow_build.json"
       },
       {
         "type": "sequence_model",
-        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "workspace_id": "ws_gin_route_direct_e2420f1094b8",
         "path": "sequence_model.json"
       },
       {
         "type": "mermaid_diagram",
-        "workspace_id": "ws_gin_route_direct_dee2c77c1496",
+        "workspace_id": "ws_gin_route_direct_e2420f1094b8",
         "path": "diagram_http.mmd"
       }
     ]
