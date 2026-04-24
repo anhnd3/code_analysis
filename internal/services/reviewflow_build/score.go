@@ -5,9 +5,14 @@ import (
 	"strings"
 
 	"analysis-module/internal/domain/reviewflow"
+	"analysis-module/internal/services/reviewflow_policy"
 )
 
 func scoreCandidates(candidates []reviewflow.Flow) []CandidateScore {
+	return scoreCandidatesWithPolicy(candidates, nil)
+}
+
+func scoreCandidatesWithPolicy(candidates []reviewflow.Flow, policy *reviewflow_policy.Policy) []CandidateScore {
 	scores := make([]CandidateScore, 0, len(candidates))
 	for _, candidate := range candidates {
 		breakdown := scoreBreakdown(candidate)
@@ -33,8 +38,9 @@ func scoreCandidates(candidates []reviewflow.Flow) []CandidateScore {
 		if scores[i].StageCount != scores[j].StageCount {
 			return scores[i].StageCount > scores[j].StageCount
 		}
-		if candidatePriority(scores[i].CandidateKind) != candidatePriority(scores[j].CandidateKind) {
-			return candidatePriority(scores[i].CandidateKind) < candidatePriority(scores[j].CandidateKind)
+		preferredKinds := preferredCandidateKinds(policy)
+		if candidatePriority(scores[i].CandidateKind, preferredKinds) != candidatePriority(scores[j].CandidateKind, preferredKinds) {
+			return candidatePriority(scores[i].CandidateKind, preferredKinds) < candidatePriority(scores[j].CandidateKind, preferredKinds)
 		}
 		return scores[i].Signature < scores[j].Signature
 	})
@@ -143,15 +149,28 @@ func hasBusinessParticipants(flow reviewflow.Flow) bool {
 	return false
 }
 
-func candidatePriority(kind string) int {
+func preferredCandidateKinds(policy *reviewflow_policy.Policy) []string {
+	if policy == nil {
+		return nil
+	}
+	return append([]string(nil), policy.PreferredCandidateKinds...)
+}
+
+func candidatePriority(kind string, preferred []string) int {
+	for idx, pref := range preferred {
+		if kind == pref {
+			return idx
+		}
+	}
+	base := len(preferred)
 	switch kind {
 	case string(CandidateCompactReview):
-		return 0
+		return base
 	case string(CandidateAsyncSummarized):
-		return 1
+		return base + 1
 	case string(CandidateFaithful):
-		return 2
+		return base + 2
 	default:
-		return 3
+		return base + 3
 	}
 }

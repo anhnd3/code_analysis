@@ -224,19 +224,7 @@ func matchResolved(expected reviewpack.ExpectedRoot, resolved []entrypoint.Root)
 	path := strings.TrimSpace(expected.Path)
 
 	if rootType == string(entrypoint.RootBootstrap) {
-		bootstrap := make([]entrypoint.Root, 0, len(resolved))
-		for _, root := range resolved {
-			if string(root.RootType) == rootType {
-				bootstrap = append(bootstrap, root)
-			}
-		}
-		if len(bootstrap) == 0 {
-			return entrypoint.Root{}, false
-		}
-		sort.SliceStable(bootstrap, func(i, j int) bool {
-			return bootstrap[i].CanonicalName < bootstrap[j].CanonicalName
-		})
-		return bootstrap[0], true
+		return chooseBootstrapRoot(resolved)
 	}
 
 	for _, root := range resolved {
@@ -286,4 +274,55 @@ func policySourceDefault(source reviewpack.PolicySource, family string) reviewpa
 		return reviewpack.PolicySourceManifest
 	}
 	return reviewpack.PolicySourceDefault
+}
+
+func chooseBootstrapRoot(roots []entrypoint.Root) (entrypoint.Root, bool) {
+	bootstrap := make([]entrypoint.Root, 0, len(roots))
+	for _, root := range roots {
+		if root.RootType == entrypoint.RootBootstrap {
+			bootstrap = append(bootstrap, root)
+		}
+	}
+	if len(bootstrap) == 0 {
+		return entrypoint.Root{}, false
+	}
+	sort.SliceStable(bootstrap, func(i, j int) bool {
+		left := bootstrap[i]
+		right := bootstrap[j]
+		if confidenceRank(left.Confidence) != confidenceRank(right.Confidence) {
+			return confidenceRank(left.Confidence) > confidenceRank(right.Confidence)
+		}
+		if bootstrapNameRank(left.CanonicalName) != bootstrapNameRank(right.CanonicalName) {
+			return bootstrapNameRank(left.CanonicalName) < bootstrapNameRank(right.CanonicalName)
+		}
+		return left.CanonicalName < right.CanonicalName
+	})
+	return bootstrap[0], true
+}
+
+func confidenceRank(confidence entrypoint.Confidence) int {
+	switch confidence {
+	case entrypoint.ConfidenceHigh:
+		return 3
+	case entrypoint.ConfidenceMedium:
+		return 2
+	case entrypoint.ConfidenceLow:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func bootstrapNameRank(canonical string) int {
+	name := strings.ToLower(strings.TrimSpace(canonical))
+	switch {
+	case name == "main.main":
+		return 0
+	case strings.HasSuffix(name, ".main"):
+		return 1
+	case strings.Contains(name, "main"):
+		return 2
+	default:
+		return 3
+	}
 }

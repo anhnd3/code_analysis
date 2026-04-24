@@ -12,6 +12,7 @@ import (
 	"analysis-module/internal/domain/reviewflow"
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/participant_classify"
+	"analysis-module/internal/services/reviewflow_policy"
 	"analysis-module/pkg/ids"
 )
 
@@ -69,6 +70,12 @@ type Service struct {
 	classifier participant_classify.Service
 }
 
+type BuildOptions struct {
+	Policy           *reviewflow_policy.Policy `json:"-"`
+	EntryMode        string                    `json:"entry_mode,omitempty"`
+	ExpansionEnabled bool                      `json:"expansion_enabled,omitempty"`
+}
+
 // New creates a reviewflow builder.
 func New() Service {
 	return Service{
@@ -121,6 +128,14 @@ type stageAccumulator struct {
 
 // Build creates a deterministic reviewflow candidate set for one root.
 func (s Service) Build(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot) (BuildResult, error) {
+	return s.BuildWithOptions(snapshot, root, chain, audit, BuildOptions{})
+}
+
+func (s Service) BuildWithPolicy(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, policy reviewflow_policy.Policy) (BuildResult, error) {
+	return s.BuildWithOptions(snapshot, root, chain, audit, BuildOptions{Policy: &policy})
+}
+
+func (s Service) BuildWithOptions(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, options BuildOptions) (BuildResult, error) {
 	if chain.RootNodeID == "" {
 		return BuildResult{}, nil
 	}
@@ -133,11 +148,7 @@ func (s Service) Build(snapshot graph.GraphSnapshot, root entrypoint.Root, chain
 		nodeByID: indexGraphNodes(snapshot.Nodes),
 	}
 
-	settingsList := []candidateSettings{
-		{kind: CandidateFaithful},
-		{kind: CandidateCompactReview, compactHelpers: true, summarizeResponse: true, includeGenericReturn: true},
-		{kind: CandidateAsyncSummarized, compactHelpers: true, summarizeResponse: true, summarizeAsync: true, includeGenericReturn: true},
-	}
+	settingsList := settingsListForOptions(options)
 
 	candidates := make([]reviewflow.Flow, 0, len(settingsList))
 	for _, settings := range settingsList {
@@ -148,7 +159,7 @@ func (s Service) Build(snapshot graph.GraphSnapshot, root entrypoint.Root, chain
 		candidates = append(candidates, candidate)
 	}
 
-	scores := scoreCandidates(candidates)
+	scores := scoreCandidatesWithPolicy(candidates, options.Policy)
 	best := selectBestScore(scores)
 	selected := reviewflow.Flow{}
 	for i := range candidates {
@@ -165,6 +176,41 @@ func (s Service) Build(snapshot graph.GraphSnapshot, root entrypoint.Root, chain
 		SelectedID: best.FlowID,
 		Signature:  best.Signature,
 	}, nil
+}
+
+func settingsListForOptions(options BuildOptions) []candidateSettings {
+	defaultList := []candidateSettings{
+		{kind: CandidateFaithful},
+		{kind: CandidateCompactReview, compactHelpers: true, summarizeResponse: true, includeGenericReturn: true},
+		{kind: CandidateAsyncSummarized, compactHelpers: true, summarizeResponse: true, summarizeAsync: true, includeGenericReturn: true},
+	}
+	if options.Policy == nil || len(options.Policy.PreferredCandidateKinds) == 0 {
+		return defaultList
+	}
+
+	byKind := make(map[string]candidateSettings, len(defaultList))
+	for _, settings := range defaultList {
+		byKind[string(settings.kind)] = settings
+	}
+
+	ordered := make([]candidateSettings, 0, len(defaultList))
+	seen := map[string]bool{}
+	for _, preferred := range options.Policy.PreferredCandidateKinds {
+		settings, ok := byKind[preferred]
+		if !ok || seen[preferred] {
+			continue
+		}
+		ordered = append(ordered, settings)
+		seen[preferred] = true
+	}
+	for _, settings := range defaultList {
+		key := string(settings.kind)
+		if seen[key] {
+			continue
+		}
+		ordered = append(ordered, settings)
+	}
+	return ordered
 }
 
 func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (reviewflow.Flow, error) {

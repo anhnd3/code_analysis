@@ -10,9 +10,14 @@ import (
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/entrypoint"
 	"analysis-module/internal/domain/graph"
+	"analysis-module/internal/domain/reduced"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/reviewpack"
 	"analysis-module/internal/services/chain_reduce"
+	"analysis-module/internal/services/flow_stitch"
+	"analysis-module/internal/services/reviewflow_bootstrap"
+	"analysis-module/internal/services/reviewflow_build"
+	"analysis-module/internal/services/reviewflow_policy"
 	"analysis-module/internal/services/sequence_model_build"
 	"analysis-module/internal/services/service_review_pack"
 )
@@ -28,6 +33,8 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 	}
 
 	packSvc := service_review_pack.New()
+	policySvc := reviewflow_policy.New()
+	bootstrapSvc := reviewflow_bootstrap.New()
 	expectedRoots, err := packSvc.LoadExpectedRoots(req.ExpectedRootsFile)
 	if err != nil {
 		return Result{}, fmt.Errorf("export_mermaid: load expected roots: %w", err)
@@ -78,6 +85,57 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 			outcome.PolicySource = reviewpack.PolicySourceDefault
 		}
 
+		if strings.TrimSpace(expected.RootType) == string(entrypoint.RootBootstrap) {
+			bootstrapFlow, bootstrapErr := bootstrapSvc.Build(snapshot, resolvedRoot)
+			if bootstrapErr != nil {
+				outcome.Status = reviewpack.CoverageSkipped
+				outcome.Reason = reviewpack.ReasonBootstrapInsufficient
+				outcome.FailureStage = reviewpack.FailureStageRendering
+				outcomes[expected.ID] = outcome
+				continue
+			}
+			diagram, seqErr := w.sequenceModel.BuildFromReviewFlow(bootstrapFlow, sequence_model_build.Options{
+				Title:            diagramTitleForRoot(req, resolvedRoot),
+				ServiceShortName: req.ServiceShortName,
+			})
+			if seqErr != nil || !hasRenderableSequence(diagram) {
+				outcome.Status = reviewpack.CoverageSkipped
+				outcome.Reason = reviewpack.ReasonBootstrapInsufficient
+				outcome.FailureStage = reviewpack.FailureStageRendering
+				outcomes[expected.ID] = outcome
+				continue
+			}
+			mermaidCode, mermaidErr := w.mermaidEmit.Emit(diagram)
+			if mermaidErr != nil || strings.TrimSpace(mermaidCode) == "" {
+				outcome.Status = reviewpack.CoverageSkipped
+				outcome.Reason = reviewpack.ReasonBootstrapInsufficient
+				outcome.FailureStage = reviewpack.FailureStageRendering
+				outcomes[expected.ID] = outcome
+				continue
+			}
+			rootRefs, saveErr := w.saveServicePackFlowArtifacts(req, expected.ID, renderedRoot{
+				reviewFlow:  &bootstrapFlow,
+				diagram:     diagram,
+				mermaidCode: mermaidCode,
+			})
+			if saveErr != nil {
+				outcome.Status = reviewpack.CoverageSkipped
+				outcome.Reason = reviewpack.ReasonBootstrapInsufficient
+				outcome.FailureStage = reviewpack.FailureStageRendering
+				outcomes[expected.ID] = outcome
+				continue
+			}
+			artifactRefs = append(artifactRefs, rootRefs...)
+
+			outcome.Status = reviewpack.CoverageRendered
+			outcome.RenderSource = reviewpack.RenderSourceBootstrapLifecycle
+			outcome.MermaidPath = filepath.ToSlash(filepath.Join("flows", expected.ID+".mmd"))
+			outcome.ReviewFlowPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__review_flow.json"))
+			outcome.SequenceModelPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__sequence_model.json"))
+			outcomes[expected.ID] = outcome
+			continue
+		}
+
 		if strings.TrimSpace(expected.RootType) != string(entrypoint.RootHTTP) {
 			outcome.Status = reviewpack.CoverageSkipped
 			outcome.Reason = reviewpack.ReasonUnsupportedRootType
@@ -85,6 +143,14 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 			outcomes[expected.ID] = outcome
 			continue
 		}
+		policyResult := policySvc.Resolve(reviewflow_policy.ResolveInput{
+			Root:           resolvedRoot,
+			ExpectedFamily: expected.Family,
+			ServiceName:    servicePackServiceName(req, filtered),
+			WorkspacePath:  req.WorkspaceID,
+		})
+		outcome.PolicySource = policyResult.Source
+		outcome.Family = policyResult.Policy.Family
 
 		chain, hasChain := chainByRoot[resolvedRoot.NodeID]
 		if !hasChain {
@@ -116,10 +182,10 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 		}
 
 		auditRoot, _ := semanticAuditRootByNodeID(&semanticAudit, resolvedRoot.NodeID)
-		rendered, decision, renderErr := w.renderRoot(req, snapshot, resolvedRoot, reducedChain, auditRoot, sequence_model_build.Options{
+		rendered, decision, renderErr := w.renderRootWithPolicy(req, snapshot, resolvedRoot, reducedChain, auditRoot, sequence_model_build.Options{
 			Title:            diagramTitleForRoot(req, resolvedRoot),
 			ServiceShortName: req.ServiceShortName,
-		})
+		}, policyResult.Policy)
 		debug.rootRenderDecisions = append(debug.rootRenderDecisions, decision)
 		if renderErr != nil {
 			outcome.Status = reviewpack.CoverageSkipped
@@ -239,19 +305,7 @@ func matchExpectedRootForRender(expected reviewpack.ExpectedRoot, roots []entryp
 	path := strings.TrimSpace(expected.Path)
 
 	if rootType == string(entrypoint.RootBootstrap) {
-		bootstrapRoots := make([]entrypoint.Root, 0, len(roots))
-		for _, root := range roots {
-			if root.RootType == entrypoint.RootBootstrap {
-				bootstrapRoots = append(bootstrapRoots, root)
-			}
-		}
-		if len(bootstrapRoots) == 0 {
-			return entrypoint.Root{}, false
-		}
-		sort.SliceStable(bootstrapRoots, func(i, j int) bool {
-			return bootstrapRoots[i].CanonicalName < bootstrapRoots[j].CanonicalName
-		})
-		return bootstrapRoots[0], true
+		return pickBootstrapRoot(roots)
 	}
 
 	for _, root := range roots {
@@ -288,6 +342,57 @@ func servicePackServiceName(req Request, filtered entrypoint.Result) string {
 		return repoID
 	}
 	return "service_pack"
+}
+
+func pickBootstrapRoot(roots []entrypoint.Root) (entrypoint.Root, bool) {
+	bootstrapRoots := make([]entrypoint.Root, 0, len(roots))
+	for _, root := range roots {
+		if root.RootType == entrypoint.RootBootstrap {
+			bootstrapRoots = append(bootstrapRoots, root)
+		}
+	}
+	if len(bootstrapRoots) == 0 {
+		return entrypoint.Root{}, false
+	}
+	sort.SliceStable(bootstrapRoots, func(i, j int) bool {
+		left := bootstrapRoots[i]
+		right := bootstrapRoots[j]
+		if bootstrapConfidenceRank(left.Confidence) != bootstrapConfidenceRank(right.Confidence) {
+			return bootstrapConfidenceRank(left.Confidence) > bootstrapConfidenceRank(right.Confidence)
+		}
+		if bootstrapCanonicalRank(left.CanonicalName) != bootstrapCanonicalRank(right.CanonicalName) {
+			return bootstrapCanonicalRank(left.CanonicalName) < bootstrapCanonicalRank(right.CanonicalName)
+		}
+		return left.CanonicalName < right.CanonicalName
+	})
+	return bootstrapRoots[0], true
+}
+
+func bootstrapConfidenceRank(confidence entrypoint.Confidence) int {
+	switch confidence {
+	case entrypoint.ConfidenceHigh:
+		return 3
+	case entrypoint.ConfidenceMedium:
+		return 2
+	case entrypoint.ConfidenceLow:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func bootstrapCanonicalRank(canonical string) int {
+	name := strings.ToLower(strings.TrimSpace(canonical))
+	switch {
+	case name == "main.main":
+		return 0
+	case strings.HasSuffix(name, ".main"):
+		return 1
+	case strings.Contains(name, "main"):
+		return 2
+	default:
+		return 3
+	}
 }
 
 func rootExportsFromCoverage(coverage []reviewpack.CoverageItem, expected []reviewpack.ExpectedRoot, outcomes map[string]service_review_pack.RenderOutcome) []RootExport {
@@ -341,4 +446,75 @@ func validateCoverageInvariants(items []reviewpack.CoverageItem) error {
 		}
 	}
 	return nil
+}
+
+func (w Workflow) renderRootWithPolicy(req Request, snapshot graph.GraphSnapshot, root entrypoint.Root, reducedChain reduced.Chain, audit flow_stitch.SemanticAuditRoot, opts sequence_model_build.Options, policy reviewflow_policy.Policy) (renderedRoot, RootRenderDecision, error) {
+	mode := w.renderModeForRoot(req, root)
+	decision := newRootRenderDecision(req, root, mode)
+	if mode == RenderModeReview {
+		decision.ReviewAttempted = true
+
+		buildResult, err := w.buildReviewFlowWithPolicy(snapshot, root, reducedChain, audit, policy)
+		if err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, renderedRoot{}, decision, ReviewFallbackReasonReviewRenderError, fmt.Errorf("build reviewflow with policy: %w", err))
+		}
+
+		rendered := renderedRoot{reviewFlowBuild: &buildResult}
+		decision.ReviewFlowBuildPresent = true
+		populateSelectedDecisionMetadata(&decision, buildResult)
+		decision.ReviewSelected = buildResult.SelectedID != "" || buildResult.Selected.RootNodeID != "" || buildResult.Selected.ID != ""
+
+		if len(buildResult.Candidates) == 0 {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonReviewBuildEmpty, nil)
+		}
+		if buildResult.SelectedID == "" && buildResult.Selected.RootNodeID == "" && buildResult.Selected.ID == "" {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonNoSelectedCandidate, nil)
+		}
+		if buildResult.SelectedID != "" && buildResult.Selected.RootNodeID == "" {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonIncompleteReviewArtifacts, nil)
+		}
+
+		selected := buildResult.Selected
+		rendered.reviewFlow = &selected
+		decision.ReviewFlowPresent = true
+
+		if err := reviewflow_build.ValidateSelectedBuildResult(buildResult); err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, reviewFallbackReasonForValidation(err), err)
+		}
+
+		diagram, err := w.sequenceModel.BuildFromReviewFlow(selected, opts)
+		if err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonReviewRenderError, fmt.Errorf("build review sequence: %w", err))
+		}
+		rendered.diagram = diagram
+		decision.SequenceModelPresent = hasRenderableSequence(diagram)
+		if !decision.SequenceModelPresent {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonIncompleteReviewArtifacts, nil)
+		}
+
+		mermaidCode, err := w.mermaidEmit.Emit(diagram)
+		if err != nil {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonReviewRenderError, fmt.Errorf("emit review mermaid: %w", err))
+		}
+		rendered.mermaidCode = mermaidCode
+		decision.MermaidPresent = strings.TrimSpace(mermaidCode) != ""
+		if !decision.MermaidPresent {
+			return w.handleReviewFailure(req, reducedChain, opts, rendered, decision, ReviewFallbackReasonIncompleteReviewArtifacts, nil)
+		}
+
+		decision.UsedRenderer = UsedRendererReviewFlow
+		return rendered, decision, nil
+	}
+
+	return w.renderReducedRoot(reducedChain, opts, renderedRoot{}, decision)
+}
+
+func (w Workflow) buildReviewFlowWithPolicy(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, policy reviewflow_policy.Policy) (reviewflow_build.BuildResult, error) {
+	type policyBuilder interface {
+		BuildWithPolicy(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, policy reviewflow_policy.Policy) (reviewflow_build.BuildResult, error)
+	}
+	if builder, ok := w.reviewFlow.(policyBuilder); ok {
+		return builder.BuildWithPolicy(snapshot, root, chain, audit, policy)
+	}
+	return w.reviewFlow.Build(snapshot, root, chain, audit)
 }

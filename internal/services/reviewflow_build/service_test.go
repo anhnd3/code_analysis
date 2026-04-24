@@ -11,6 +11,7 @@ import (
 	"analysis-module/internal/domain/reviewflow"
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/mermaid_emit"
+	"analysis-module/internal/services/reviewflow_policy"
 	"analysis-module/internal/services/sequence_model_build"
 )
 
@@ -155,6 +156,59 @@ func TestBuild_ProducesDeterministicReviewflowAndSuppressesInlineArtifacts(t *te
 		t.Fatalf("expected deterministic Mermaid output, got:\n%s\n---\n%s", firstMermaid, secondMermaid)
 	}
 	assertNoVisibleReviewLeaks(t, first.Selected, firstMermaid)
+}
+
+func TestBuildWithOptions_DefaultMatchesBuild(t *testing.T) {
+	service := New()
+	root := entrypoint.Root{
+		NodeID:        "boundary_health",
+		CanonicalName: "GET /health",
+		RootType:      entrypoint.RootHTTP,
+		Framework:     "gin",
+		Method:        "GET",
+		Path:          "/health",
+	}
+	snapshot := graph.GraphSnapshot{
+		Nodes: []graph.Node{
+			{ID: "boundary_health", Kind: graph.NodeEndpoint, CanonicalName: "GET /health"},
+			{ID: "handler_health", Kind: graph.NodeSymbol, CanonicalName: "api.Health", Properties: map[string]string{"name": "Health", "kind": "function"}},
+		},
+	}
+	chain := reduced.Chain{
+		RootNodeID: "boundary_health",
+		Edges: []reduced.Edge{
+			{FromID: "boundary_health", ToID: "handler_health", Label: "dispatch request", OrderIndex: 0},
+		},
+	}
+	audit := flow_stitch.SemanticAuditRoot{
+		RootNodeID:    "boundary_health",
+		RootCanonical: "GET /health",
+		HandlerTargetNode: &flow_stitch.SemanticAuditNodeRef{
+			NodeID:        "handler_health",
+			CanonicalName: "api.Health",
+		},
+	}
+
+	defaultBuild, err := service.Build(snapshot, root, chain, audit)
+	if err != nil {
+		t.Fatalf("build default: %v", err)
+	}
+	optionBuild, err := service.BuildWithOptions(snapshot, root, chain, audit, BuildOptions{})
+	if err != nil {
+		t.Fatalf("build with options default: %v", err)
+	}
+
+	if defaultBuild.SelectedID != optionBuild.SelectedID || defaultBuild.Signature != optionBuild.Signature {
+		t.Fatalf("expected Build and BuildWithOptions default to match, got %+v vs %+v", defaultBuild, optionBuild)
+	}
+
+	_, err = service.BuildWithPolicy(snapshot, root, chain, audit, reviewflow_policy.Policy{
+		Family:                  reviewflow_policy.FamilySimpleQuery,
+		PreferredCandidateKinds: []string{"faithful", "compact_review", "async_summarized"},
+	})
+	if err != nil {
+		t.Fatalf("build with policy: %v", err)
+	}
 }
 
 func TestBuild_StableAcrossSemanticAuditEdgeIDChanges(t *testing.T) {

@@ -136,3 +136,41 @@ func TestBuild_RenderedClearsFailureMetadata(t *testing.T) {
 		t.Fatalf("rendered item should not keep failure stage, got %s", item.FailureStage)
 	}
 }
+
+func TestBuild_BootstrapPrefersHighConfidenceMainRoot(t *testing.T) {
+	svc := New()
+	pack, err := svc.Build(BuildInput{
+		ServiceName: "svc",
+		ExpectedRoots: []reviewpack.ExpectedRoot{
+			{
+				ID:       "start_service",
+				RootType: "bootstrap",
+				Required: true,
+				Family:   "bootstrap_startup",
+			},
+		},
+		ResolvedRoots: []entrypoint.Root{
+			{
+				NodeID:        "root_execute",
+				CanonicalName: "cmd.Execute",
+				RootType:      entrypoint.RootBootstrap,
+				Confidence:    entrypoint.ConfidenceMedium,
+			},
+			{
+				NodeID:        "root_main",
+				CanonicalName: "main.main",
+				RootType:      entrypoint.RootBootstrap,
+				Confidence:    entrypoint.ConfidenceHigh,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build pack: %v", err)
+	}
+	if len(pack.Coverage) != 1 {
+		t.Fatalf("expected one coverage item, got %d", len(pack.Coverage))
+	}
+	if pack.Coverage[0].RootNodeID != "root_main" {
+		t.Fatalf("expected high-confidence main root, got %s", pack.Coverage[0].RootNodeID)
+	}
+}
