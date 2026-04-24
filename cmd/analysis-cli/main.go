@@ -152,6 +152,8 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	snapshotFile := fs.String("snapshot", "", "JSON snapshot path to load and export")
 	rootType := fs.String("root-type", "master", "root type: bootstrap|http|worker|symbol|master")
 	rootSelector := fs.String("root-selector", "", "target canonical name or node id")
+	reviewScope := fs.String("review-scope", "root", "review scope: root|service_pack")
+	expectedRootsFile := fs.String("expected-roots-file", "", "path to expected roots JSON manifest for service_pack mode")
 	renderMode := fs.String("render-mode", "auto", "render mode: auto|review|reduced_debug")
 	reviewStrict := fs.Bool("review-strict", false, "fail review mode instead of silently falling back")
 	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
@@ -210,6 +212,8 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 		SnapshotID:        snapshot.ID,
 		RootType:          export_mermaid.RootTypeFilter(*rootType),
 		RootSelector:      *rootSelector,
+		ReviewScope:       export_mermaid.ReviewScope(*reviewScope),
+		ExpectedRootsFile: *expectedRootsFile,
 		RenderMode:        export_mermaid.RenderMode(*renderMode),
 		ReviewStrict:      *reviewStrict,
 		MaxDepth:          *maxDepth,

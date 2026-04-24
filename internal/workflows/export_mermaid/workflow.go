@@ -58,6 +58,13 @@ const (
 	RenderModeReducedDebug RenderMode = "reduced_debug"
 )
 
+type ReviewScope string
+
+const (
+	ReviewScopeRoot        ReviewScope = "root"
+	ReviewScopeServicePack ReviewScope = "service_pack"
+)
+
 type UsedRenderer string
 
 const (
@@ -114,6 +121,8 @@ type Request struct {
 	SnapshotID        string         `json:"snapshot_id"`
 	RootType          RootTypeFilter `json:"root_type"`
 	RootSelector      string         `json:"root_selector,omitempty"`
+	ReviewScope       ReviewScope    `json:"review_scope,omitempty"`
+	ExpectedRootsFile string         `json:"expected_roots_file,omitempty"`
 	RenderMode        RenderMode     `json:"render_mode,omitempty"`
 	ReviewStrict      bool           `json:"review_strict,omitempty"`
 	MaxDepth          int            `json:"max_depth,omitempty"`
@@ -214,6 +223,9 @@ func (w Workflow) Run(req Request, inventory repository.Inventory, snapshot grap
 	if err := ensureNonEmptyRoots(filtered, req.RootType); err != nil {
 		_ = debug.write()
 		return Result{}, fmt.Errorf("export_mermaid: %w", err)
+	}
+	if req.ReviewScope == ReviewScopeServicePack {
+		return w.runServicePackExport(req, snapshot, inventory, detected.Roots, filtered, debug)
 	}
 
 	bundle, err := w.flowStitch.Build(snapshot, filtered, inventory)

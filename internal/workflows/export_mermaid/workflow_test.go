@@ -12,6 +12,7 @@ import (
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/reduced"
 	"analysis-module/internal/domain/reviewflow"
+	"analysis-module/internal/domain/reviewpack"
 	"analysis-module/internal/domain/sequence"
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/mermaid_emit"
@@ -41,6 +42,34 @@ func TestEnsureNonEmptyStageGuards(t *testing.T) {
 	t.Run("sequence", func(t *testing.T) {
 		if err := ensureNonEmptySequence(sequence.Diagram{}); err == nil {
 			t.Fatal("expected empty-sequence guard to fail")
+		}
+	})
+}
+
+func TestValidateCoverageInvariants(t *testing.T) {
+	t.Run("rendered must not contain failure metadata", func(t *testing.T) {
+		err := validateCoverageInvariants([]reviewpack.CoverageItem{
+			{
+				ExpectedRootID: "root_a",
+				Status:         reviewpack.CoverageRendered,
+				FailureStage:   reviewpack.FailureStageRendering,
+			},
+		})
+		if err == nil {
+			t.Fatal("expected rendered invariant violation")
+		}
+	})
+
+	t.Run("non rendered must contain reason and stage", func(t *testing.T) {
+		err := validateCoverageInvariants([]reviewpack.CoverageItem{
+			{
+				ExpectedRootID: "root_b",
+				Status:         reviewpack.CoverageSkipped,
+				Reason:         reviewpack.ReasonUnsupportedRootType,
+			},
+		})
+		if err == nil {
+			t.Fatal("expected non-rendered invariant violation")
 		}
 	})
 }
