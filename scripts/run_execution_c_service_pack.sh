@@ -22,7 +22,23 @@ This script:
   - uses isolated /tmp sqlite and artifact roots
   - uses isolated /tmp go cache and mod cache
   - emits debug bundles and JSON result files per service
+  - copies snapshot artifacts (coverage, selected flows, per-root files) into each service output directory
 EOF
+}
+
+copy_snapshot_artifacts() {
+	local artifact_root="$1"
+	local out_dir="$2"
+	local snapshot_dir
+
+	snapshot_dir="$(find "$artifact_root/workspaces" -mindepth 3 -maxdepth 3 -type d 2>/dev/null | head -n 1 || true)"
+	if [[ -z "${snapshot_dir}" ]]; then
+		echo "FAILED: unable to locate snapshot artifact directory under $artifact_root" >&2
+		return 1
+	fi
+
+	cp -R "$snapshot_dir"/. "$out_dir"/
+	return 0
 }
 
 run_service_pack() {
@@ -36,6 +52,7 @@ run_service_pack() {
 
 	artifact_root="$(mktemp -d /tmp/execution_c_service_pack_artifacts_XXXXXX)"
 	sqlite_path="$(mktemp -u /tmp/execution_c_service_pack_XXXXXX.sqlite)"
+	rm -rf "$out_dir"
 	mkdir -p "$out_dir"
 
 	echo "==> export-mermaid service_pack :: $service_name"
@@ -60,6 +77,12 @@ run_service_pack() {
 	)
 	status=$?
 	set -e
+
+	if [[ $status -eq 0 ]]; then
+		if ! copy_snapshot_artifacts "$artifact_root" "$out_dir"; then
+			status=1
+		fi
+	fi
 
 	rm -rf "$artifact_root"
 	rm -f "$sqlite_path"

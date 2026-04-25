@@ -12,6 +12,7 @@ import (
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/reduced"
 	"analysis-module/internal/domain/repository"
+	"analysis-module/internal/domain/reviewflow"
 	"analysis-module/internal/domain/reviewpack"
 	"analysis-module/internal/services/chain_reduce"
 	"analysis-module/internal/services/flow_stitch"
@@ -78,6 +79,7 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 			CanonicalName:  resolvedRoot.CanonicalName,
 			ArtifactSlug:   expected.ID,
 			Family:         expected.Family,
+			PolicyFamily:   expected.Family,
 		}
 		if strings.TrimSpace(expected.Family) != "" {
 			outcome.PolicySource = reviewpack.PolicySourceManifest
@@ -129,6 +131,12 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 
 			outcome.Status = reviewpack.CoverageRendered
 			outcome.RenderSource = reviewpack.RenderSourceBootstrapLifecycle
+			outcome.CandidateKind = bootstrapFlow.Metadata.CandidateKind
+			outcome.Signature = bootstrapFlow.Metadata.Signature
+			outcome.ParticipantCount = len(bootstrapFlow.Participants)
+			outcome.StageCount = len(bootstrapFlow.Stages)
+			outcome.MessageCount = reviewFlowMessageCount(bootstrapFlow)
+			outcome.QualityFlags = qualityFlagsForRenderedFlow(policyForExpectedBootstrap(expected), &bootstrapFlow, mermaidCode, outcome.RenderSource)
 			outcome.MermaidPath = filepath.ToSlash(filepath.Join("flows", expected.ID+".mmd"))
 			outcome.ReviewFlowPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__review_flow.json"))
 			outcome.SequenceModelPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__sequence_model.json"))
@@ -151,6 +159,7 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 		})
 		outcome.PolicySource = policyResult.Source
 		outcome.Family = policyResult.Policy.Family
+		outcome.PolicyFamily = policyResult.Policy.Family
 
 		chain, hasChain := chainByRoot[resolvedRoot.NodeID]
 		if !hasChain {
@@ -214,6 +223,14 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 
 		outcome.Status = reviewpack.CoverageRendered
 		outcome.RenderSource = renderSourceFromDecision(decision)
+		if rendered.reviewFlow != nil {
+			outcome.CandidateKind = rendered.reviewFlow.Metadata.CandidateKind
+			outcome.Signature = rendered.reviewFlow.Metadata.Signature
+			outcome.ParticipantCount = len(rendered.reviewFlow.Participants)
+			outcome.StageCount = len(rendered.reviewFlow.Stages)
+			outcome.MessageCount = reviewFlowMessageCount(*rendered.reviewFlow)
+		}
+		outcome.QualityFlags = qualityFlagsForRenderedFlow(policyResult.Policy, rendered.reviewFlow, rendered.mermaidCode, outcome.RenderSource)
 		outcome.MermaidPath = filepath.ToSlash(filepath.Join("flows", expected.ID+".mmd"))
 		outcome.ReviewFlowPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__review_flow.json"))
 		outcome.SequenceModelPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__sequence_model.json"))
@@ -510,11 +527,266 @@ func (w Workflow) renderRootWithPolicy(req Request, snapshot graph.GraphSnapshot
 }
 
 func (w Workflow) buildReviewFlowWithPolicy(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, policy reviewflow_policy.Policy) (reviewflow_build.BuildResult, error) {
+	type optionsBuilder interface {
+		BuildWithOptions(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, options reviewflow_build.BuildOptions) (reviewflow_build.BuildResult, error)
+	}
 	type policyBuilder interface {
 		BuildWithPolicy(snapshot graph.GraphSnapshot, root entrypoint.Root, chain reduced.Chain, audit flow_stitch.SemanticAuditRoot, policy reviewflow_policy.Policy) (reviewflow_build.BuildResult, error)
+	}
+	if builder, ok := w.reviewFlow.(optionsBuilder); ok {
+		options := reviewflow_build.BuildOptions{
+			Policy: &policy,
+		}
+		if policy.AddHTTPEntryParticipants {
+			options.EntryMode = reviewflow_build.EntryModeServicePackHTTP
+		}
+		return builder.BuildWithOptions(snapshot, root, chain, audit, options)
 	}
 	if builder, ok := w.reviewFlow.(policyBuilder); ok {
 		return builder.BuildWithPolicy(snapshot, root, chain, audit, policy)
 	}
 	return w.reviewFlow.Build(snapshot, root, chain, audit)
+}
+
+func policyForExpectedBootstrap(expected reviewpack.ExpectedRoot) reviewflow_policy.Policy {
+	family := strings.TrimSpace(expected.Family)
+	if family == "" {
+		family = reviewflow_policy.FamilyBootstrapStartup
+	}
+	return reviewflow_policy.Policy{Family: family}
+}
+
+func reviewFlowMessageCount(flow reviewflow.Flow) int {
+	count := 0
+	for _, stage := range flow.Stages {
+		count += len(stage.Messages)
+	}
+	for _, block := range flow.Blocks {
+		for _, section := range block.Sections {
+			count += len(section.Messages)
+		}
+	}
+	return count
+}
+
+func qualityFlagsForRenderedFlow(policy reviewflow_policy.Policy, flow *reviewflow.Flow, mermaidCode string, renderSource reviewpack.RenderSource) []string {
+	flags := map[string]bool{}
+
+	if flow != nil && renderSource == reviewpack.RenderSourceReviewFlow && flow.SourceRootType == string(entrypoint.RootHTTP) && policy.AddHTTPEntryParticipants {
+		if hasHTTPEntryAbstraction(*flow) {
+			flags["entry_abstraction_present"] = true
+		}
+	}
+	if policy.PreserveBranchBlocks {
+		if flow != nil && hasBranchEvidence(*flow) {
+			flags["branch_expected_present"] = true
+		} else {
+			flags["branch_expected_missing"] = true
+		}
+	}
+	if policy.PreserveAsyncBlocks {
+		if flow != nil && hasAsyncEvidence(*flow) {
+			flags["async_expected_present"] = true
+		} else {
+			flags["async_expected_missing"] = true
+		}
+	}
+	if policy.PreservePostProcessing {
+		if flow != nil && hasPostProcessingEvidence(*flow) {
+			flags["post_processing_expected_present"] = true
+		} else {
+			flags["post_processing_expected_missing"] = true
+		}
+	}
+	if hasVisibleArtifactLeak(flow, mermaidCode) {
+		flags["visible_artifact_leak"] = true
+	} else {
+		flags["no_visible_artifact_leak"] = true
+	}
+
+	out := make([]string, 0, len(flags))
+	for flag := range flags {
+		out = append(out, flag)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func hasHTTPEntryAbstraction(flow reviewflow.Flow) bool {
+	if flow.SourceRootType != string(entrypoint.RootHTTP) {
+		return false
+	}
+	clientID := ""
+	frameworkID := ""
+	handlerID := ""
+	expectedFrameworkLabel := frameworkLabelForEntry(flow.Metadata.RootFramework)
+	for _, participant := range flow.Participants {
+		if isRouteLikeParticipantLabel(participant.Label) {
+			return false
+		}
+		if participant.Label == "Client" {
+			clientID = participant.ID
+		}
+		if participant.Label == expectedFrameworkLabel {
+			frameworkID = participant.ID
+		}
+		if participant.Kind == "handler" || participant.Label == "Handler" {
+			handlerID = participant.ID
+		}
+	}
+	if clientID == "" || frameworkID == "" || handlerID == "" {
+		return false
+	}
+
+	hasClientRequest := false
+	hasHandlerInvoke := false
+	for _, stage := range flow.Stages {
+		for _, message := range stage.Messages {
+			if message.FromParticipantID == clientID && message.ToParticipantID == frameworkID && isHTTPMethodPathLabel(message.Label) {
+				hasClientRequest = true
+			}
+			if message.FromParticipantID == frameworkID && message.ToParticipantID == handlerID && strings.EqualFold(strings.TrimSpace(message.Label), "invoke handler") {
+				hasHandlerInvoke = true
+			}
+		}
+	}
+	return hasClientRequest && hasHandlerInvoke
+}
+
+func frameworkLabelForEntry(framework string) string {
+	switch strings.ToLower(strings.TrimSpace(framework)) {
+	case "gin":
+		return "Gin"
+	case "net/http":
+		return "net/http"
+	case "grpc-gateway":
+		return "Gateway Proxy"
+	case "":
+		return "HTTP Router"
+	default:
+		return strings.TrimSpace(framework)
+	}
+}
+
+func isRouteLikeParticipantLabel(label string) bool {
+	return isHTTPMethodPathLabel(label)
+}
+
+func isHTTPMethodPathLabel(label string) bool {
+	parts := strings.SplitN(strings.TrimSpace(label), " ", 2)
+	return len(parts) == 2 && isUpperMethodToken(parts[0]) && strings.HasPrefix(parts[1], "/")
+}
+
+func isUpperMethodToken(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func hasBranchEvidence(flow reviewflow.Flow) bool {
+	for _, block := range flow.Blocks {
+		if block.Kind == reviewflow.BlockAlt || block.Kind == reviewflow.BlockLoop || block.Kind == reviewflow.BlockPar {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAsyncEvidence(flow reviewflow.Flow) bool {
+	for _, stage := range flow.Stages {
+		if stage.Kind == "deferred_async" {
+			return true
+		}
+		for _, message := range stage.Messages {
+			if message.Kind == reviewflow.MessageAsync {
+				return true
+			}
+		}
+	}
+	for _, block := range flow.Blocks {
+		if block.Kind == reviewflow.BlockPar {
+			return true
+		}
+		for _, section := range block.Sections {
+			for _, message := range section.Messages {
+				if message.Kind == reviewflow.MessageAsync {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func hasPostProcessingEvidence(flow reviewflow.Flow) bool {
+	for _, stage := range flow.Stages {
+		if stage.Kind == "post_processing" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasVisibleArtifactLeak(flow *reviewflow.Flow, mermaidCode string) bool {
+	containsLeak := func(value string) bool {
+		lower := strings.ToLower(value)
+		switch {
+		case strings.Contains(lower, "$closure"), strings.Contains(lower, "$inline"), strings.Contains(lower, "goroutine"), strings.Contains(lower, "go func"), strings.Contains(lower, "func()"), strings.Contains(lower, "func ("), strings.Contains(lower, "wg."), strings.Contains(lower, "defer "), strings.Contains(lower, "<-"), strings.Contains(lower, "select {"), strings.Contains(lower, "chan "):
+			return true
+		default:
+			return strings.ContainsAny(value, "{}")
+		}
+	}
+
+	if flow != nil {
+		for _, participant := range flow.Participants {
+			if containsLeak(participant.Label) {
+				return true
+			}
+		}
+		for _, stage := range flow.Stages {
+			if containsLeak(stage.Label) {
+				return true
+			}
+			for _, message := range stage.Messages {
+				if containsLeak(message.Label) {
+					return true
+				}
+			}
+		}
+		for _, block := range flow.Blocks {
+			if containsLeak(block.Label) {
+				return true
+			}
+			for _, section := range block.Sections {
+				if containsLeak(section.Label) {
+					return true
+				}
+				for _, message := range section.Messages {
+					if containsLeak(message.Label) {
+						return true
+					}
+				}
+			}
+		}
+		for _, note := range flow.Notes {
+			if containsLeak(note.Text) {
+				return true
+			}
+		}
+	}
+
+	lowerMermaid := strings.ToLower(mermaidCode)
+	for _, token := range []string{"$closure_", "$inline_", "go func", "func()", "func (", "wg.", "defer ", "<-", "select {", "chan "} {
+		if strings.Contains(lowerMermaid, token) {
+			return true
+		}
+	}
+	return false
 }

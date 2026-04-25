@@ -37,6 +37,13 @@ type RenderOutcome struct {
 	ArtifactSlug      string
 	Family            string
 	PolicySource      reviewpack.PolicySource
+	CandidateKind     string
+	Signature         string
+	ParticipantCount  int
+	StageCount        int
+	MessageCount      int
+	PolicyFamily      string
+	QualityFlags      []string
 	MermaidPath       string
 	ReviewFlowPath    string
 	SequenceModelPath string
@@ -135,8 +142,15 @@ func (s Service) Build(input BuildInput) (reviewpack.ServiceReviewPack, error) {
 				RootNodeID:        outcome.RootNodeID,
 				CanonicalName:     outcome.CanonicalName,
 				Family:            firstNonEmpty(outcome.Family, expected.Family),
+				PolicyFamily:      firstNonEmpty(outcome.PolicyFamily, outcome.Family, expected.Family),
 				PolicySource:      policySourceDefault(outcome.PolicySource, expected.Family),
 				RenderSource:      outcome.RenderSource,
+				CandidateKind:     outcome.CandidateKind,
+				Signature:         outcome.Signature,
+				ParticipantCount:  outcome.ParticipantCount,
+				StageCount:        outcome.StageCount,
+				MessageCount:      outcome.MessageCount,
+				QualityFlags:      append([]string(nil), outcome.QualityFlags...),
 				ArtifactSlug:      outcome.ArtifactSlug,
 				MermaidPath:       outcome.MermaidPath,
 				ReviewFlowPath:    outcome.ReviewFlowPath,
@@ -165,15 +179,38 @@ func Markdown(pack reviewpack.ServiceReviewPack) string {
 		fmt.Fprintf(&b, "No rendered selected flows.\n")
 		return b.String()
 	}
-	fmt.Fprintf(&b, "| expected_root_id | canonical_name | policy_source | render_source | mermaid_path |\n")
-	fmt.Fprintf(&b, "| --- | --- | --- | --- | --- |\n")
+	fmt.Fprintf(&b, "| expected_root_id | canonical_name | policy_family | policy_source | render_source | candidate_kind | signature | participants | stages | messages | quality_flags | mermaid_path |\n")
+	fmt.Fprintf(&b, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, selected := range pack.SelectedFlows {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n",
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %d | %d | %d | %s | %s |\n",
 			selected.ExpectedRootID,
 			selected.CanonicalName,
+			firstNonEmpty(selected.PolicyFamily, selected.Family),
 			selected.PolicySource,
 			selected.RenderSource,
+			selected.CandidateKind,
+			selected.Signature,
+			selected.ParticipantCount,
+			selected.StageCount,
+			selected.MessageCount,
+			strings.Join(selected.QualityFlags, ","),
 			selected.MermaidPath,
+		)
+	}
+	fmt.Fprintf(&b, "\n# Quality Checklist\n\n")
+	fmt.Fprintf(&b, "| expected_root_id | policy_family | candidate_kind | entry_ok | branch_ok | async_ok | post_processing_ok | no_leak | verdict |\n")
+	fmt.Fprintf(&b, "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	for _, selected := range pack.SelectedFlows {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+			selected.ExpectedRootID,
+			firstNonEmpty(selected.PolicyFamily, selected.Family),
+			selected.CandidateKind,
+			qualityEntryStatus(selected),
+			qualityExpectationStatus(selected.QualityFlags, "branch_expected_present", "branch_expected_missing"),
+			qualityExpectationStatus(selected.QualityFlags, "async_expected_present", "async_expected_missing"),
+			qualityExpectationStatus(selected.QualityFlags, "post_processing_expected_present", "post_processing_expected_missing"),
+			qualityLeakStatus(selected.QualityFlags),
+			qualityVerdict(selected),
 		)
 	}
 	return b.String()
@@ -216,6 +253,69 @@ func CoverageMarkdown(pack reviewpack.ServiceReviewPack) string {
 		)
 	}
 	return b.String()
+}
+
+func qualityEntryStatus(selected reviewpack.SelectedFlow) string {
+	family := firstNonEmpty(selected.PolicyFamily, selected.Family)
+	if family == "bootstrap_startup" {
+		return "n/a"
+	}
+	if selected.RenderSource != reviewpack.RenderSourceReviewFlow {
+		return "n/a"
+	}
+	if hasQualityFlag(selected.QualityFlags, "entry_abstraction_present") {
+		return "yes"
+	}
+	return "no"
+}
+
+func qualityExpectationStatus(flags []string, presentFlag, missingFlag string) string {
+	if hasQualityFlag(flags, presentFlag) {
+		return "yes"
+	}
+	if hasQualityFlag(flags, missingFlag) {
+		return "no"
+	}
+	return "n/a"
+}
+
+func qualityLeakStatus(flags []string) string {
+	if hasQualityFlag(flags, "visible_artifact_leak") {
+		return "no"
+	}
+	if hasQualityFlag(flags, "no_visible_artifact_leak") {
+		return "yes"
+	}
+	return "n/a"
+}
+
+func qualityVerdict(selected reviewpack.SelectedFlow) string {
+	family := firstNonEmpty(selected.PolicyFamily, selected.Family)
+	missingExpected := hasQualityFlag(selected.QualityFlags, "branch_expected_missing") ||
+		hasQualityFlag(selected.QualityFlags, "async_expected_missing") ||
+		hasQualityFlag(selected.QualityFlags, "post_processing_expected_missing")
+	entryMissing := selected.RenderSource == reviewpack.RenderSourceReviewFlow &&
+		family != "bootstrap_startup" &&
+		!hasQualityFlag(selected.QualityFlags, "entry_abstraction_present")
+	if hasQualityFlag(selected.QualityFlags, "visible_artifact_leak") || entryMissing || strings.TrimSpace(selected.CandidateKind) == "" {
+		return "warning"
+	}
+	if missingExpected && (family == "detector_pipeline" || family == "scan_pipeline" || family == "blacklist_gate") {
+		return "needs_slice4"
+	}
+	if missingExpected {
+		return "warning"
+	}
+	return "pass"
+}
+
+func hasQualityFlag(flags []string, flag string) bool {
+	for _, current := range flags {
+		if current == flag {
+			return true
+		}
+	}
+	return false
 }
 
 func matchResolved(expected reviewpack.ExpectedRoot, resolved []entrypoint.Root) (entrypoint.Root, bool) {

@@ -177,7 +177,7 @@ func policyForFamily(family string) Policy {
 			MaxBusinessExpansionDepth: 1,
 			PreserveBranchBlocks:      false,
 			PreserveAsyncBlocks:       false,
-			PreservePostProcessing:    true,
+			PreservePostProcessing:    false,
 			AddHTTPEntryParticipants:  true,
 		}
 	case FamilySimpleQuery:

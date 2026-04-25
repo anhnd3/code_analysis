@@ -34,6 +34,11 @@ const (
 	stageDeferredAsync      = "deferred_async"
 )
 
+const (
+	EntryModeDefault         = "default"
+	EntryModeServicePackHTTP = "service_pack_http"
+)
+
 // BuildResult is the deterministic reviewflow generation result for one root.
 type BuildResult struct {
 	Selected   reviewflow.Flow   `json:"selected"`
@@ -45,12 +50,13 @@ type BuildResult struct {
 
 // ScoreBreakdown records deterministic score dimensions.
 type ScoreBreakdown struct {
-	BusinessClarity int `json:"business_clarity"`
-	StageQuality    int `json:"stage_quality"`
-	BlockQuality    int `json:"block_quality"`
-	Readability     int `json:"readability"`
-	NoisePenalty    int `json:"noise_penalty"`
-	ArtifactPenalty int `json:"artifact_penalty"`
+	BusinessClarity  int `json:"business_clarity"`
+	StageQuality     int `json:"stage_quality"`
+	BlockQuality     int `json:"block_quality"`
+	Readability      int `json:"readability"`
+	NoisePenalty     int `json:"noise_penalty"`
+	ArtifactPenalty  int `json:"artifact_penalty"`
+	PolicyAdjustment int `json:"policy_adjustment,omitempty"`
 }
 
 // CandidateScore records the deterministic score for one candidate.
@@ -89,6 +95,7 @@ type candidateSettings struct {
 	summarizeResponse    bool
 	summarizeAsync       bool
 	includeGenericReturn bool
+	entryMode            string
 }
 
 type buildContext struct {
@@ -139,6 +146,7 @@ func (s Service) BuildWithOptions(snapshot graph.GraphSnapshot, root entrypoint.
 	if chain.RootNodeID == "" {
 		return BuildResult{}, nil
 	}
+	options.EntryMode = normalizeEntryMode(options.EntryMode)
 
 	ctx := buildContext{
 		snapshot: snapshot,
@@ -185,6 +193,9 @@ func settingsListForOptions(options BuildOptions) []candidateSettings {
 		{kind: CandidateAsyncSummarized, compactHelpers: true, summarizeResponse: true, summarizeAsync: true, includeGenericReturn: true},
 	}
 	if options.Policy == nil || len(options.Policy.PreferredCandidateKinds) == 0 {
+		for i := range defaultList {
+			defaultList[i].entryMode = normalizeEntryMode(options.EntryMode)
+		}
 		return defaultList
 	}
 
@@ -209,6 +220,9 @@ func settingsListForOptions(options BuildOptions) []candidateSettings {
 			continue
 		}
 		ordered = append(ordered, settings)
+	}
+	for i := range ordered {
+		ordered[i].entryMode = normalizeEntryMode(options.EntryMode)
 	}
 	return ordered
 }
@@ -243,12 +257,27 @@ func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (r
 	if len(auditLeading) == 0 && len(auditBusiness) == 0 && len(auditDrilldown) == 0 && len(ctx.audit.FirstBusinessCalls) > 0 {
 		auditBusiness = ctx.audit.FirstBusinessCalls
 	}
+	if isServicePackHTTPEntryMode(settings, ctx.root) {
+		client := participants.ensureHTTPClient()
+		stages[stageBoundaryEntry].add(reviewflow.Message{
+			ID:                ids.Stable("review_msg", ctx.root.NodeID, "boundary_entry", client.Participant.ID, boundary.Participant.ID, string(settings.kind), "client_request"),
+			FromParticipantID: client.Participant.ID,
+			ToParticipantID:   boundary.Participant.ID,
+			Label:             httpRequestLabel(ctx.root),
+			Kind:              reviewflow.MessageSync,
+			SourceEdgeIDs:     collectEntrySourceEdgeIDs(ctx.audit),
+		})
+	}
 	if hasHandler {
+		dispatch := dispatchLabel(ctx.root)
+		if isServicePackHTTPEntryMode(settings, ctx.root) {
+			dispatch = "invoke handler"
+		}
 		msg := reviewflow.Message{
 			ID:                ids.Stable("review_msg", ctx.root.NodeID, "boundary_entry", boundary.Participant.ID, handler.Participant.ID, string(settings.kind)),
 			FromParticipantID: boundary.Participant.ID,
 			ToParticipantID:   handler.Participant.ID,
-			Label:             dispatchLabel(ctx.root),
+			Label:             dispatch,
 			Kind:              reviewflow.MessageSync,
 			SourceEdgeIDs:     collectEntrySourceEdgeIDs(ctx.audit),
 		}
@@ -379,7 +408,9 @@ func newParticipantState(root entrypoint.Root, chain reduced.Chain, snapshot gra
 
 func (p *participantState) ensureBoundary() participantView {
 	label := p.root.CanonicalName
-	if p.root.Framework == "grpc-gateway" {
+	if isServicePackHTTPEntryMode(p.settings, p.root) {
+		label = frameworkBoundaryLabel(p.root.Framework)
+	} else if p.root.Framework == "grpc-gateway" {
 		label = "Gateway Proxy"
 	}
 	part := p.ensureByIdentity("boundary", label, string(participant_classify.BucketBoundary), string(reduced.RoleBoundary), false, p.root.NodeID)
@@ -392,6 +423,25 @@ func (p *participantState) ensureBoundary() participantView {
 			DisplayLabel: label,
 		},
 		Node: p.nodeFor(p.root.NodeID, p.root.CanonicalName),
+	}
+}
+
+func (p *participantState) ensureHTTPClient() participantView {
+	part := p.ensureByIdentity("http_client", "Client", "client", "client", true, "")
+	return participantView{
+		Participant: part,
+		Profile: participant_classify.Profile{
+			Role:         reduced.RoleBoundary,
+			Bucket:       participant_classify.BucketRemote,
+			ShortName:    "Client",
+			DisplayLabel: "Client",
+			IsRemote:     true,
+		},
+		Node: graph.Node{
+			ID:            "http_client",
+			CanonicalName: "Client",
+			Properties:    map[string]string{"name": "Client"},
+		},
 	}
 }
 
@@ -980,6 +1030,52 @@ func normalizeRoot(root entrypoint.Root) entrypoint.Root {
 		}
 	}
 	return root
+}
+
+func normalizeEntryMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case EntryModeServicePackHTTP:
+		return EntryModeServicePackHTTP
+	default:
+		return EntryModeDefault
+	}
+}
+
+func isServicePackHTTPEntryMode(settings candidateSettings, root entrypoint.Root) bool {
+	return root.RootType == entrypoint.RootHTTP && normalizeEntryMode(settings.entryMode) == EntryModeServicePackHTTP
+}
+
+func frameworkBoundaryLabel(framework string) string {
+	switch strings.ToLower(strings.TrimSpace(framework)) {
+	case "gin":
+		return "Gin"
+	case "net/http":
+		return "net/http"
+	case "grpc-gateway":
+		return "Gateway Proxy"
+	case "":
+		return "HTTP Router"
+	default:
+		return strings.TrimSpace(framework)
+	}
+}
+
+func httpRequestLabel(root entrypoint.Root) string {
+	method := strings.ToUpper(strings.TrimSpace(root.Method))
+	path := strings.TrimSpace(root.Path)
+	if method != "" && path != "" {
+		return method + " " + path
+	}
+	if method != "" {
+		return method + " request"
+	}
+	if path != "" {
+		return path
+	}
+	if parts := strings.SplitN(strings.TrimSpace(root.CanonicalName), " ", 2); len(parts) == 2 && isUpperASCII(parts[0]) && strings.HasPrefix(parts[1], "/") {
+		return parts[0] + " " + parts[1]
+	}
+	return "HTTP request"
 }
 
 func stageLabel(kind string) string {

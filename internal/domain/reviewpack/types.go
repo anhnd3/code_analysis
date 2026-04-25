@@ -80,8 +80,15 @@ type SelectedFlow struct {
 	RootNodeID        string       `json:"root_node_id"`
 	CanonicalName     string       `json:"canonical_name"`
 	Family            string       `json:"family,omitempty"`
+	PolicyFamily      string       `json:"policy_family,omitempty"`
 	PolicySource      PolicySource `json:"policy_source,omitempty"`
 	RenderSource      RenderSource `json:"render_source"`
+	CandidateKind     string       `json:"candidate_kind,omitempty"`
+	Signature         string       `json:"signature,omitempty"`
+	ParticipantCount  int          `json:"participant_count,omitempty"`
+	StageCount        int          `json:"stage_count,omitempty"`
+	MessageCount      int          `json:"message_count,omitempty"`
+	QualityFlags      []string     `json:"quality_flags,omitempty"`
 	ArtifactSlug      string       `json:"artifact_slug,omitempty"`
 	MermaidPath       string       `json:"mermaid_path,omitempty"`
 	ReviewFlowPath    string       `json:"review_flow_path,omitempty"`
