@@ -89,3 +89,31 @@ func TestResolve_DoesNotDependOnServiceNameOrWorkspacePath(t *testing.T) {
 		t.Fatalf("expected policy resolution to ignore service/workspace context, got %+v vs %+v", first, second)
 	}
 }
+
+func TestResolve_ExpansionDepthBoundsByFamily(t *testing.T) {
+	service := New()
+	cases := []struct {
+		family      string
+		minExpected int
+		maxExpected int
+	}{
+		{family: FamilyDetectorPipeline, minExpected: 1, maxExpected: 3},
+		{family: FamilyScanPipeline, minExpected: 1, maxExpected: 3},
+		{family: FamilyBlacklistGate, minExpected: 1, maxExpected: 2},
+		{family: FamilyConfigLookup, minExpected: 0, maxExpected: 1},
+		{family: FamilySimpleQuery, minExpected: 0, maxExpected: 1},
+	}
+
+	for _, tc := range cases {
+		result := service.Resolve(ResolveInput{ExpectedFamily: tc.family})
+		if result.Policy.MinBusinessExpansionDepth != tc.minExpected || result.Policy.MaxBusinessExpansionDepth != tc.maxExpected {
+			t.Fatalf("family %s expansion depth bounds = [%d,%d], want [%d,%d]",
+				tc.family,
+				result.Policy.MinBusinessExpansionDepth,
+				result.Policy.MaxBusinessExpansionDepth,
+				tc.minExpected,
+				tc.maxExpected,
+			)
+		}
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"analysis-module/internal/domain/reviewflow"
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/participant_classify"
+	"analysis-module/internal/services/reviewflow_expand"
 	"analysis-module/internal/services/reviewflow_policy"
 	"analysis-module/pkg/ids"
 )
@@ -41,11 +42,12 @@ const (
 
 // BuildResult is the deterministic reviewflow generation result for one root.
 type BuildResult struct {
-	Selected   reviewflow.Flow   `json:"selected"`
-	Candidates []reviewflow.Flow `json:"candidates"`
-	Scores     []CandidateScore  `json:"scores"`
-	SelectedID string            `json:"selected_id"`
-	Signature  string            `json:"signature"`
+	Selected          reviewflow.Flow             `json:"selected"`
+	Candidates        []reviewflow.Flow           `json:"candidates"`
+	Scores            []CandidateScore            `json:"scores"`
+	SelectedID        string                      `json:"selected_id"`
+	Signature         string                      `json:"signature"`
+	ExpansionMetadata *reviewflow_expand.Metadata `json:"expansion_metadata,omitempty"`
 }
 
 // ScoreBreakdown records deterministic score dimensions.
@@ -74,6 +76,7 @@ type CandidateScore struct {
 // Service builds reviewer-facing flow abstractions from reduced chains.
 type Service struct {
 	classifier participant_classify.Service
+	expander   reviewflow_expand.Service
 }
 
 type BuildOptions struct {
@@ -86,6 +89,7 @@ type BuildOptions struct {
 func New() Service {
 	return Service{
 		classifier: participant_classify.New(),
+		expander:   reviewflow_expand.New(),
 	}
 }
 
@@ -176,13 +180,37 @@ func (s Service) BuildWithOptions(snapshot graph.GraphSnapshot, root entrypoint.
 			selected = candidates[i]
 		}
 	}
+	var expansionMetadata *reviewflow_expand.Metadata
+	if options.ExpansionEnabled && options.Policy != nil && selected.RootNodeID != "" {
+		expanded, err := s.expander.Expand(reviewflow_expand.Input{
+			Snapshot: snapshot,
+			Root:     ctx.root,
+			Reduced:  chain,
+			Audit:    audit,
+			Selected: selected,
+			Policy:   *options.Policy,
+		})
+		if err != nil {
+			return BuildResult{}, err
+		}
+		selected = expanded.Flow
+		expansionMetadata = &expanded.Metadata
+		for i := range candidates {
+			if candidates[i].ID == best.FlowID {
+				candidates[i] = selected
+				candidates[i].Metadata.Score = findScore(scores, best.FlowID).Score
+				break
+			}
+		}
+	}
 
 	return BuildResult{
-		Selected:   selected,
-		Candidates: candidates,
-		Scores:     scores,
-		SelectedID: best.FlowID,
-		Signature:  best.Signature,
+		Selected:          selected,
+		Candidates:        candidates,
+		Scores:            scores,
+		SelectedID:        best.FlowID,
+		Signature:         best.Signature,
+		ExpansionMetadata: expansionMetadata,
 	}, nil
 }
 
@@ -387,6 +415,7 @@ func (s Service) buildCandidate(ctx buildContext, settings candidateSettings) (r
 			RootFramework: ctx.root.Framework,
 		},
 	}
+	flow = reviewflow_expand.ClassifyFlow(flow)
 	signature := buildSignature(flow)
 	flow.ID = ids.Stable("reviewflow", ctx.root.NodeID, string(settings.kind), signature)
 	flow.Metadata.Signature = signature

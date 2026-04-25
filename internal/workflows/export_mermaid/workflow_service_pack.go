@@ -18,6 +18,7 @@ import (
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/reviewflow_bootstrap"
 	"analysis-module/internal/services/reviewflow_build"
+	"analysis-module/internal/services/reviewflow_expand"
 	"analysis-module/internal/services/reviewflow_policy"
 	"analysis-module/internal/services/sequence_model_build"
 	"analysis-module/internal/services/service_review_pack"
@@ -536,6 +537,9 @@ func (w Workflow) buildReviewFlowWithPolicy(snapshot graph.GraphSnapshot, root e
 	if builder, ok := w.reviewFlow.(optionsBuilder); ok {
 		options := reviewflow_build.BuildOptions{
 			Policy: &policy,
+			// Expansion is only enabled when reviewflow is built through the
+			// service-pack policy-aware path.
+			ExpansionEnabled: true,
 		}
 		if policy.AddHTTPEntryParticipants {
 			options.EntryMode = reviewflow_build.EntryModeServicePackHTTP
@@ -690,9 +694,26 @@ func isUpperMethodToken(value string) bool {
 }
 
 func hasBranchEvidence(flow reviewflow.Flow) bool {
+	for _, stage := range flow.Stages {
+		for _, message := range stage.Messages {
+			if message.Class == reviewflow_expand.ClassBranchBusiness || message.Class == reviewflow_expand.ClassBranchValidation {
+				return true
+			}
+		}
+	}
 	for _, block := range flow.Blocks {
+		if block.Class == reviewflow_expand.ClassBranchBusiness || block.Class == reviewflow_expand.ClassBranchValidation {
+			return true
+		}
 		if block.Kind == reviewflow.BlockAlt || block.Kind == reviewflow.BlockLoop || block.Kind == reviewflow.BlockPar {
 			return true
+		}
+		for _, section := range block.Sections {
+			for _, message := range section.Messages {
+				if message.Class == reviewflow_expand.ClassBranchBusiness || message.Class == reviewflow_expand.ClassBranchValidation {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -704,18 +725,21 @@ func hasAsyncEvidence(flow reviewflow.Flow) bool {
 			return true
 		}
 		for _, message := range stage.Messages {
-			if message.Kind == reviewflow.MessageAsync {
+			if message.Kind == reviewflow.MessageAsync || message.Class == reviewflow_expand.ClassAsyncWorker || message.Class == reviewflow_expand.ClassDeferredSideEffect {
 				return true
 			}
 		}
 	}
 	for _, block := range flow.Blocks {
+		if block.Class == reviewflow_expand.ClassAsyncWorker || block.Class == reviewflow_expand.ClassDeferredSideEffect {
+			return true
+		}
 		if block.Kind == reviewflow.BlockPar {
 			return true
 		}
 		for _, section := range block.Sections {
 			for _, message := range section.Messages {
-				if message.Kind == reviewflow.MessageAsync {
+				if message.Kind == reviewflow.MessageAsync || message.Class == reviewflow_expand.ClassAsyncWorker || message.Class == reviewflow_expand.ClassDeferredSideEffect {
 					return true
 				}
 			}
@@ -728,6 +752,23 @@ func hasPostProcessingEvidence(flow reviewflow.Flow) bool {
 	for _, stage := range flow.Stages {
 		if stage.Kind == "post_processing" {
 			return true
+		}
+		for _, message := range stage.Messages {
+			if message.Class == reviewflow_expand.ClassPostProcessing {
+				return true
+			}
+		}
+	}
+	for _, block := range flow.Blocks {
+		if block.Class == reviewflow_expand.ClassPostProcessing {
+			return true
+		}
+		for _, section := range block.Sections {
+			for _, message := range section.Messages {
+				if message.Class == reviewflow_expand.ClassPostProcessing {
+					return true
+				}
+			}
 		}
 	}
 	return false

@@ -45,6 +45,9 @@ func TestBuildReviewFlowWithPolicy_PassesServicePackEntryMode(t *testing.T) {
 	if builder.lastOptions.EntryMode != reviewflow_build.EntryModeServicePackHTTP {
 		t.Fatalf("expected service-pack HTTP entry mode, got %+v", builder.lastOptions)
 	}
+	if !builder.lastOptions.ExpansionEnabled {
+		t.Fatalf("expected expansion to be enabled in service-pack policy mode, got %+v", builder.lastOptions)
+	}
 	if builder.lastOptions.Policy == nil || builder.lastOptions.Policy.Family != reviewflow_policy.FamilyConfigLookup {
 		t.Fatalf("expected policy to be forwarded through options, got %+v", builder.lastOptions)
 	}

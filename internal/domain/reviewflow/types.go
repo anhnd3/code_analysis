@@ -60,6 +60,7 @@ type Message struct {
 	ToParticipantID   string      `json:"to_participant_id"`
 	Label             string      `json:"label"`
 	Kind              MessageKind `json:"kind"`
+	Class             string      `json:"class,omitempty"`
 	SourceEdgeIDs     []string    `json:"source_edge_ids,omitempty"`
 }
 
@@ -75,6 +76,7 @@ type Block struct {
 	ID            string         `json:"id"`
 	Kind          BlockKind      `json:"kind"`
 	Label         string         `json:"label"`
+	Class         string         `json:"class,omitempty"`
 	StageID       string         `json:"stage_id,omitempty"`
 	Sections      []BlockSection `json:"sections,omitempty"`
 	SourceEdgeIDs []string       `json:"source_edge_ids,omitempty"`

@@ -22,6 +22,7 @@ type Policy struct {
 	Family                    string   `json:"family"`
 	PreferredCandidateKinds   []string `json:"preferred_candidate_kinds,omitempty"`
 	MaxVisibleParticipants    int      `json:"max_visible_participants,omitempty"`
+	MinBusinessExpansionDepth int      `json:"min_business_expansion_depth,omitempty"`
 	MaxBusinessExpansionDepth int      `json:"max_business_expansion_depth,omitempty"`
 	PreserveBranchBlocks      bool     `json:"preserve_branch_blocks,omitempty"`
 	PreserveAsyncBlocks       bool     `json:"preserve_async_blocks,omitempty"`
@@ -129,6 +130,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyBootstrapStartup,
 			PreferredCandidateKinds:   []string{"compact_review", "faithful", "async_summarized"},
 			MaxVisibleParticipants:    8,
+			MinBusinessExpansionDepth: 0,
 			MaxBusinessExpansionDepth: 0,
 			PreserveBranchBlocks:      false,
 			PreserveAsyncBlocks:       false,
@@ -141,6 +143,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyDetectorPipeline,
 			PreferredCandidateKinds:   []string{"faithful", "compact_review", "async_summarized"},
 			MaxVisibleParticipants:    10,
+			MinBusinessExpansionDepth: 1,
 			MaxBusinessExpansionDepth: 3,
 			PreserveBranchBlocks:      true,
 			PreserveAsyncBlocks:       true,
@@ -152,6 +155,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyScanPipeline,
 			PreferredCandidateKinds:   []string{"compact_review", "faithful", "async_summarized"},
 			MaxVisibleParticipants:    10,
+			MinBusinessExpansionDepth: 1,
 			MaxBusinessExpansionDepth: 3,
 			PreserveBranchBlocks:      true,
 			PreserveAsyncBlocks:       true,
@@ -163,6 +167,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyBlacklistGate,
 			PreferredCandidateKinds:   []string{"compact_review", "faithful", "async_summarized"},
 			MaxVisibleParticipants:    8,
+			MinBusinessExpansionDepth: 1,
 			MaxBusinessExpansionDepth: 2,
 			PreserveBranchBlocks:      true,
 			PreserveAsyncBlocks:       false,
@@ -174,6 +179,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyConfigLookup,
 			PreferredCandidateKinds:   []string{"compact_review", "faithful", "async_summarized"},
 			MaxVisibleParticipants:    6,
+			MinBusinessExpansionDepth: 0,
 			MaxBusinessExpansionDepth: 1,
 			PreserveBranchBlocks:      false,
 			PreserveAsyncBlocks:       false,
@@ -185,6 +191,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilySimpleQuery,
 			PreferredCandidateKinds:   []string{"compact_review", "faithful", "async_summarized"},
 			MaxVisibleParticipants:    6,
+			MinBusinessExpansionDepth: 0,
 			MaxBusinessExpansionDepth: 1,
 			PreserveBranchBlocks:      false,
 			PreserveAsyncBlocks:       false,
@@ -196,6 +203,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyGatewayProxy,
 			PreferredCandidateKinds:   []string{"compact_review", "faithful", "async_summarized"},
 			MaxVisibleParticipants:    7,
+			MinBusinessExpansionDepth: 0,
 			MaxBusinessExpansionDepth: 1,
 			PreserveBranchBlocks:      false,
 			PreserveAsyncBlocks:       false,
@@ -207,6 +215,7 @@ func policyForFamily(family string) Policy {
 			Family:                    FamilyDefault,
 			PreferredCandidateKinds:   []string{"compact_review", "async_summarized", "faithful"},
 			MaxVisibleParticipants:    7,
+			MinBusinessExpansionDepth: 0,
 			MaxBusinessExpansionDepth: 1,
 			PreserveBranchBlocks:      false,
 			PreserveAsyncBlocks:       false,
