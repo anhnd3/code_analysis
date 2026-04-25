@@ -89,6 +89,39 @@ Render decisions use:
 - If the diagram is too complex, try `--collapse-mode aggressive`.
 - Use `--root-selector <canonical_name>` to focus on a specific endpoint or function.
 
+#### Service-Pack Confirmation
+For Slice 2 and Slice 3 confirmation runs, use the service-pack runner:
+
+```bash
+bash ./scripts/run_execution_c_service_pack.sh
+```
+
+That script runs `export-mermaid` in `service_pack` mode for the ZPA and Scan audit workspaces, using explicit expected-root manifests and isolated artifact/database roots.
+
+The per-service output directories include:
+- `service_coverage_report.json`
+- `service_review_pack.json`
+- `selected_flows.json`
+- `root_exports.json`
+- `flows/*.mmd`
+- `flows/*__review_flow.json`
+- `flows/*__sequence_model.json`
+
+Service-pack HTTP reviewflows now use a policy-aware entry abstraction so the diagrams read as `Client -> framework -> Handler` instead of exposing the route endpoint as a top-level participant.
+
+The selected-flow manifest now includes selection metadata used for review:
+- `candidate_kind`
+- `signature`
+- `participant_count`
+- `stage_count`
+- `message_count`
+- `policy_family`
+- `policy_source`
+- `render_source`
+- `quality_flags`
+
+`service_review_pack.md` also includes a per-flow quality checklist with a review verdict so you can tell which flows are intentionally deferred to Slice 4.
+
 The parser layer now uses the official Tree-Sitter Go bindings from `github.com/tree-sitter/go-tree-sitter` plus the official Go grammar package from `github.com/tree-sitter/tree-sitter-go/bindings/go`.
 
 `vendor/` is intentionally stale in this pass. Until a later dependency-sync run refreshes vendoring, use module mode explicitly:
