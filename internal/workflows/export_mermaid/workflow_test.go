@@ -226,6 +226,43 @@ func TestRenderRootNonStrictReviewFallsBackToReduced(t *testing.T) {
 	}
 }
 
+func TestRenderRootReviewPathDoesNotUseServicePackOptionsBuilder(t *testing.T) {
+	selected := validSelectedReviewFlow()
+	builder := &spyReviewFlowBuilder{
+		result: reviewflow_build.BuildResult{
+			Selected:   selected,
+			Candidates: []reviewflow.Flow{selected},
+			SelectedID: selected.ID,
+			Signature:  selected.Metadata.Signature,
+		},
+	}
+	w := testWorkflowWithReviewBuilder(builder)
+
+	rendered, decision, err := w.renderRoot(
+		Request{RenderMode: RenderModeReview},
+		graph.GraphSnapshot{},
+		testHTTPRoot(),
+		testReducedChain(),
+		flow_stitch.SemanticAuditRoot{},
+		sequence_model_build.Options{Title: "Review"},
+	)
+	if err != nil {
+		t.Fatalf("expected review render to succeed, got %v", err)
+	}
+	if rendered.reviewFlow == nil || rendered.reviewFlowBuild == nil {
+		t.Fatalf("expected review artifacts to be present, got %+v", rendered)
+	}
+	if decision.UsedRenderer != UsedRendererReviewFlow || decision.FallbackUsed {
+		t.Fatalf("expected reviewflow renderer decision, got %+v", decision)
+	}
+	if builder.buildCalls != 1 {
+		t.Fatalf("expected review path to call Build once, got %d", builder.buildCalls)
+	}
+	if builder.optionsCalls != 0 {
+		t.Fatalf("expected review path to avoid BuildWithOptions (service-pack only), got %d", builder.optionsCalls)
+	}
+}
+
 func TestDebugBundleWritesRenderDecisionArtifacts(t *testing.T) {
 	w := testWorkflowWithReviewBuilder(stubReviewFlowBuilder{
 		result: invalidSelectedBuildResult(),
@@ -287,6 +324,23 @@ type stubReviewFlowBuilder struct {
 }
 
 func (s stubReviewFlowBuilder) Build(graph.GraphSnapshot, entrypoint.Root, reduced.Chain, flow_stitch.SemanticAuditRoot) (reviewflow_build.BuildResult, error) {
+	return s.result, s.err
+}
+
+type spyReviewFlowBuilder struct {
+	result       reviewflow_build.BuildResult
+	err          error
+	buildCalls   int
+	optionsCalls int
+}
+
+func (s *spyReviewFlowBuilder) Build(graph.GraphSnapshot, entrypoint.Root, reduced.Chain, flow_stitch.SemanticAuditRoot) (reviewflow_build.BuildResult, error) {
+	s.buildCalls++
+	return s.result, s.err
+}
+
+func (s *spyReviewFlowBuilder) BuildWithOptions(graph.GraphSnapshot, entrypoint.Root, reduced.Chain, flow_stitch.SemanticAuditRoot, reviewflow_build.BuildOptions) (reviewflow_build.BuildResult, error) {
+	s.optionsCalls++
 	return s.result, s.err
 }
 

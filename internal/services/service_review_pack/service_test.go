@@ -174,3 +174,59 @@ func TestBuild_BootstrapPrefersHighConfidenceMainRoot(t *testing.T) {
 		t.Fatalf("expected high-confidence main root, got %s", pack.Coverage[0].RootNodeID)
 	}
 }
+
+func TestBuild_BootstrapRenderedFlowCarriesLifecycleMetadata(t *testing.T) {
+	svc := New()
+	pack, err := svc.Build(BuildInput{
+		ServiceName: "svc",
+		ExpectedRoots: []reviewpack.ExpectedRoot{
+			{
+				ID:       "start_service",
+				RootType: "bootstrap",
+				Required: true,
+				Family:   "bootstrap_startup",
+			},
+		},
+		ResolvedRoots: []entrypoint.Root{
+			{NodeID: "root_main", RootType: entrypoint.RootBootstrap, CanonicalName: "main.main"},
+		},
+		Outcomes: map[string]RenderOutcome{
+			"start_service": {
+				ExpectedRootID:    "start_service",
+				RootNodeID:        "root_main",
+				CanonicalName:     "main.main",
+				Status:            reviewpack.CoverageRendered,
+				RenderSource:      reviewpack.RenderSourceBootstrapLifecycle,
+				PolicySource:      reviewpack.PolicySourceManifest,
+				Family:            "bootstrap_startup",
+				PolicyFamily:      "bootstrap_startup",
+				CandidateKind:     "bootstrap_lifecycle",
+				Signature:         "bootstrap_signature",
+				ParticipantCount:  2,
+				StageCount:        4,
+				MessageCount:      4,
+				QualityFlags:      []string{"no_visible_artifact_leak"},
+				ArtifactSlug:      "start_service",
+				MermaidPath:       "flows/start_service.mmd",
+				ReviewFlowPath:    "flows/start_service__review_flow.json",
+				SequenceModelPath: "flows/start_service__sequence_model.json",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build pack: %v", err)
+	}
+	if len(pack.SelectedFlows) != 1 {
+		t.Fatalf("expected one selected flow, got %d", len(pack.SelectedFlows))
+	}
+	selected := pack.SelectedFlows[0]
+	if selected.RenderSource != reviewpack.RenderSourceBootstrapLifecycle {
+		t.Fatalf("expected bootstrap lifecycle render source, got %+v", selected)
+	}
+	if selected.PolicySource != reviewpack.PolicySourceManifest {
+		t.Fatalf("expected manifest policy source, got %+v", selected)
+	}
+	if selected.CandidateKind != "bootstrap_lifecycle" {
+		t.Fatalf("expected bootstrap lifecycle candidate kind, got %+v", selected)
+	}
+}

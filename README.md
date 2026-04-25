@@ -36,7 +36,7 @@ Current intentional deferrals:
 - branch/control shaping beyond the existing compile-safe path
 - reducer shaping and final flow generation
 
-The operating policy for this work is documented in [AGENTS.md](AGENTS.md) and the PR1 scope doc at [docs/master_plan/phase1_pr1_semantic_core.md](docs/master_plan/phase1_pr1_semantic_core.md).
+The operating policy for this work is documented in [AGENTS.md](AGENTS.md) and the Execution C Slice 4.1 note at [docs/execution_c_slice4_1.md](docs/execution_c_slice4_1.md).
 
 Expected commands:
 
@@ -90,7 +90,7 @@ Render decisions use:
 - Use `--root-selector <canonical_name>` to focus on a specific endpoint or function.
 
 #### Service-Pack Confirmation
-For Slice 2 and Slice 3 confirmation runs, use the service-pack runner:
+For Slice 2, Slice 3, and Slice 4.1 confirmation runs, use the service-pack runner:
 
 ```bash
 bash ./scripts/run_execution_c_service_pack.sh
@@ -120,7 +120,15 @@ The selected-flow manifest now includes selection metadata used for review:
 - `render_source`
 - `quality_flags`
 
-`service_review_pack.md` also includes a per-flow quality checklist with a review verdict so you can tell which flows are intentionally deferred to Slice 4.
+`service_review_pack.md` also includes a per-flow quality checklist with a review verdict so you can tell which flows need more evidence, which ones are accepted as compact synchronous routes, and which ones are complete.
+
+Slice 4.1 calibrated that checklist to be evidence-aware:
+
+- `detector_pipeline` only requires async or post-processing when upstream evidence supports it
+- `scan_pipeline` no longer treats synchronous or metrics-only routes as missing async/post-processing by default
+- `blacklist_gate` is judged on gate/decision clarity instead of mandatory post-processing
+
+The detailed Slice 4.1 review lives in [docs/execution_c_slice4_1.md](docs/execution_c_slice4_1.md).
 
 The parser layer now uses the official Tree-Sitter Go bindings from `github.com/tree-sitter/go-tree-sitter` plus the official Go grammar package from `github.com/tree-sitter/tree-sitter-go/bindings/go`.
 

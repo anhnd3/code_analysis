@@ -58,6 +58,9 @@ func TestBuild_SelectedFlowCarriesSlice3Metadata(t *testing.T) {
 	if selected.PolicyFamily != "config_lookup" {
 		t.Fatalf("expected policy family to be populated, got %+v", selected)
 	}
+	if selected.PolicySource != reviewpack.PolicySourceManifest {
+		t.Fatalf("expected manifest policy source to be propagated, got %+v", selected)
+	}
 	if selected.CandidateKind != "compact_review" || selected.Signature != "cfg_signature" {
 		t.Fatalf("expected candidate metadata to be populated, got %+v", selected)
 	}
@@ -112,5 +115,47 @@ func TestMarkdown_IncludesSlice3QualityChecklist(t *testing.T) {
 	}
 	if !strings.Contains(md, "| predict | detector_pipeline | faithful | yes | no | no | no | yes | needs_slice4 |") {
 		t.Fatalf("expected needs_slice4 checklist row, got:\n%s", md)
+	}
+}
+
+func TestMarkdown_CalibratedDetectorFlowDoesNotNeedSlice4(t *testing.T) {
+	pack := reviewpack.ServiceReviewPack{
+		ServiceName: "svc",
+		Coverage: []reviewpack.CoverageItem{
+			{
+				ExpectedRootID:   "detect_qr",
+				RootType:         "http",
+				Status:           reviewpack.CoverageRendered,
+				Required:         true,
+				RequiredBlocking: true,
+				RenderSource:     reviewpack.RenderSourceReviewFlow,
+			},
+		},
+		SelectedFlows: []reviewpack.SelectedFlow{
+			{
+				ExpectedRootID: "detect_qr",
+				CanonicalName:  "POST /v2/camera/detect-qr",
+				PolicyFamily:   "detector_pipeline",
+				PolicySource:   reviewpack.PolicySourceManifest,
+				RenderSource:   reviewpack.RenderSourceReviewFlow,
+				CandidateKind:  "async_summarized",
+				Signature:      "detect_signature",
+				QualityFlags: []string{
+					"entry_abstraction_present",
+					"branch_expected_present",
+					"async_expected_present",
+					"post_processing_expected_present",
+					"no_visible_artifact_leak",
+				},
+			},
+		},
+	}
+
+	md := Markdown(pack)
+	if strings.Contains(md, "needs_slice4") {
+		t.Fatalf("did not expect needs_slice4 for calibrated detector flow, got:\n%s", md)
+	}
+	if !strings.Contains(md, "| detect_qr | detector_pipeline | async_summarized | yes | yes | yes | yes | yes | pass |") {
+		t.Fatalf("expected calibrated detector row to be pass, got:\n%s", md)
 	}
 }
