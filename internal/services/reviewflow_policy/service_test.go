@@ -45,6 +45,9 @@ func TestResolve_RouteMetadataWhenNoManifestFamily(t *testing.T) {
 	if result.Policy.Family != FamilyBlacklistGate {
 		t.Fatalf("expected blacklist gate family, got %+v", result.Policy)
 	}
+	if result.Policy.PreservePostProcessing {
+		t.Fatalf("expected blacklist gate policy to avoid mandatory post-processing, got %+v", result.Policy)
+	}
 }
 
 func TestResolve_DefaultWhenNoManifestAndNoRouteSignal(t *testing.T) {

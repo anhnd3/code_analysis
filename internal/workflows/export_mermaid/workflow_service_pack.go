@@ -137,7 +137,13 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 			outcome.ParticipantCount = len(bootstrapFlow.Participants)
 			outcome.StageCount = len(bootstrapFlow.Stages)
 			outcome.MessageCount = reviewFlowMessageCount(bootstrapFlow)
-			outcome.QualityFlags = qualityFlagsForRenderedFlow(policyForExpectedBootstrap(expected), &bootstrapFlow, mermaidCode, outcome.RenderSource)
+			outcome.QualityFlags = qualityFlagsForRenderedFlow(
+				policyForExpectedBootstrap(expected),
+				&bootstrapFlow,
+				mermaidCode,
+				outcome.RenderSource,
+				qualityEvidenceContext{},
+			)
 			outcome.MermaidPath = filepath.ToSlash(filepath.Join("flows", expected.ID+".mmd"))
 			outcome.ReviewFlowPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__review_flow.json"))
 			outcome.SequenceModelPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__sequence_model.json"))
@@ -231,7 +237,16 @@ func (w Workflow) runServicePackExport(req Request, snapshot graph.GraphSnapshot
 			outcome.StageCount = len(rendered.reviewFlow.Stages)
 			outcome.MessageCount = reviewFlowMessageCount(*rendered.reviewFlow)
 		}
-		outcome.QualityFlags = qualityFlagsForRenderedFlow(policyResult.Policy, rendered.reviewFlow, rendered.mermaidCode, outcome.RenderSource)
+		outcome.QualityFlags = qualityFlagsForRenderedFlow(
+			policyResult.Policy,
+			rendered.reviewFlow,
+			rendered.mermaidCode,
+			outcome.RenderSource,
+			qualityEvidenceContext{
+				Audit:   auditRoot,
+				Reduced: reducedChain,
+			},
+		)
 		outcome.MermaidPath = filepath.ToSlash(filepath.Join("flows", expected.ID+".mmd"))
 		outcome.ReviewFlowPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__review_flow.json"))
 		outcome.SequenceModelPath = filepath.ToSlash(filepath.Join("flows", expected.ID+"__sequence_model.json"))
@@ -573,29 +588,47 @@ func reviewFlowMessageCount(flow reviewflow.Flow) int {
 	return count
 }
 
-func qualityFlagsForRenderedFlow(policy reviewflow_policy.Policy, flow *reviewflow.Flow, mermaidCode string, renderSource reviewpack.RenderSource) []string {
+type qualityEvidenceContext struct {
+	Audit   flow_stitch.SemanticAuditRoot
+	Reduced reduced.Chain
+}
+
+type qualityExpectationProfile struct {
+	ExpectBranch         bool
+	ExpectAsync          bool
+	ExpectPostProcessing bool
+}
+
+func qualityFlagsForRenderedFlow(
+	policy reviewflow_policy.Policy,
+	flow *reviewflow.Flow,
+	mermaidCode string,
+	renderSource reviewpack.RenderSource,
+	evidence qualityEvidenceContext,
+) []string {
 	flags := map[string]bool{}
+	expectations := qualityExpectationsForRenderedFlow(policy, flow, evidence)
 
 	if flow != nil && renderSource == reviewpack.RenderSourceReviewFlow && flow.SourceRootType == string(entrypoint.RootHTTP) && policy.AddHTTPEntryParticipants {
 		if hasHTTPEntryAbstraction(*flow) {
 			flags["entry_abstraction_present"] = true
 		}
 	}
-	if policy.PreserveBranchBlocks {
+	if expectations.ExpectBranch {
 		if flow != nil && hasBranchEvidence(*flow) {
 			flags["branch_expected_present"] = true
 		} else {
 			flags["branch_expected_missing"] = true
 		}
 	}
-	if policy.PreserveAsyncBlocks {
+	if expectations.ExpectAsync {
 		if flow != nil && hasAsyncEvidence(*flow) {
 			flags["async_expected_present"] = true
 		} else {
 			flags["async_expected_missing"] = true
 		}
 	}
-	if policy.PreservePostProcessing {
+	if expectations.ExpectPostProcessing {
 		if flow != nil && hasPostProcessingEvidence(*flow) {
 			flags["post_processing_expected_present"] = true
 		} else {
@@ -614,6 +647,27 @@ func qualityFlagsForRenderedFlow(policy reviewflow_policy.Policy, flow *reviewfl
 	}
 	sort.Strings(out)
 	return out
+}
+
+func qualityExpectationsForRenderedFlow(policy reviewflow_policy.Policy, flow *reviewflow.Flow, evidence qualityEvidenceContext) qualityExpectationProfile {
+	family := strings.TrimSpace(strings.ToLower(policy.Family))
+	profile := qualityExpectationProfile{
+		ExpectBranch:         policy.PreserveBranchBlocks,
+		ExpectAsync:          policy.PreserveAsyncBlocks,
+		ExpectPostProcessing: policy.PreservePostProcessing,
+	}
+
+	switch family {
+	case reviewflow_policy.FamilyBlacklistGate:
+		// Blacklist routes are judged by decision/gate clarity; async/post are optional.
+		profile.ExpectAsync = false
+		profile.ExpectPostProcessing = false
+	case reviewflow_policy.FamilyDetectorPipeline, reviewflow_policy.FamilyScanPipeline:
+		// Detector and scan pipelines only require async/post when upstream evidence exists.
+		profile.ExpectAsync = profile.ExpectAsync && hasRelevantAsyncEvidence(flow, evidence)
+		profile.ExpectPostProcessing = profile.ExpectPostProcessing && hasRelevantPostProcessingEvidence(flow, evidence)
+	}
+	return profile
 }
 
 func hasHTTPEntryAbstraction(flow reviewflow.Flow) bool {
@@ -769,6 +823,188 @@ func hasPostProcessingEvidence(flow reviewflow.Flow) bool {
 					return true
 				}
 			}
+		}
+	}
+	return false
+}
+
+func hasRelevantAsyncEvidence(flow *reviewflow.Flow, evidence qualityEvidenceContext) bool {
+	if flow != nil && hasAsyncEvidence(*flow) {
+		return true
+	}
+	for _, ref := range collectQualityEvidenceRefs(evidence.Audit) {
+		if isRelevantAsyncEvidenceRef(ref) {
+			return true
+		}
+	}
+	return hasReducedAsyncEvidence(evidence.Reduced)
+}
+
+func hasRelevantPostProcessingEvidence(flow *reviewflow.Flow, evidence qualityEvidenceContext) bool {
+	if flow != nil && hasPostProcessingEvidence(*flow) {
+		return true
+	}
+	for _, ref := range collectQualityEvidenceRefs(evidence.Audit) {
+		if isRelevantPostProcessingEvidenceRef(ref) {
+			return true
+		}
+	}
+	return hasReducedPostProcessingEvidence(evidence.Reduced)
+}
+
+func collectQualityEvidenceRefs(audit flow_stitch.SemanticAuditRoot) []flow_stitch.SemanticAuditEdgeRef {
+	refs := make([]flow_stitch.SemanticAuditEdgeRef, 0, len(audit.LeadingCalls)+len(audit.BusinessHandoff)+len(audit.DrilldownCalls)+len(audit.FirstBusinessCalls)+len(audit.SideEdges))
+	refs = append(refs, audit.LeadingCalls...)
+	refs = append(refs, audit.BusinessHandoff...)
+	refs = append(refs, audit.DrilldownCalls...)
+	refs = append(refs, audit.FirstBusinessCalls...)
+	refs = append(refs, audit.SideEdges...)
+	return refs
+}
+
+func isRelevantAsyncEvidenceRef(ref flow_stitch.SemanticAuditEdgeRef) bool {
+	kind := strings.ToUpper(strings.TrimSpace(ref.Kind))
+	switch kind {
+	case string(graph.EdgeSpawns), string(graph.EdgeWaitsOn):
+		if isSupportNoiseLabel(ref.Label) {
+			return false
+		}
+		return true
+	case string(graph.EdgeDefers):
+		if isSupportNoiseLabel(ref.Label) {
+			return false
+		}
+		return isMeaningfulDeferredLabel(ref.Label)
+	default:
+		return false
+	}
+}
+
+func isRelevantPostProcessingEvidenceRef(ref flow_stitch.SemanticAuditEdgeRef) bool {
+	if !hasPostProcessingToken(ref.Label) {
+		return false
+	}
+	return !isSupportNoiseLabel(ref.Label)
+}
+
+func hasReducedAsyncEvidence(chain reduced.Chain) bool {
+	for _, block := range chain.Blocks {
+		if block.Kind == reduced.BlockPar {
+			return true
+		}
+		for _, branch := range block.Branches {
+			for _, edge := range branch.Edges {
+				if isReducedAsyncEdge(edge.Label) {
+					return true
+				}
+			}
+		}
+	}
+	for _, edge := range chain.Edges {
+		if isReducedAsyncEdge(edge.Label) {
+			return true
+		}
+	}
+	return false
+}
+
+func isReducedAsyncEdge(label string) bool {
+	lower := strings.ToLower(strings.TrimSpace(label))
+	if lower == "" {
+		return false
+	}
+	if strings.Contains(lower, "defer") {
+		if isSupportNoiseLabel(label) {
+			return false
+		}
+		return isMeaningfulDeferredLabel(label)
+	}
+	if containsAnyToken(lower, "go func", "goroutine", "spawn", "waitgroup", "wg.", "context.withtimeout", "timeout") {
+		if isSupportNoiseLabel(label) && !containsAnyToken(lower, "go func", "goroutine", "spawn", "context.withtimeout", "timeout") {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func hasReducedPostProcessingEvidence(chain reduced.Chain) bool {
+	for _, edge := range chain.Edges {
+		if hasPostProcessingToken(edge.Label) && !isSupportNoiseLabel(edge.Label) {
+			return true
+		}
+	}
+	for _, block := range chain.Blocks {
+		if hasPostProcessingToken(block.Label) && !isSupportNoiseLabel(block.Label) {
+			return true
+		}
+		for _, branch := range block.Branches {
+			if hasPostProcessingToken(branch.Condition) && !isSupportNoiseLabel(branch.Condition) {
+				return true
+			}
+			for _, edge := range branch.Edges {
+				if hasPostProcessingToken(edge.Label) && !isSupportNoiseLabel(edge.Label) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func hasPostProcessingToken(label string) bool {
+	lower := strings.ToLower(strings.TrimSpace(label))
+	return containsAnyToken(
+		lower,
+		"post process",
+		"postprocess",
+		"post processing",
+		"postprocessing",
+		"processresult",
+		"process result",
+		"finalize",
+		"aggregate",
+		"sort",
+		"merge",
+		"normalize",
+		"buildresponse",
+		"build response",
+		"transform",
+	)
+}
+
+func isMeaningfulDeferredLabel(label string) bool {
+	lower := strings.ToLower(strings.TrimSpace(label))
+	if lower == "" {
+		return false
+	}
+	if containsAnyToken(lower, "recordoperation", "recordpredict", "recordblacklistchecklatency", "monitor", "metric", "metrics", "trace", "log", "logger") {
+		return false
+	}
+	return containsAnyToken(lower, "push", "publish", "enqueue", "send", "event", "notify", "webhook", "callback", "timeout", "cancel", "cleanup")
+}
+
+func isSupportNoiseLabel(label string) bool {
+	lower := strings.ToLower(strings.TrimSpace(label))
+	if lower == "" {
+		return false
+	}
+	if containsAnyToken(lower, "go func", "goroutine", "spawn worker", "spawn", "context.withtimeout", "timeout") {
+		return false
+	}
+	if containsAnyToken(lower, "trace", "tracing", "logger", "logging", "telemetry", "prometheus", "span") {
+		return true
+	}
+	if containsAnyToken(lower, "recordoperation", "recordpredict", "recordblacklistchecklatency", "monitorqr", " metric", "metrics") {
+		return true
+	}
+	return containsAnyToken(lower, "response wrapper", "responsehelper", "writejson", "renderjson", "httpresponse", "generic helper")
+}
+
+func containsAnyToken(value string, tokens ...string) bool {
+	for _, token := range tokens {
+		if strings.Contains(value, token) {
+			return true
 		}
 	}
 	return false

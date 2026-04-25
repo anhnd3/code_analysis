@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"analysis-module/internal/domain/entrypoint"
+	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/reviewflow"
 	"analysis-module/internal/domain/reviewpack"
+	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/reviewflow_expand"
 	"analysis-module/internal/services/reviewflow_policy"
 )
@@ -48,7 +50,7 @@ func TestQualityFlagsForRenderedFlow_ClassBasedEvidenceTurnsExpectedFlagsPresent
 		PreserveBranchBlocks:     true,
 		PreserveAsyncBlocks:      true,
 		PreservePostProcessing:   true,
-	}, &flow, "", reviewpack.RenderSourceReviewFlow)
+	}, &flow, "", reviewpack.RenderSourceReviewFlow, qualityEvidenceContext{})
 
 	for _, expected := range []string{
 		"entry_abstraction_present",
@@ -70,5 +72,171 @@ func TestQualityFlagsForRenderedFlow_ClassBasedEvidenceTurnsExpectedFlagsPresent
 		if containsString(flags, missing) {
 			t.Fatalf("did not expect %q when class-based evidence is present, got %+v", missing, flags)
 		}
+	}
+}
+
+func TestQualityFlagsForRenderedFlow_DetectorWithoutPostEvidenceDoesNotRequirePost(t *testing.T) {
+	flow := reviewflow.Flow{
+		SourceRootType: string(entrypoint.RootHTTP),
+		Metadata:       reviewflow.Metadata{RootFramework: "gin"},
+		Participants: []reviewflow.Participant{
+			{ID: "client", Kind: "client", Label: "Client"},
+			{ID: "framework", Kind: "boundary", Label: "Gin"},
+			{ID: "handler", Kind: "handler", Label: "Handler"},
+			{ID: "repo", Kind: "repo", Label: "Repo"},
+			{ID: "worker", Kind: "async_sink", Label: "Async Worker"},
+		},
+		Stages: []reviewflow.Stage{
+			{
+				Kind: "boundary_entry",
+				Messages: []reviewflow.Message{
+					{FromParticipantID: "client", ToParticipantID: "framework", Label: "POST /v1/camera/detect-qr", Kind: reviewflow.MessageSync},
+					{FromParticipantID: "framework", ToParticipantID: "handler", Label: "invoke handler", Kind: reviewflow.MessageSync},
+				},
+			},
+			{
+				Kind: "business_core",
+				Messages: []reviewflow.Message{
+					{FromParticipantID: "handler", ToParticipantID: "repo", Label: "Detect QR", Kind: reviewflow.MessageSync},
+				},
+			},
+			{
+				Kind: "deferred_async",
+				Messages: []reviewflow.Message{
+					{FromParticipantID: "handler", ToParticipantID: "worker", Label: "spawn worker", Kind: reviewflow.MessageAsync, Class: reviewflow_expand.ClassAsyncWorker},
+				},
+			},
+		},
+		Blocks: []reviewflow.Block{
+			{
+				Kind:  reviewflow.BlockAlt,
+				Class: reviewflow_expand.ClassBranchBusiness,
+				Sections: []reviewflow.BlockSection{
+					{
+						Label: "if err != nil",
+					},
+				},
+			},
+		},
+	}
+
+	flags := qualityFlagsForRenderedFlow(reviewflow_policy.Policy{
+		Family:                   reviewflow_policy.FamilyDetectorPipeline,
+		AddHTTPEntryParticipants: true,
+		PreserveBranchBlocks:     true,
+		PreserveAsyncBlocks:      true,
+		PreservePostProcessing:   true,
+	}, &flow, "", reviewpack.RenderSourceReviewFlow, qualityEvidenceContext{})
+
+	if containsString(flags, "post_processing_expected_missing") {
+		t.Fatalf("did not expect post_processing_expected_missing without upstream post evidence, got %+v", flags)
+	}
+}
+
+func TestQualityFlagsForRenderedFlow_DetectorWithUpstreamPostEvidenceMarksMissing(t *testing.T) {
+	flow := reviewflow.Flow{
+		SourceRootType: string(entrypoint.RootHTTP),
+		Participants: []reviewflow.Participant{
+			{ID: "handler", Kind: "handler", Label: "Handler"},
+		},
+		Stages: []reviewflow.Stage{
+			{
+				Kind: "business_core",
+				Messages: []reviewflow.Message{
+					{FromParticipantID: "handler", ToParticipantID: "handler", Label: "Detect QR", Kind: reviewflow.MessageSync},
+				},
+			},
+		},
+	}
+
+	flags := qualityFlagsForRenderedFlow(reviewflow_policy.Policy{
+		Family:                 reviewflow_policy.FamilyDetectorPipeline,
+		PreservePostProcessing: true,
+	}, &flow, "", reviewpack.RenderSourceReviewFlow, qualityEvidenceContext{
+		Audit: flow_stitch.SemanticAuditRoot{
+			DrilldownCalls: []flow_stitch.SemanticAuditEdgeRef{
+				{
+					Kind:  string(graph.EdgeCalls),
+					Label: "postProcessingQRResults",
+				},
+			},
+		},
+	})
+
+	if !containsString(flags, "post_processing_expected_missing") {
+		t.Fatalf("expected post_processing_expected_missing when upstream post evidence exists but flow misses it, got %+v", flags)
+	}
+}
+
+func TestQualityFlagsForRenderedFlow_BlacklistGateDoesNotRequirePostOrAsync(t *testing.T) {
+	flow := reviewflow.Flow{
+		SourceRootType: string(entrypoint.RootHTTP),
+		Participants: []reviewflow.Participant{
+			{ID: "handler", Kind: "handler", Label: "Handler"},
+		},
+		Stages: []reviewflow.Stage{
+			{
+				Kind: "business_core",
+				Messages: []reviewflow.Message{
+					{FromParticipantID: "handler", ToParticipantID: "handler", Label: "branch decision: allow", Kind: reviewflow.MessageSync, Class: reviewflow_expand.ClassBranchBusiness},
+				},
+			},
+		},
+	}
+
+	flags := qualityFlagsForRenderedFlow(reviewflow_policy.Policy{
+		Family:                 reviewflow_policy.FamilyBlacklistGate,
+		PreserveBranchBlocks:   true,
+		PreserveAsyncBlocks:    true,
+		PreservePostProcessing: true,
+	}, &flow, "", reviewpack.RenderSourceReviewFlow, qualityEvidenceContext{
+		Audit: flow_stitch.SemanticAuditRoot{
+			SideEdges: []flow_stitch.SemanticAuditEdgeRef{
+				{Kind: string(graph.EdgeDefers), Label: "defer func() { metrics.RecordOperation(...) }()"},
+			},
+		},
+	})
+
+	for _, unexpected := range []string{
+		"async_expected_missing",
+		"async_expected_present",
+		"post_processing_expected_missing",
+		"post_processing_expected_present",
+	} {
+		if containsString(flags, unexpected) {
+			t.Fatalf("did not expect %q for blacklist gate defaults, got %+v", unexpected, flags)
+		}
+	}
+}
+
+func TestQualityFlagsForRenderedFlow_ScanDeferredMetricsDoesNotTriggerAsyncRequirement(t *testing.T) {
+	flow := reviewflow.Flow{
+		SourceRootType: string(entrypoint.RootHTTP),
+		Participants: []reviewflow.Participant{
+			{ID: "handler", Kind: "handler", Label: "Handler"},
+		},
+		Stages: []reviewflow.Stage{
+			{
+				Kind: "business_core",
+				Messages: []reviewflow.Message{
+					{FromParticipantID: "handler", ToParticipantID: "handler", Label: "Extract Bank Info", Kind: reviewflow.MessageSync},
+				},
+			},
+		},
+	}
+
+	flags := qualityFlagsForRenderedFlow(reviewflow_policy.Policy{
+		Family:              reviewflow_policy.FamilyScanPipeline,
+		PreserveAsyncBlocks: true,
+	}, &flow, "", reviewpack.RenderSourceReviewFlow, qualityEvidenceContext{
+		Audit: flow_stitch.SemanticAuditRoot{
+			SideEdges: []flow_stitch.SemanticAuditEdgeRef{
+				{Kind: string(graph.EdgeDefers), Label: "defer func() { metrics.RecordOperation(\"extract_bank_info\") }()"},
+			},
+		},
+	})
+
+	if containsString(flags, "async_expected_missing") {
+		t.Fatalf("did not expect async_expected_missing for deferred metrics-only evidence, got %+v", flags)
 	}
 }

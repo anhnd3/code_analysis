@@ -106,7 +106,7 @@ func TestQualityFlagsForRenderedFlow_HTTPPolicySignals(t *testing.T) {
 		PreserveBranchBlocks:     true,
 		PreserveAsyncBlocks:      true,
 		PreservePostProcessing:   true,
-	}, &flow, "", reviewpack.RenderSourceReviewFlow)
+	}, &flow, "", reviewpack.RenderSourceReviewFlow, qualityEvidenceContext{})
 
 	for _, expected := range []string{
 		"entry_abstraction_present",
