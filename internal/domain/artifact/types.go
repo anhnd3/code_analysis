@@ -25,6 +25,8 @@ const (
 	TypeServiceCoverageReport Type = "service_coverage_report"
 	TypeServiceReviewPack     Type = "service_review_pack"
 	TypeSelectedFlows         Type = "selected_flows"
+	TypeFactsIndex            Type = "facts_index"
+	TypeReviewMarkdown        Type = "review_markdown"
 )
 
 type Ref struct {

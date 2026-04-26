@@ -40,12 +40,46 @@ The operating policy for this work is documented in [AGENTS.md](AGENTS.md) and t
 
 Expected commands:
 
+- `analysis-cli scan`
+- `analysis-cli index`
+- `analysis-cli inspect-function`
+- `analysis-cli review-flow`
+- `analysis-cli export-md`
 - `analysis-cli analyze-workspace`
 - `analysis-cli build-snapshot`
 - `analysis-cli blast-radius`
 - `analysis-cli impacted-tests`
 - `analysis-cli export-mermaid`
 - `analysis-cli build-all-mermaid`
+
+### Facts + LLM Review Flow
+
+The new refactor path is additive and compatibility-safe:
+
+```bash
+# 1) Scan workspace inventory
+analysis-cli scan --workspace .
+
+# 2) Build fact index (SQLite + JSONL)
+analysis-cli index --workspace .
+
+# 3) Inspect one function packet from fact store
+analysis-cli inspect-function --workspace-id <workspace_id> --snapshot-id <snapshot_id> --symbol "pkg.Service.Handle"
+
+# 4) Run LLM-led review flow
+analysis-cli review-flow --workspace-id <workspace_id> --snapshot-id <snapshot_id> --symbol "pkg.Service.Handle" --out ./artifacts/review/
+
+# 5) Export markdown and mermaid from review flow
+analysis-cli export-md --review ./artifacts/review/flow.json --out ./artifacts/review/flow.md
+analysis-cli export-mermaid --review ./artifacts/review/flow.json --out ./artifacts/review/flow.mmd
+```
+
+LLM client environment variables (OpenAI-compatible endpoint):
+
+- `ANALYSIS_LLM_BASE_URL` (example: `http://127.0.0.1:1234/v1`)
+- `ANALYSIS_LLM_MODEL`
+- `ANALYSIS_LLM_API_KEY` (optional for local servers)
+- `ANALYSIS_LLM_TIMEOUT_SEC` (default `15`)
 
 ### Mermaid Flow Export
 

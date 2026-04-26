@@ -3,13 +3,18 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type Config struct {
-	ArtifactRoot string
-	SQLitePath   string
-	HTTPAddr     string
-	ProgressMode string
+	ArtifactRoot  string
+	SQLitePath    string
+	HTTPAddr      string
+	ProgressMode  string
+	LLMBaseURL    string
+	LLMModel      string
+	LLMAPIKey     string
+	LLMTimeoutSec int
 }
 
 func Default() Config {
@@ -29,10 +34,32 @@ func Default() Config {
 	if value := os.Getenv("ANALYSIS_PROGRESS_MODE"); value != "" {
 		progressMode = value
 	}
+	llmBaseURL := ""
+	if value := os.Getenv("ANALYSIS_LLM_BASE_URL"); value != "" {
+		llmBaseURL = value
+	}
+	llmModel := ""
+	if value := os.Getenv("ANALYSIS_LLM_MODEL"); value != "" {
+		llmModel = value
+	}
+	llmAPIKey := ""
+	if value := os.Getenv("ANALYSIS_LLM_API_KEY"); value != "" {
+		llmAPIKey = value
+	}
+	llmTimeoutSec := 15
+	if value := os.Getenv("ANALYSIS_LLM_TIMEOUT_SEC"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			llmTimeoutSec = parsed
+		}
+	}
 	return Config{
-		ArtifactRoot: artifactRoot,
-		SQLitePath:   sqlitePath,
-		HTTPAddr:     addr,
-		ProgressMode: progressMode,
+		ArtifactRoot:  artifactRoot,
+		SQLitePath:    sqlitePath,
+		HTTPAddr:      addr,
+		ProgressMode:  progressMode,
+		LLMBaseURL:    llmBaseURL,
+		LLMModel:      llmModel,
+		LLMAPIKey:     llmAPIKey,
+		LLMTimeoutSec: llmTimeoutSec,
 	}
 }
