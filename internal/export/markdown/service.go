@@ -32,26 +32,6 @@ func (Service) Render(flow facts.ReviewFlow) string {
 		out.WriteString("\n")
 	}
 
-	out.WriteString("## Ambiguous Steps\n\n")
-	if len(flow.Ambiguous) == 0 {
-		out.WriteString("- none\n\n")
-	} else {
-		for _, step := range flow.Ambiguous {
-			out.WriteString(fmt.Sprintf("- `%s` -> `%s`: %s\n", step.FromCanonicalName, step.ToCanonicalName, safeReason(step.Rationale)))
-		}
-		out.WriteString("\n")
-	}
-
-	out.WriteString("## Rejected Steps\n\n")
-	if len(flow.Rejected) == 0 {
-		out.WriteString("- none\n\n")
-	} else {
-		for _, step := range flow.Rejected {
-			out.WriteString(fmt.Sprintf("- `%s` -> `%s`: %s\n", step.FromCanonicalName, step.ToCanonicalName, safeReason(step.Rationale)))
-		}
-		out.WriteString("\n")
-	}
-
 	if len(flow.UncertaintyNotes) > 0 {
 		out.WriteString("## Uncertainty Notes\n\n")
 		for _, note := range flow.UncertaintyNotes {

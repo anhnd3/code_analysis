@@ -15,6 +15,7 @@ type Config struct {
 	LLMModel      string
 	LLMAPIKey     string
 	LLMTimeoutSec int
+	LLMMaxRetries int
 }
 
 func Default() Config {
@@ -52,6 +53,12 @@ func Default() Config {
 			llmTimeoutSec = parsed
 		}
 	}
+	llmMaxRetries := 2
+	if value := os.Getenv("ANALYSIS_LLM_MAX_RETRIES"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
+			llmMaxRetries = parsed
+		}
+	}
 	return Config{
 		ArtifactRoot:  artifactRoot,
 		SQLitePath:    sqlitePath,
@@ -61,5 +68,6 @@ func Default() Config {
 		LLMModel:      llmModel,
 		LLMAPIKey:     llmAPIKey,
 		LLMTimeoutSec: llmTimeoutSec,
+		LLMMaxRetries: llmMaxRetries,
 	}
 }

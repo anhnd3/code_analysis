@@ -38,19 +38,25 @@ Current intentional deferrals:
 
 The operating policy for this work is documented in [AGENTS.md](AGENTS.md) and the Execution C Slice 4.1 note at [docs/execution_c_slice4_1.md](docs/execution_c_slice4_1.md).
 
-Expected commands:
+Primary commands:
 
 - `analysis-cli scan`
 - `analysis-cli index`
 - `analysis-cli inspect-function`
 - `analysis-cli review-flow`
 - `analysis-cli export-md`
+- `analysis-cli export-mermaid --review`
+
+Compatibility only:
+
 - `analysis-cli analyze-workspace`
 - `analysis-cli build-snapshot`
+- `analysis-cli build-review-bundle`
 - `analysis-cli blast-radius`
 - `analysis-cli impacted-tests`
-- `analysis-cli export-mermaid`
+- `analysis-cli export-mermaid` without `--review`
 - `analysis-cli build-all-mermaid`
+- `analysis-cli graph ...`
 
 ### Facts + LLM Review Flow
 
@@ -74,16 +80,25 @@ analysis-cli export-md --review ./artifacts/review/flow.json --out ./artifacts/r
 analysis-cli export-mermaid --review ./artifacts/review/flow.json --out ./artifacts/review/flow.mmd
 ```
 
+The primary chain is:
+
+`scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid --review`
+
+Everything else in this repository is compatibility-only until the legacy stack is fully removed.
+
 LLM client environment variables (OpenAI-compatible endpoint):
 
 - `ANALYSIS_LLM_BASE_URL` (example: `http://127.0.0.1:1234/v1`)
 - `ANALYSIS_LLM_MODEL`
 - `ANALYSIS_LLM_API_KEY` (optional for local servers)
 - `ANALYSIS_LLM_TIMEOUT_SEC` (default `15`)
+- `ANALYSIS_LLM_MAX_RETRIES` (default `2`)
 
 ### Mermaid Flow Export
 
 Generate Mermaid sequence diagrams from your Go codebase.
+
+The `--review` path is the primary supported route. All workspace/snapshot/debug modes below are legacy compatibility only.
 
 ```bash
 # Analyze current workspace and export bootstrap flows
@@ -130,7 +145,7 @@ For Slice 2, Slice 3, and Slice 4.1 confirmation runs, use the service-pack runn
 bash ./scripts/run_execution_c_service_pack.sh
 ```
 
-That script runs `export-mermaid` in `service_pack` mode for the ZPA and Scan audit workspaces, using explicit expected-root manifests and isolated artifact/database roots.
+That script runs the legacy `export-mermaid` compatibility path in `service_pack` mode for the ZPA and Scan audit workspaces, using explicit expected-root manifests and isolated artifact/database roots.
 
 The per-service output directories include:
 - `service_coverage_report.json`
@@ -172,6 +187,14 @@ The parser layer now uses the official Tree-Sitter Go bindings from `github.com/
 - `go test -mod=mod ./...`
 
 The official bindings require explicit `Close()` calls on C-backed parser and tree objects. The parser adapter closes parsers per parse call, and extractor code closes returned trees after use.
+
+Required baseline:
+
+- `./scripts/test_required_baseline.sh`
+
+Legacy health check:
+
+- `./scripts/test_legacy_health.sh`
 
 For a richer test report with executed test cases plus coverage artifacts, run:
 

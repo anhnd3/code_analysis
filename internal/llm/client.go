@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -59,10 +60,11 @@ func (NoopClient) Review(req ReviewRequest) (ReviewResponse, error) {
 }
 
 type OpenAIClient struct {
-	BaseURL string
-	Model   string
-	APIKey  string
-	Timeout time.Duration
+	BaseURL    string
+	Model      string
+	APIKey     string
+	Timeout    time.Duration
+	MaxRetries int
 }
 
 func (c OpenAIClient) Review(req ReviewRequest) (ReviewResponse, error) {
@@ -72,8 +74,27 @@ func (c OpenAIClient) Review(req ReviewRequest) (ReviewResponse, error) {
 	if c.Timeout <= 0 {
 		c.Timeout = 15 * time.Second
 	}
+	if c.MaxRetries <= 0 {
+		c.MaxRetries = 2
+	}
 
-	promptBody, _ := json.Marshal(req.Packet)
+	var lastErr error
+	attempts := c.MaxRetries + 1
+	for attempt := 0; attempt < attempts; attempt++ {
+		out, err := c.reviewOnce(req)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+	}
+	return ReviewResponse{}, fmt.Errorf("llm review failed after %d attempt(s): %w", attempts, lastErr)
+}
+
+func (c OpenAIClient) reviewOnce(req ReviewRequest) (ReviewResponse, error) {
+	promptBody, err := json.Marshal(req.Packet)
+	if err != nil {
+		return ReviewResponse{}, err
+	}
 	requestBody := map[string]any{
 		"model": c.Model,
 		"messages": []map[string]string{
@@ -108,6 +129,10 @@ func (c OpenAIClient) Review(req ReviewRequest) (ReviewResponse, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		if len(strings.TrimSpace(string(body))) > 0 {
+			return ReviewResponse{}, fmt.Errorf("llm status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 		return ReviewResponse{}, fmt.Errorf("llm status %d", resp.StatusCode)
 	}
 	var completion struct {
@@ -123,10 +148,42 @@ func (c OpenAIClient) Review(req ReviewRequest) (ReviewResponse, error) {
 	if len(completion.Choices) == 0 {
 		return ReviewResponse{}, fmt.Errorf("llm response contained no choices")
 	}
-	content := completion.Choices[0].Message.Content
+	return decodeReviewResponse(completion.Choices[0].Message.Content)
+}
+
+func decodeReviewResponse(content string) (ReviewResponse, error) {
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.DisallowUnknownFields()
 	var out ReviewResponse
-	if err := json.Unmarshal([]byte(content), &out); err != nil {
-		return NoopClient{}.Review(req)
+	if err := decoder.Decode(&out); err != nil {
+		return ReviewResponse{}, fmt.Errorf("invalid review response json: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return ReviewResponse{}, fmt.Errorf("invalid review response json: trailing data")
+		}
+		return ReviewResponse{}, fmt.Errorf("invalid review response json: %w", err)
+	}
+	if err := validateReviewResponse(out); err != nil {
+		return ReviewResponse{}, err
 	}
 	return out, nil
+}
+
+func validateReviewResponse(out ReviewResponse) error {
+	if len(out.Decisions) == 0 {
+		return fmt.Errorf("invalid review response: no decisions")
+	}
+	for idx, decision := range out.Decisions {
+		switch decision.Status {
+		case facts.StepAccepted, facts.StepAmbiguous, facts.StepRejected:
+		default:
+			return fmt.Errorf("invalid review response: decision %d has unknown status %q", idx, decision.Status)
+		}
+		if strings.TrimSpace(decision.TargetSymbolID) == "" &&
+			strings.TrimSpace(decision.TargetCanonicalName) == "" {
+			return fmt.Errorf("invalid review response: decision %d is missing a target", idx)
+		}
+	}
+	return nil
 }

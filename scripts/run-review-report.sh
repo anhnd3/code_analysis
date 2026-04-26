@@ -16,6 +16,9 @@ usage() {
 Usage:
   bash ./scripts/run-review-report.sh [workspace]
 
+Legacy compatibility only:
+  This script drives the old review-graph export path.
+
 Environment variables:
   STARTPOINT_MODE   Startpoint selection mode. Default: workflow
   RENDER_MODE       Review render mode. Default: grouped
@@ -84,7 +87,7 @@ cd "$ROOT_DIR"
 snapshot_json="$(mktemp)"
 trap 'rm -f "$snapshot_json"' EXIT
 
-echo "==> Building fresh snapshot for workspace: $WORKSPACE_PATH"
+echo "==> Building fresh snapshot for legacy reviewgraph workspace: $WORKSPACE_PATH"
 "$GO_BIN" run -mod=mod ./cmd/analysis-cli build-snapshot \
 	--workspace "$WORKSPACE_PATH" \
 	--progress-mode plain | tee "$snapshot_json"
@@ -96,19 +99,19 @@ review_dir="artifacts/workspaces/$workspace_id/snapshots/$snapshot_id/review"
 targets_file="$review_dir/resolved_targets.json"
 
 echo
-echo "==> Importing review graph into: $db_path"
+echo "==> Importing legacy review graph into: $db_path"
 "$GO_BIN" run -mod=mod ./cmd/analysis-cli graph import-sqlite \
 	--workspace-id "$workspace_id" \
 	--snapshot-id "$snapshot_id"
 
 echo
-echo "==> Resolving startpoints with mode: $STARTPOINT_MODE"
+echo "==> Resolving legacy startpoints with mode: $STARTPOINT_MODE"
 "$GO_BIN" run -mod=mod ./cmd/analysis-cli graph list-startpoints \
 	--db "$db_path" \
 	--mode "$STARTPOINT_MODE"
 
 echo
-echo "==> Exporting markdown review into: $review_dir"
+echo "==> Exporting legacy markdown review into: $review_dir"
 "$GO_BIN" run -mod=mod ./cmd/analysis-cli graph export-markdown-review \
 	--db "$db_path" \
 	--targets-file "$targets_file" \

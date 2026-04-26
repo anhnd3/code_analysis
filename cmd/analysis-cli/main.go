@@ -13,20 +13,17 @@ import (
 	"analysis-module/internal/app/logging"
 	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/domain/reviewgraph"
 	"analysis-module/internal/facts"
+	legacymermaid "analysis-module/internal/legacy/mermaid_old"
+	legacyreviewgraph "analysis-module/internal/legacy/reviewgraph"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
 	"analysis-module/internal/workflows/analyze_workspace"
 	"analysis-module/internal/workflows/blast_radius"
 	"analysis-module/internal/workflows/build_review_bundle"
 	"analysis-module/internal/workflows/build_snapshot"
-	"analysis-module/internal/workflows/export_mermaid"
 	"analysis-module/internal/workflows/facts_index"
 	"analysis-module/internal/workflows/impacted_tests"
-	"analysis-module/internal/workflows/review_graph_export"
-	"analysis-module/internal/workflows/review_graph_import"
-	"analysis-module/internal/workflows/review_graph_list_startpoints"
 )
 
 func main() {
@@ -36,7 +33,8 @@ func main() {
 		fatal(err)
 	}
 	if len(os.Args) < 2 {
-		fatal(fmt.Errorf("expected subcommand: scan | index | inspect-function | review-flow | export-md | export-mermaid | analyze-workspace | build-snapshot | build-review-bundle | blast-radius | impacted-tests | graph | build-all-mermaid"))
+		printUsage()
+		fatal(fmt.Errorf("expected a subcommand"))
 	}
 	switch os.Args[1] {
 	case "scan":
@@ -66,7 +64,34 @@ func main() {
 	case "graph":
 		runGraph(app, os.Args[2:])
 	default:
+		printUsage()
 		fatal(fmt.Errorf("unknown subcommand: %s", os.Args[1]))
+	}
+}
+
+func printUsage() {
+	lines := []string{
+		"Analysis Module CLI",
+		"",
+		"Primary path:",
+		"  scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid --review",
+		"",
+		"Compatibility only:",
+		"  analyze-workspace",
+		"  build-snapshot",
+		"  build-review-bundle",
+		"  blast-radius",
+		"  impacted-tests",
+		"  export-mermaid (workspace/snapshot/root/debug legacy modes)",
+		"  build-all-mermaid",
+		"  graph <subcommand>",
+		"",
+		"Notes:",
+		"  scan is the primary alias for workspace discovery; analyze-workspace remains compatibility only.",
+		"  export-mermaid is primary only with --review; all other export-mermaid entry modes are legacy compatibility.",
+	}
+	for _, line := range lines {
+		fmt.Fprintln(os.Stderr, line)
 	}
 }
 
@@ -155,19 +180,20 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 	if *workspaceID == "" || *snapshotID == "" || *symbol == "" {
 		fatal(fmt.Errorf("--workspace-id, --snapshot-id and --symbol are required"))
 	}
+	dir := *outDir
+	if dir == "" {
+		dir = filepath.Join(app.Config.ArtifactRoot, "workspaces", *workspaceID, "snapshots", *snapshotID, "review")
+	}
 	result, err := app.FlowReview.Run(factreview.Request{
 		WorkspaceID: *workspaceID,
 		SnapshotID:  *snapshotID,
 		Symbol:      *symbol,
 		MaxDepth:    *maxDepth,
 		MaxSteps:    *maxSteps,
+		OutDir:      dir,
 	})
 	if err != nil {
 		fatal(err)
-	}
-	dir := *outDir
-	if dir == "" {
-		dir = filepath.Join(app.Config.ArtifactRoot, "workspaces", *workspaceID, "snapshots", *snapshotID, "review")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fatal(err)
@@ -373,14 +399,14 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 		debugDir = *debugOut
 	}
 
-	result, err := app.ExportMermaid.Run(export_mermaid.Request{
+	result, err := app.ExportMermaid.Run(legacymermaid.Request{
 		WorkspaceID:       workspaceID,
 		SnapshotID:        snapshot.ID,
-		RootType:          export_mermaid.RootTypeFilter(*rootType),
+		RootType:          legacymermaid.RootTypeFilter(*rootType),
 		RootSelector:      *rootSelector,
-		ReviewScope:       export_mermaid.ReviewScope(*reviewScope),
+		ReviewScope:       legacymermaid.ReviewScope(*reviewScope),
 		ExpectedRootsFile: *expectedRootsFile,
-		RenderMode:        export_mermaid.RenderMode(*renderMode),
+		RenderMode:        legacymermaid.RenderMode(*renderMode),
 		ReviewStrict:      *reviewStrict,
 		MaxDepth:          *maxDepth,
 		MaxBranches:       *maxBranches,
@@ -417,14 +443,14 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 	}
 	app.Logger.Info("Snapshot built", "workspace_id", snapResult.WorkspaceID, "snapshot_id", snapResult.Snapshot.ID)
 
-	var allResults []export_mermaid.Result
+	var allResults []legacymermaid.Result
 
 	// Step 2: Pass A - Bootstrap
 	app.Logger.Info("Exporting 'bootstrap' flows...")
-	resBoot, err := app.ExportMermaid.Run(export_mermaid.Request{
+	resBoot, err := app.ExportMermaid.Run(legacymermaid.Request{
 		WorkspaceID:  snapResult.WorkspaceID,
 		SnapshotID:   snapResult.Snapshot.ID,
-		RootType:     export_mermaid.RootFilterBootstrap,
+		RootType:     legacymermaid.RootFilterBootstrap,
 		MaxDepth:     *maxDepth,
 		MaxBranches:  *maxBranches,
 		CollapseMode: "default",
@@ -437,11 +463,11 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 
 	// Step 3: Pass B - HTTP
 	app.Logger.Info("Exporting 'http' endpoint flows...")
-	resHTTP, err := app.ExportMermaid.Run(export_mermaid.Request{
+	resHTTP, err := app.ExportMermaid.Run(legacymermaid.Request{
 		WorkspaceID:  snapResult.WorkspaceID,
 		SnapshotID:   snapResult.Snapshot.ID,
-		RootType:     export_mermaid.RootFilterHTTP,
-		RenderMode:   export_mermaid.RenderModeReview,
+		RootType:     legacymermaid.RootFilterHTTP,
+		RenderMode:   legacymermaid.RenderModeReview,
 		MaxDepth:     *maxDepth,
 		CollapseMode: "default",
 	}, snapResult.Inventory, snapResult.Snapshot)
@@ -453,10 +479,10 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 
 	// Step 4: Pass C - Worker
 	app.Logger.Info("Exporting 'worker' flows...")
-	resWorker, err := app.ExportMermaid.Run(export_mermaid.Request{
+	resWorker, err := app.ExportMermaid.Run(legacymermaid.Request{
 		WorkspaceID:  snapResult.WorkspaceID,
 		SnapshotID:   snapResult.Snapshot.ID,
-		RootType:     export_mermaid.RootFilterWorker,
+		RootType:     legacymermaid.RootFilterWorker,
 		MaxDepth:     *maxDepth,
 		CollapseMode: "aggressive",
 	}, snapResult.Inventory, snapResult.Snapshot)
@@ -474,7 +500,7 @@ func runBuildAllMermaid(app *bootstrap.Application, args []string) {
 
 func runGraph(app *bootstrap.Application, args []string) {
 	if len(args) == 0 {
-		fatal(fmt.Errorf("expected graph subcommand: import-sqlite | list-startpoints | export-markdown-review"))
+		fatal(fmt.Errorf("expected legacy graph subcommand: import-sqlite | list-startpoints | export-markdown-review"))
 	}
 	switch args[0] {
 	case "import-sqlite":
@@ -484,7 +510,7 @@ func runGraph(app *bootstrap.Application, args []string) {
 	case "export-markdown-review":
 		runGraphExportMarkdownReview(app, args[1:])
 	default:
-		fatal(fmt.Errorf("unknown graph subcommand: %s", args[0]))
+		fatal(fmt.Errorf("unknown legacy graph subcommand: %s", args[0]))
 	}
 }
 
@@ -500,7 +526,7 @@ func runGraphImportSQLite(app *bootstrap.Application, args []string) {
 	ignoreFilePath := fs.String("ignore-file", "", "optional text review ignore file")
 	outDBPath := fs.String("out", "", "review graph sqlite output path")
 	_ = fs.Parse(args)
-	result, err := app.ReviewGraphImport.Run(review_graph_import.Request{
+	result, err := app.ReviewGraphImport.Run(legacyreviewgraph.ImportRequest{
 		WorkspaceID:         *workspaceID,
 		SnapshotID:          *snapshotID,
 		NodesPath:           *nodesPath,
@@ -526,7 +552,7 @@ func runGraphListStartpoints(app *bootstrap.Application, args []string) {
 	topic := fs.String("topic", "", "manual topic selector")
 	outPath := fs.String("out", "", "resolved targets output file")
 	_ = fs.Parse(args)
-	result, err := app.ReviewGraphListStartpoints.Run(review_graph_list_startpoints.Request{
+	result, err := app.ReviewGraphListStartpoints.Run(legacyreviewgraph.SelectRequest{
 		DBPath:  *dbPath,
 		Mode:    *mode,
 		Symbol:  *symbol,
@@ -544,7 +570,7 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("graph export-markdown-review", flag.ExitOnError)
 	dbPath := fs.String("db", "", "review graph sqlite path")
 	targetsFile := fs.String("targets-file", "", "resolved targets json file")
-	mode := fs.String("mode", string(reviewgraph.TraversalFullFlow), "traversal mode: full-flow|bounded")
+	mode := fs.String("mode", string(legacyreviewgraph.TraversalFullFlow), "traversal mode: full-flow|bounded")
 	renderMode := fs.String("render-mode", "grouped", "render mode: grouped|raw")
 	companionView := fs.String("companion-view", "none", "companion view generation: none|overview|all")
 	includeAsync := fs.Bool("include-async", true, "include async traversal")
@@ -552,7 +578,7 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	reverseDepth := fs.Int("reverse-depth", 2, "bounded reverse depth")
 	outDir := fs.String("out", "", "review directory output path")
 	_ = fs.Parse(args)
-	result, err := app.ReviewGraphExport.Run(review_graph_export.Request{
+	result, err := app.ReviewGraphExport.Run(legacyreviewgraph.ExportRequest{
 		DBPath:        *dbPath,
 		TargetsFile:   *targetsFile,
 		Mode:          *mode,

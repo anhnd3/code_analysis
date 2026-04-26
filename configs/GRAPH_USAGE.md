@@ -1,5 +1,12 @@
 # Review Graph Usage
 
+> Legacy compatibility only.
+>
+> The primary supported path is the fact-centric flow documented in `README.md`:
+> `scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid --review`
+>
+> Do not add new behavior to this workflow.
+
 ## Purpose
 
 Use the review graph when the question is:
@@ -17,7 +24,7 @@ file/module -> class/type -> function
 
 That means repeated prefixes appear once in the rendered flow tree instead of being repeated across many flat path lines.
 
-## Preferred One-Command Run
+## Legacy One-Command Run
 
 From the `analysis_module` directory:
 

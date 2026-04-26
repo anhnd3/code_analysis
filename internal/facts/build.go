@@ -1,8 +1,10 @@
 package facts
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"analysis-module/internal/domain/analysis"
@@ -34,6 +36,10 @@ func BuildIndex(input BuildInput) Index {
 	}
 
 	symbolByCanonical := map[string]string{}
+	ambiguousCanonical := map[string]bool{}
+	symbolByID := map[string]SymbolFact{}
+	symbolByFile := map[string][]SymbolFact{}
+	exportCanonicalByFile := map[string]map[string]string{}
 	repoByID := map[string]repository.Manifest{}
 	for _, repo := range input.Inventory.Repositories {
 		repoByID[string(repo.ID)] = repo
@@ -104,6 +110,11 @@ func BuildIndex(input BuildInput) Index {
 			}
 
 			for _, exp := range file.Exports {
+				fileKey := filepath.ToSlash(file.FilePath)
+				if exportCanonicalByFile[fileKey] == nil {
+					exportCanonicalByFile[fileKey] = map[string]string{}
+				}
+				exportCanonicalByFile[fileKey][exp.Name] = exp.CanonicalName
 				out.Exports = append(out.Exports, ExportFact{
 					ID:            ids.Stable("fact", "export", fileID, exp.Name, exp.CanonicalName),
 					FileID:        fileID,
@@ -144,7 +155,14 @@ func BuildIndex(input BuildInput) Index {
 					EndByte:       sym.Location.EndByte,
 				}
 				out.Symbols = append(out.Symbols, symbolFact)
-				symbolByCanonical[sym.CanonicalName] = string(sym.ID)
+				symbolByID[string(sym.ID)] = symbolFact
+				if existing, ok := symbolByCanonical[sym.CanonicalName]; ok && existing != string(sym.ID) {
+					ambiguousCanonical[sym.CanonicalName] = true
+					delete(symbolByCanonical, sym.CanonicalName)
+				} else if !ambiguousCanonical[sym.CanonicalName] {
+					symbolByCanonical[sym.CanonicalName] = string(sym.ID)
+				}
+				symbolByFile[filepath.ToSlash(sym.FilePath)] = append(symbolByFile[filepath.ToSlash(sym.FilePath)], symbolFact)
 				if sym.Kind == symbol.KindTestFunction {
 					out.Tests = append(out.Tests, TestFact{
 						ID:            ids.Stable("fact", "test", string(sym.ID)),
@@ -211,12 +229,32 @@ func BuildIndex(input BuildInput) Index {
 
 	for i := range out.CallCandidates {
 		candidate := &out.CallCandidates[i]
-		if candidate.TargetFilePath == "" && candidate.TargetSymbolID != "" {
-			for _, sym := range out.Symbols {
-				if sym.ID == candidate.TargetSymbolID {
-					candidate.TargetFilePath = sym.FilePath
-					break
+		if candidate.TargetSymbolID == "" && candidate.TargetCanonicalName != "" {
+			if !ambiguousCanonical[candidate.TargetCanonicalName] {
+				candidate.TargetSymbolID = symbolByCanonical[candidate.TargetCanonicalName]
+			}
+		}
+		if candidate.TargetSymbolID == "" && candidate.TargetFilePath != "" && candidate.TargetExportName != "" {
+			if targetID, resolved, ambiguous := resolveCandidateTarget(candidate.TargetFilePath, candidate.TargetExportName, symbolByFile, exportCanonicalByFile); resolved {
+				candidate.TargetSymbolID = targetID
+			} else if ambiguous {
+				out.IssueCounts.AmbiguousRelations++
+				sourceFile := ""
+				if source, ok := symbolByID[candidate.SourceSymbolID]; ok {
+					sourceFile = source.FilePath
 				}
+				out.Diagnostics = append(out.Diagnostics, DiagnosticFact{
+					ID:       ids.Stable("fact", "diag", candidate.ID, "ambiguous_relation"),
+					FilePath: sourceFile,
+					Category: "ambiguous_relation",
+					Message:  fmt.Sprintf("could not uniquely resolve %q in %q", candidate.TargetExportName, candidate.TargetFilePath),
+					Evidence: candidate.EvidenceSource,
+				})
+			}
+		}
+		if candidate.TargetFilePath == "" && candidate.TargetSymbolID != "" {
+			if sym, ok := symbolByID[candidate.TargetSymbolID]; ok {
+				candidate.TargetFilePath = sym.FilePath
 			}
 		}
 	}
@@ -226,6 +264,35 @@ func BuildIndex(input BuildInput) Index {
 	out.SymbolCount = len(out.Symbols)
 	out.CallCandidateCount = len(out.CallCandidates)
 	return out
+}
+
+func resolveCandidateTarget(targetFilePath, targetExportName string, symbolByFile map[string][]SymbolFact, exportCanonicalByFile map[string]map[string]string) (string, bool, bool) {
+	fileKey := filepath.ToSlash(targetFilePath)
+	matches := make([]SymbolFact, 0)
+	if exports := exportCanonicalByFile[fileKey]; exports != nil {
+		if canonical := exports[targetExportName]; canonical != "" {
+			for _, sym := range symbolByFile[fileKey] {
+				if sym.CanonicalName == canonical {
+					matches = append(matches, sym)
+				}
+			}
+			if len(matches) == 1 {
+				return matches[0].ID, true, false
+			}
+		}
+	}
+	for _, sym := range symbolByFile[fileKey] {
+		if sym.Name == targetExportName || strings.HasSuffix(sym.CanonicalName, "."+targetExportName) {
+			matches = append(matches, sym)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0].ID, true, false
+	}
+	if len(matches) > 1 {
+		return "", false, true
+	}
+	return "", false, true
 }
 
 func toIssueCounts(in analysis.IssueCounts) IssueCountsFact {

@@ -19,14 +19,15 @@ import (
 	"analysis-module/internal/app/progress"
 	factmarkdown "analysis-module/internal/export/markdown"
 	factmermaid "analysis-module/internal/export/mermaid"
+	legacymermaid "analysis-module/internal/legacy/mermaid_old"
+	legacyreviewflow "analysis-module/internal/legacy/reviewflow"
+	legacyreviewgraph "analysis-module/internal/legacy/reviewgraph"
 	"analysis-module/internal/llm"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
 	"analysis-module/internal/services/boundary_detect"
-	"analysis-module/internal/services/chain_reduce"
 	"analysis-module/internal/services/cross_boundary_link"
 	"analysis-module/internal/services/entrypoint_resolve"
-	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/graph_build"
 	"analysis-module/internal/services/graph_query"
 	"analysis-module/internal/services/mermaid_emit"
@@ -35,7 +36,6 @@ import (
 	"analysis-module/internal/services/review_bundle_packager"
 	"analysis-module/internal/services/reviewgraph_export"
 	"analysis-module/internal/services/reviewgraph_import"
-	"analysis-module/internal/services/reviewgraph_paths"
 	"analysis-module/internal/services/reviewgraph_select"
 	"analysis-module/internal/services/reviewgraph_traverse"
 	"analysis-module/internal/services/sequence_model_build"
@@ -46,12 +46,8 @@ import (
 	"analysis-module/internal/workflows/blast_radius"
 	"analysis-module/internal/workflows/build_review_bundle"
 	"analysis-module/internal/workflows/build_snapshot"
-	"analysis-module/internal/workflows/export_mermaid"
 	"analysis-module/internal/workflows/facts_index"
 	"analysis-module/internal/workflows/impacted_tests"
-	"analysis-module/internal/workflows/review_graph_export"
-	"analysis-module/internal/workflows/review_graph_import"
-	"analysis-module/internal/workflows/review_graph_list_startpoints"
 )
 
 type Application struct {
@@ -62,10 +58,10 @@ type Application struct {
 	BuildReviewBundle          build_review_bundle.Workflow
 	BlastRadius                blast_radius.Workflow
 	ImpactedTests              impacted_tests.Workflow
-	ReviewGraphImport          review_graph_import.Workflow
-	ReviewGraphListStartpoints review_graph_list_startpoints.Workflow
-	ReviewGraphExport          review_graph_export.Workflow
-	ExportMermaid              export_mermaid.Workflow
+	ReviewGraphImport          legacyreviewgraph.ImportWorkflow
+	ReviewGraphListStartpoints legacyreviewgraph.SelectWorkflow
+	ReviewGraphExport          legacyreviewgraph.ExportWorkflow
+	ExportMermaid              legacymermaid.Workflow
 	FactsIndex                 facts_index.Workflow
 	FactsQuery                 factquery.Service
 	FlowReview                 factreview.Service
@@ -104,28 +100,29 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	querySvc := graph_query.New(graphStores)
 	blastRadiusWorkflow := blast_radius.New(querySvc, artifactStore)
 	impactedTestsWorkflow := impacted_tests.New(querySvc, artifactStore)
-	reviewGraphPathsSvc := reviewgraph_paths.New(cfg.ArtifactRoot)
+	reviewGraphPathsSvc := legacyreviewgraph.NewPathsService(cfg.ArtifactRoot)
 	reviewGraphImportSvc := reviewgraph_import.New(reviewGraphPathsSvc)
 	reviewGraphTraverseSvc := reviewgraph_traverse.New()
 	reviewGraphSelectSvc := reviewgraph_select.New(reviewGraphPathsSvc)
 	reviewGraphExportSvc := reviewgraph_export.New(reviewGraphPathsSvc, reviewGraphTraverseSvc)
 
 	entrypointResolveSvc := entrypoint_resolve.New()
-	flowStitchSvc := flow_stitch.New()
+	flowStitchSvc := legacyreviewflow.NewFlowStitchService()
 	crossBoundaryLinkSvc := cross_boundary_link.New()
-	chainReduceSvc := chain_reduce.New()
+	chainReduceSvc := legacyreviewflow.NewChainReduceService()
 	sequenceModelSvc := sequence_model_build.New()
 	mermaidEmitSvc := mermaid_emit.New()
-	exportMermaidWorkflow := export_mermaid.New(artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc, boundaryDetectSvc)
+	exportMermaidWorkflow := legacymermaid.New(artifactStore, entrypointResolveSvc, flowStitchSvc, crossBoundaryLinkSvc, chainReduceSvc, sequenceModelSvc, mermaidEmitSvc, boundaryDetectSvc)
 	factsIndexWorkflow := facts_index.New(analyzeWorkflow, symbolIndexSvc, boundaryDetectSvc, snapshotManageSvc, artifactStore, cfg.ArtifactRoot)
 	factsQuerySvc := factquery.New(cfg.ArtifactRoot)
 	var llmClient llm.Client = llm.NoopClient{}
 	if cfg.LLMBaseURL != "" && cfg.LLMModel != "" {
 		llmClient = llm.OpenAIClient{
-			BaseURL: cfg.LLMBaseURL,
-			Model:   cfg.LLMModel,
-			APIKey:  cfg.LLMAPIKey,
-			Timeout: time.Duration(cfg.LLMTimeoutSec) * time.Second,
+			BaseURL:    cfg.LLMBaseURL,
+			Model:      cfg.LLMModel,
+			APIKey:     cfg.LLMAPIKey,
+			Timeout:    time.Duration(cfg.LLMTimeoutSec) * time.Second,
+			MaxRetries: cfg.LLMMaxRetries,
 		}
 	}
 	flowReviewSvc := factreview.New(cfg.ArtifactRoot, factsQuerySvc, llmClient)
@@ -140,9 +137,9 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 		BuildReviewBundle:          buildReviewBundleWorkflow,
 		BlastRadius:                blastRadiusWorkflow,
 		ImpactedTests:              impactedTestsWorkflow,
-		ReviewGraphImport:          review_graph_import.New(reviewGraphImportSvc),
-		ReviewGraphListStartpoints: review_graph_list_startpoints.New(reviewGraphSelectSvc),
-		ReviewGraphExport:          review_graph_export.New(reviewGraphExportSvc),
+		ReviewGraphImport:          legacyreviewgraph.NewImportWorkflow(reviewGraphImportSvc),
+		ReviewGraphListStartpoints: legacyreviewgraph.NewSelectWorkflow(reviewGraphSelectSvc),
+		ReviewGraphExport:          legacyreviewgraph.NewExportWorkflow(reviewGraphExportSvc),
 		ExportMermaid:              exportMermaidWorkflow,
 		FactsIndex:                 factsIndexWorkflow,
 		FactsQuery:                 factsQuerySvc,

@@ -1,7 +1,10 @@
 package review
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -18,6 +21,7 @@ type Request struct {
 	Symbol      string
 	MaxDepth    int
 	MaxSteps    int
+	OutDir      string
 }
 
 type Result struct {
@@ -62,6 +66,10 @@ func (s Service) Run(req Request) (Result, error) {
 		RootCanonicalName: rootPacket.RootSymbol.CanonicalName,
 		CreatedAt:         time.Now().UTC(),
 	}
+	reviewDir := req.OutDir
+	if reviewDir == "" {
+		reviewDir = filepath.Join(s.artifactRoot, "workspaces", req.WorkspaceID, "snapshots", req.SnapshotID, "review")
+	}
 
 	type queueItem struct {
 		SymbolID string
@@ -100,15 +108,17 @@ func (s Service) Run(req Request) (Result, error) {
 		})
 		if err != nil {
 			flow.UncertaintyNotes = append(flow.UncertaintyNotes, fmt.Sprintf("llm review failed for %s: %v", symbolFact.CanonicalName, err))
-			llmResp, _ = llm.NoopClient{}.Review(llm.ReviewRequest{
-				RootSymbol: symbolFact,
-				Packet:     packet,
-				Depth:      item.Depth,
-			})
+			if artifactErr := writeLLMErrorArtifact(reviewDir, req, symbolFact, item.Depth, err); artifactErr != nil {
+				flow.UncertaintyNotes = append(flow.UncertaintyNotes, fmt.Sprintf("failed to write llm error artifact: %v", artifactErr))
+			}
+			llmResp = ambiguousResponseForPacket(packet, fmt.Sprintf("llm review unavailable: %v", err))
 		}
 
 		candidateByTarget := map[string]facts.CallCandidate{}
 		for _, candidate := range packet.OutgoingCandidates {
+			if candidate.ID != "" {
+				candidateByTarget[candidate.ID] = candidate
+			}
 			if candidate.TargetSymbolID != "" {
 				candidateByTarget[candidate.TargetSymbolID] = candidate
 			}
@@ -118,17 +128,44 @@ func (s Service) Run(req Request) (Result, error) {
 		}
 
 		for _, decision := range llmResp.Decisions {
-			target := decision.TargetSymbolID
-			targetCanonical := decision.TargetCanonicalName
-			if target == "" && targetCanonical != "" {
-				if resolved, resolveErr := s.query.ResolveSymbol(req.WorkspaceID, req.SnapshotID, targetCanonical); resolveErr == nil {
-					target = resolved.ID
-					targetCanonical = resolved.CanonicalName
+			candidate, matched := candidateForDecision(decision, candidateByTarget)
+			target := candidate.TargetSymbolID
+			targetCanonical := candidate.TargetCanonicalName
+			status := decision.Status
+			rationale := decision.Rationale
+
+			if matched && targetCanonical == "" {
+				targetCanonical = decision.TargetCanonicalName
+			}
+			if matched && targetCanonical == "" {
+				targetCanonical = candidate.TargetCanonicalName
+			}
+			if matched && target == "" {
+				target = decision.TargetSymbolID
+			}
+			if !matched {
+				status = facts.StepAmbiguous
+				if rationale == "" {
+					rationale = "decision target did not map to an evidence-backed candidate"
 				}
 			}
-			candidate := candidateByTarget[target]
-			if candidate.ID == "" && targetCanonical != "" {
-				candidate = candidateByTarget[targetCanonical]
+			if status == facts.StepAccepted && candidate.TargetSymbolID == "" {
+				status = facts.StepAmbiguous
+				if rationale == "" {
+					rationale = "accepted decision did not resolve to an evidence-backed target symbol"
+				}
+			}
+			if status == facts.StepAccepted && target == "" {
+				status = facts.StepAmbiguous
+				if rationale == "" {
+					rationale = "accepted candidate was not resolved to a stable target symbol"
+				}
+			}
+			if target == "" && decision.TargetSymbolID != "" {
+				target = decision.TargetSymbolID
+			}
+			if targetCanonical == "" {
+				targetCanonical = decision.TargetCanonicalName
 			}
 			if targetCanonical == "" {
 				targetCanonical = candidate.TargetCanonicalName
@@ -140,8 +177,8 @@ func (s Service) Run(req Request) (Result, error) {
 				FromCanonicalName: symbolFact.CanonicalName,
 				ToSymbolID:        target,
 				ToCanonicalName:   targetCanonical,
-				Status:            decision.Status,
-				Rationale:         decision.Rationale,
+				Status:            status,
+				Rationale:         rationale,
 				Evidence: []facts.EvidenceRef{
 					{
 						SymbolID:  symbolFact.ID,
@@ -180,4 +217,61 @@ func (s Service) Run(req Request) (Result, error) {
 		_ = store.Close()
 	}
 	return Result{Flow: flow}, nil
+}
+
+func candidateForDecision(decision llm.HopDecision, candidates map[string]facts.CallCandidate) (facts.CallCandidate, bool) {
+	if decision.TargetSymbolID != "" {
+		if candidate, ok := candidates[decision.TargetSymbolID]; ok {
+			return candidate, true
+		}
+	}
+	if decision.TargetCanonicalName != "" {
+		if candidate, ok := candidates[decision.TargetCanonicalName]; ok {
+			return candidate, true
+		}
+	}
+	return facts.CallCandidate{}, false
+}
+
+func ambiguousResponseForPacket(packet facts.ContextPacket, note string) llm.ReviewResponse {
+	decisions := make([]llm.HopDecision, 0, len(packet.OutgoingCandidates))
+	for _, candidate := range packet.OutgoingCandidates {
+		targetCanonical := candidate.TargetCanonicalName
+		if targetCanonical == "" {
+			targetCanonical = candidate.ID
+		}
+		decisions = append(decisions, llm.HopDecision{
+			TargetSymbolID:      candidate.TargetSymbolID,
+			TargetCanonicalName: targetCanonical,
+			Status:              facts.StepAmbiguous,
+			Rationale:           note,
+		})
+	}
+	return llm.ReviewResponse{
+		Decisions: decisions,
+		Notes:     []string{note},
+	}
+}
+
+func writeLLMErrorArtifact(reviewDir string, req Request, symbolFact facts.SymbolFact, depth int, err error) error {
+	if reviewDir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(reviewDir, 0o755); err != nil {
+		return err
+	}
+	payload := map[string]any{
+		"workspace_id": req.WorkspaceID,
+		"snapshot_id":  req.SnapshotID,
+		"symbol_id":    symbolFact.ID,
+		"symbol":       symbolFact.CanonicalName,
+		"depth":        depth,
+		"error":        err.Error(),
+		"created_at":   time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	data, marshalErr := json.MarshalIndent(payload, "", "  ")
+	if marshalErr != nil {
+		return marshalErr
+	}
+	return os.WriteFile(filepath.Join(reviewDir, "llm_error.json"), data, 0o644)
 }
