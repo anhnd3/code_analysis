@@ -22,6 +22,9 @@ import (
 	"analysis-module/internal/services/symbol_index"
 	boundary "analysis-module/internal/adapters/boundary/go"
 	"analysis-module/internal/adapters/boundary/go/frameworks"
+	goextractor "analysis-module/internal/adapters/extractor/go"
+	pythonextractor "analysis-module/internal/adapters/extractor/python"
+	jsextractor "analysis-module/internal/adapters/extractor/javascript"
 )
 
 type Application struct {
@@ -55,7 +58,12 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	boundaryRegistry.Register(frameworks.NewGRPCGatewayDetector())
 	boundaryDetectSvc := boundary_detect.New(boundaryRegistry)
 
-	symbolIdx := symbol_index.New(reporter)
+	symbolIdx := symbol_index.New(
+	reporter,
+	goextractor.New(),
+	pythonextractor.New(),
+	jsextractor.New(),
+)
 	factsIndexWorkflow := facts_index.New(analyzeWorkflow, symbolIdx, boundaryDetectSvc, snapshotManageSvc, artifactStore, cfg.ArtifactRoot)
 	factsQuerySvc := factquery.New(cfg.ArtifactRoot)
 	var llmClient llm.Client = llm.NoopClient{}
