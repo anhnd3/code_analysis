@@ -4,8 +4,8 @@ import (
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
-	"analysis-module/internal/services/boundary_detect"
-	"analysis-module/internal/services/symbol_index"
+	"analysis-module/internal/indexer/extract/boundaries"
+	"analysis-module/internal/indexer/extract/symbols"
 )
 
 type Result struct {

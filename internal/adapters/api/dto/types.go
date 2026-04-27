@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"analysis-module/internal/workflows/analyze_workspace"
+	"analysis-module/internal/indexer/workflow/scan"
 	"analysis-module/internal/workflows/blast_radius"
 	"analysis-module/internal/workflows/build_snapshot"
 	"analysis-module/internal/workflows/impacted_tests"

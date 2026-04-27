@@ -1,10 +1,16 @@
 package bootstrap
 
 import (
-	"log/slog"	
+	"log/slog"
 	"time"
 
 	artifactfs "analysis-module/internal/adapters/artifactstore/filesystem"
+	boundary "analysis-module/internal/adapters/boundary/go"
+	"analysis-module/internal/adapters/boundary/go/frameworks"
+	goextractor "analysis-module/internal/adapters/extractor/go"
+	jsextractor "analysis-module/internal/adapters/extractor/javascript"
+	pythonextractor "analysis-module/internal/adapters/extractor/python"
+	"analysis-module/internal/adapters/scanner/detectors"
 	"analysis-module/internal/app/config"
 	"analysis-module/internal/app/progress"
 	factmarkdown "analysis-module/internal/export/markdown"
@@ -12,24 +18,18 @@ import (
 	"analysis-module/internal/llm"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
-	"analysis-module/internal/services/boundary_detect"
+	"analysis-module/internal/indexer/extract/boundaries"
+	"analysis-module/internal/indexer/scan/inventory"
 	"analysis-module/internal/services/snapshot_manage"
-	"analysis-module/internal/services/workspace_scan"
-	"analysis-module/internal/workflows/analyze_workspace"
-	"analysis-module/internal/workflows/facts_index"
-	"analysis-module/internal/adapters/scanner/detectors"
-	"analysis-module/internal/services/repo_inventory"
-	"analysis-module/internal/services/symbol_index"
-	boundary "analysis-module/internal/adapters/boundary/go"
-	"analysis-module/internal/adapters/boundary/go/frameworks"
-	goextractor "analysis-module/internal/adapters/extractor/go"
-	pythonextractor "analysis-module/internal/adapters/extractor/python"
-	jsextractor "analysis-module/internal/adapters/extractor/javascript"
+	"analysis-module/internal/indexer/extract/symbols"
+	"analysis-module/internal/indexer/scan/workspace"
+	"analysis-module/internal/indexer/workflow/scan"
+	"analysis-module/internal/indexer/workflow/index"
 )
 
 type Application struct {
-	Config       config.Config
-	Logger       *slog.Logger
+	Config config.Config
+	Logger *slog.Logger
 
 	Scan         analyze_workspace.Workflow // or renamed WorkspaceScan later
 	FactsIndex   facts_index.Workflow
@@ -59,11 +59,11 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	boundaryDetectSvc := boundary_detect.New(boundaryRegistry)
 
 	symbolIdx := symbol_index.New(
-	reporter,
-	goextractor.New(),
-	pythonextractor.New(),
-	jsextractor.New(),
-)
+		reporter,
+		goextractor.New(),
+		pythonextractor.New(),
+		jsextractor.New(),
+	)
 	factsIndexWorkflow := facts_index.New(analyzeWorkflow, symbolIdx, boundaryDetectSvc, snapshotManageSvc, artifactStore, cfg.ArtifactRoot)
 	factsQuerySvc := factquery.New(cfg.ArtifactRoot)
 	var llmClient llm.Client = llm.NoopClient{}

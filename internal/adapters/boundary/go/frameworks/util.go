@@ -1,8 +1,8 @@
 package frameworks
 
 import (
-	"strings"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	"strings"
 )
 
 func walk(n *tree_sitter.Node, fn func(*tree_sitter.Node) bool) {
@@ -46,4 +46,3 @@ func cleanPath(p string) string {
 	}
 	return p
 }
-

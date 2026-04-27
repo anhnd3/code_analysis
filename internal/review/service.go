@@ -11,7 +11,7 @@ import (
 	"analysis-module/internal/facts"
 	"analysis-module/internal/llm"
 	factquery "analysis-module/internal/query"
-	factsqlite "analysis-module/internal/store/sqlite"
+	factsqlite "analysis-module/internal/facts/store/sqlite"
 	"analysis-module/pkg/ids"
 )
 

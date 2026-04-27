@@ -4,13 +4,13 @@ package flow
 type StepKind string
 
 const (
-	StepCall       StepKind = "call"
-	StepConstruct  StepKind = "construct"
-	StepAsync      StepKind = "async"
-	StepDefer      StepKind = "defer"
-	StepWait       StepKind = "wait"
-	StepBranch     StepKind = "branch"
-	StepBoundary   StepKind = "boundary"
+	StepCall      StepKind = "call"
+	StepConstruct StepKind = "construct"
+	StepAsync     StepKind = "async"
+	StepDefer     StepKind = "defer"
+	StepWait      StepKind = "wait"
+	StepBranch    StepKind = "branch"
+	StepBoundary  StepKind = "boundary"
 )
 
 // Step is a single unit in a stitched execution flow.

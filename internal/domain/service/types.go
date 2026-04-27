@@ -10,10 +10,10 @@ const (
 )
 
 type Manifest struct {
-	ID          ID             `json:"id"`
-	Name        string         `json:"name"`
-	RepositoryID string        `json:"repository_id"`
-	RootPath    string         `json:"root_path"`
-	Entrypoints []string       `json:"entrypoints"`
-	Boundaries  []BoundaryType `json:"boundaries"`
+	ID           ID             `json:"id"`
+	Name         string         `json:"name"`
+	RepositoryID string         `json:"repository_id"`
+	RootPath     string         `json:"root_path"`
+	Entrypoints  []string       `json:"entrypoints"`
+	Boundaries   []BoundaryType `json:"boundaries"`
 }

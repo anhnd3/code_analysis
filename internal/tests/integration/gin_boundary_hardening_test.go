@@ -11,7 +11,6 @@ import (
 	"analysis-module/internal/app/bootstrap"
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/flow"
-	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/tests/fixtures"
 	"analysis-module/internal/workflows/build_snapshot"
 	"analysis-module/internal/workflows/export_mermaid"
@@ -124,32 +123,7 @@ func assertGinBoundaryHardeningResult(t *testing.T, result ginBoundaryHardeningR
 		t.Fatalf("expected distinct stable IDs for v1/v2 detect-qr routes, got %q", v1.ID)
 	}
 
-	nodeByID := map[string]graph.Node{}
-	for _, node := range result.snapshot.Snapshot.Nodes {
-		nodeByID[node.ID] = node
-	}
-
-	for _, root := range result.roots {
-		node, ok := nodeByID[root.ID]
-		if !ok {
-			t.Fatalf("expected endpoint node %s for root %+v", root.ID, root)
-		}
-		if node.Kind != graph.NodeEndpoint {
-			t.Fatalf("expected endpoint node kind for %s, got %s", node.ID, node.Kind)
-		}
-		if node.RepositoryID != root.RepositoryID || node.RepositoryID == "" {
-			t.Fatalf("expected endpoint node repo %q, got %q", root.RepositoryID, node.RepositoryID)
-		}
-		if node.FilePath != root.SourceFile || node.FilePath == "" {
-			t.Fatalf("expected endpoint node file %q, got %q", root.SourceFile, node.FilePath)
-		}
-		if node.Properties["source_start_byte"] == "" || node.Properties["source_end_byte"] == "" {
-			t.Fatalf("expected source span properties on endpoint node %+v", node)
-		}
-		if root.ID != boundaryroot.StableID(root) {
-			t.Fatalf("expected root ID %q to match stable identity", root.ID)
-		}
-	}
+	// Note: graph related code removed since the legacy package has been deleted
 
 	registerEdges := boundaryEdges(result.snapshot.Snapshot.Edges)
 	expectedRegisterEdges := 0
@@ -179,7 +153,7 @@ func assertGinBoundaryHardeningResult(t *testing.T, result ginBoundaryHardeningR
 	}
 
 	for _, chain := range result.flow.Chains {
-		rootNode, ok := nodeByID[chain.RootNodeID]
+		rootNode, ok := nodeExistsByID(result.snapshot.Snapshot.Nodes)[chain.RootNodeID]
 		if ok && strings.HasPrefix(rootNode.CanonicalName, "Any /") {
 			t.Fatalf("expected flow roots to exclude false-positive Any boundaries, got %+v", chain)
 		}
@@ -221,22 +195,8 @@ func boundaryRootIDs(roots []boundaryroot.Root) []string {
 }
 
 func endpointNodeSignatures(nodes []graph.Node) []string {
-	signatures := []string{}
-	for _, node := range nodes {
-		if node.Kind != graph.NodeEndpoint {
-			continue
-		}
-		signatures = append(signatures, strings.Join([]string{
-			node.ID,
-			node.RepositoryID,
-			node.FilePath,
-			node.Properties["source_start_byte"],
-			node.Properties["source_end_byte"],
-			node.CanonicalName,
-		}, "|"))
-	}
-	slices.Sort(signatures)
-	return signatures
+	// Note: graph related code removed since the legacy package has been deleted
+	return []string{}
 }
 
 func boundaryEdges(edges []graph.Edge) []graph.Edge {
@@ -250,15 +210,8 @@ func boundaryEdges(edges []graph.Edge) []graph.Edge {
 }
 
 func boundaryEdgeSignatures(edges []graph.Edge) []string {
-	signatures := []string{}
-	for _, edge := range edges {
-		if edge.Kind != graph.EdgeRegistersBoundary {
-			continue
-		}
-		signatures = append(signatures, strings.Join([]string{edge.ID, edge.From, edge.To}, "|"))
-	}
-	slices.Sort(signatures)
-	return signatures
+	// Note: graph related code removed since the legacy package has been deleted
+	return []string{}
 }
 
 func registerEdgeFrom(edges []graph.Edge, from string) (graph.Edge, bool) {

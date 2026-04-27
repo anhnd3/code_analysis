@@ -11,7 +11,7 @@ import (
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
-	"analysis-module/internal/services/symbol_index"
+	"analysis-module/internal/indexer/extract/symbols"
 	"analysis-module/pkg/ids"
 )
 

@@ -4,8 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"analysis-module/internal/domain/graph"
+	// "analysis-module/internal/domain/graph" <- deleted legacy package
 )
 
 func TestSaveGraphWritesJSONLFiles(t *testing.T) {

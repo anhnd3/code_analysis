@@ -10,7 +10,7 @@ import (
 	"analysis-module/internal/facts"
 	"analysis-module/internal/llm"
 	factquery "analysis-module/internal/query"
-	factsqlite "analysis-module/internal/store/sqlite"
+	factsqlite "analysis-module/internal/facts/store/sqlite"
 )
 
 func TestRunClassifiesAcceptedAmbiguousRejected(t *testing.T) {

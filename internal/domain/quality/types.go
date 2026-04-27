@@ -23,14 +23,14 @@ type AnalysisQualityReport struct {
 }
 
 type FlowQualityMetrics struct {
-	ResolvedEntrypoints    int `json:"resolved_entrypoints"`
-	StitchedEdges          int `json:"stitched_edges"`
-	BoundaryMarkers        int `json:"boundary_markers"`
-	ConfirmedLinks         int `json:"confirmed_links"`
-	SubsetCompatibleLinks  int `json:"subset_compatible_links"`
-	CandidateLinks         int `json:"candidate_links"`
-	MismatchLinks          int `json:"mismatch_links"`
-	ExternalOnlyLinks      int `json:"external_only_links"`
-	ReducedChainsGenerated int `json:"reduced_chains_generated"`
+	ResolvedEntrypoints     int `json:"resolved_entrypoints"`
+	StitchedEdges           int `json:"stitched_edges"`
+	BoundaryMarkers         int `json:"boundary_markers"`
+	ConfirmedLinks          int `json:"confirmed_links"`
+	SubsetCompatibleLinks   int `json:"subset_compatible_links"`
+	CandidateLinks          int `json:"candidate_links"`
+	MismatchLinks           int `json:"mismatch_links"`
+	ExternalOnlyLinks       int `json:"external_only_links"`
+	ReducedChainsGenerated  int `json:"reduced_chains_generated"`
 	MermaidExportsGenerated int `json:"mermaid_exports_generated"`
 }

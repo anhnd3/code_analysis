@@ -1,7 +1,5 @@
 package query
 
-import "analysis-module/internal/domain/graph"
-
 type BlastRadiusRequest struct {
 	WorkspaceID string `json:"workspace_id"`
 	SnapshotID  string `json:"snapshot_id"`

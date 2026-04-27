@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"analysis-module/internal/domain/artifact"
-	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/quality"
 	artifactport "analysis-module/internal/ports/artifactstore"
 )

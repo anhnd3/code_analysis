@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"analysis-module/internal/facts"
-	factsqlite "analysis-module/internal/store/sqlite"
+	factsqlite "analysis-module/internal/facts/store/sqlite"
 )
 
 type Service struct {

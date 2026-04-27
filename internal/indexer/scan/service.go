@@ -5,9 +5,9 @@ import (
 
 	"analysis-module/internal/domain/repository"
 	scannerport "analysis-module/internal/ports/scanner"
-	"analysis-module/internal/services/repo_inventory"
+	"analysis-module/internal/indexer/scan/inventory"
 	"analysis-module/internal/services/snapshot_manage"
-	"analysis-module/internal/services/workspace_scan"
+	"analysis-module/internal/indexer/scan/workspace"
 )
 
 type Request struct {

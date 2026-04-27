@@ -2,7 +2,6 @@ package artifactstore
 
 import (
 	"analysis-module/internal/domain/artifact"
-	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/domain/quality"
 )
 

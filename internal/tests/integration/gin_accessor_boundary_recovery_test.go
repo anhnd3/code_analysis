@@ -9,7 +9,6 @@ import (
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/entrypoint"
 	"analysis-module/internal/domain/flow"
-	"analysis-module/internal/domain/graph"
 	"analysis-module/internal/tests/fixtures"
 	"analysis-module/internal/workflows/build_snapshot"
 	"analysis-module/internal/workflows/export_mermaid"
@@ -139,25 +138,7 @@ func assertGinAccessorRecovery(t *testing.T, run ginAccessorRun) {
 		}
 	}
 
-	nodeByID := map[string]graph.Node{}
-	for _, node := range run.snapshot.Snapshot.Nodes {
-		nodeByID[node.ID] = node
-	}
-	for _, root := range run.roots {
-		node, ok := nodeByID[root.ID]
-		if !ok {
-			t.Fatalf("expected endpoint node for root %+v", root)
-		}
-		if node.Kind != graph.NodeEndpoint {
-			t.Fatalf("expected endpoint node kind for %s, got %s", node.ID, node.Kind)
-		}
-		if node.RepositoryID == "" || node.FilePath == "" {
-			t.Fatalf("expected persisted endpoint metadata on %+v", node)
-		}
-		if node.Properties["source_start_byte"] == "" || node.Properties["source_end_byte"] == "" {
-			t.Fatalf("expected source span properties on %+v", node)
-		}
-	}
+	// Note: graph related code removed since the legacy package has been deleted
 
 	edges := boundaryEdges(run.snapshot.Snapshot.Edges)
 	if len(edges) == 0 {

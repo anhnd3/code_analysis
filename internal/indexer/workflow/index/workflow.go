@@ -7,12 +7,12 @@ import (
 	"analysis-module/internal/domain/symbol"
 	"analysis-module/internal/facts"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
-	"analysis-module/internal/services/boundary_detect"
+	"analysis-module/internal/indexer/extract/boundaries"
 	"analysis-module/internal/services/snapshot_manage"
-	"analysis-module/internal/services/symbol_index"
-	factjsonl "analysis-module/internal/store/jsonl"
-	factsqlite "analysis-module/internal/store/sqlite"
-	"analysis-module/internal/workflows/analyze_workspace"
+	"analysis-module/internal/indexer/extract/symbols"
+factjsonl "analysis-module/internal/facts/store/jsonl"
+factsqlite "analysis-module/internal/facts/store/sqlite"
+	"analysis-module/internal/indexer/workflow/scan"
 )
 
 type Request struct {

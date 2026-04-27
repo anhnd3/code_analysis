@@ -21,15 +21,15 @@ func extractAsyncHints(node *tree_sitter.Node, content []byte, src symbol.Symbol
 			return
 		}
 		switch inner.Kind() {
-			case "go_statement":
-				if hint, ok := asyncHint(inner, content, src, env, syntheticIndex, executionhint.HintSpawn); ok {
-					hints = append(hints, hint)
-				}
+		case "go_statement":
+			if hint, ok := asyncHint(inner, content, src, env, syntheticIndex, executionhint.HintSpawn); ok {
+				hints = append(hints, hint)
+			}
 
-			case "defer_statement":
-				if hint, ok := asyncHint(inner, content, src, env, syntheticIndex, executionhint.HintDefer); ok {
-					hints = append(hints, hint)
-				}
+		case "defer_statement":
+			if hint, ok := asyncHint(inner, content, src, env, syntheticIndex, executionhint.HintDefer); ok {
+				hints = append(hints, hint)
+			}
 
 		case "call_expression":
 			if isWaitCall(inner, content) {

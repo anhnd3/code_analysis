@@ -14,8 +14,8 @@ import (
 	"analysis-module/internal/facts"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
-	"analysis-module/internal/workflows/analyze_workspace"
-	"analysis-module/internal/workflows/facts_index"
+	"analysis-module/internal/indexer/workflow/scan"
+	"analysis-module/internal/indexer/workflow/index"
 )
 
 func main() {
@@ -131,7 +131,7 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 	if *workspaceID == "" || *snapshotID == "" || *symbol == "" {
 		fatal(fmt.Errorf("--workspace-id, --snapshot-id and --symbol are required"))
 	}
-	
+
 	dir := *outDir
 	if dir == "" {
 		dir = filepath.Join(app.Config.ArtifactRoot, "workspaces", *workspaceID, "snapshots", *snapshotID, "review")
@@ -147,26 +147,26 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	
+
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fatal(err)
 	}
 	flowPath := filepath.Join(dir, "flow.json")
 	evidencePath := filepath.Join(dir, "evidence.json")
 	uncertaintyPath := filepath.Join(dir, "uncertainty.md")
-	
+
 	if err := writeJSONFile(flowPath, result.Flow); err != nil {
 		fatal(err)
 	}
-	
+
 	if err := writeJSONFile(evidencePath, result.Flow.Steps); err != nil {
 		fatal(err)
 	}
-	
+
 	if err := os.WriteFile(uncertaintyPath, []byte(strings.Join(result.Flow.UncertaintyNotes, "\n")), 0o644); err != nil {
 		fatal(err)
 	}
-	
+
 	write(map[string]any{
 		"flow":           result.Flow,
 		"flow_path":      flowPath,
@@ -214,13 +214,13 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	
+
 	diagram := app.FlowMermaid.Render(flow)
 	target := *outPath
 	if target == "" {
 		target = filepath.Join(filepath.Dir(*reviewPath), "flow.mmd")
 	}
-	
+
 	if err := os.WriteFile(target, []byte(diagram), 0o644); err != nil {
 		fatal(err)
 	}

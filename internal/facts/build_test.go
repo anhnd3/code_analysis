@@ -6,7 +6,7 @@ import (
 
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
-	"analysis-module/internal/services/symbol_index"
+	"analysis-module/internal/indexer/extract/symbols"
 )
 
 func TestBuildIndexResolvesImportSelectorTargetsSafely(t *testing.T) {

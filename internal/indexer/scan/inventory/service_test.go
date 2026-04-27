@@ -27,10 +27,10 @@ func scanFixture() scannerport.ScanWorkspaceResult {
 		WorkspacePath: ".",
 		Repositories: []repository.Manifest{
 			{
-				ID:       "repo_a",
-				Name:     "service-a",
-				RootPath: "service-a",
-				GoFiles:  []string{"main.go"},
+				ID:                "repo_a",
+				Name:              "service-a",
+				RootPath:          "service-a",
+				GoFiles:           []string{"main.go"},
 				CandidateServices: []service.Manifest{{ID: "svc_a", Name: "service-a"}},
 				TechStack:         repository.TechStackProfile{Languages: []repository.Language{repository.LanguageGo}},
 			},

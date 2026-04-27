@@ -1,9 +1,9 @@
 package goextractor
 
 import (
-	"fmt"
 	"analysis-module/internal/domain/symbol"
 	"analysis-module/pkg/ids"
+	"fmt"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
