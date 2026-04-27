@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-service BoundaryService {
-  rpc Ping (PingRequest) returns (PingResponse);
-}
-
-message PingRequest {}
-message PingResponse {}

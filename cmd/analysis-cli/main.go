@@ -14,6 +14,8 @@ import (
 	"analysis-module/internal/facts"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
+	"analysis-module/internal/workflows/analyze_workspace"
+	"analysis-module/internal/workflows/facts_index"
 )
 
 func main() {
@@ -61,23 +63,6 @@ func printUsage() {
 	}
 }
 
-func runAnalyzeWorkspace(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("analyze-workspace", flag.ExitOnError)
-	workspacePath := fs.String("workspace", ".", "workspace path")
-	ignore := fs.String("ignore", "", "comma separated ignore patterns")
-	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
-	_ = fs.Parse(args)
-	app = rebuildApp(app, *progressMode)
-	result, err := app.AnalyzeWorkspace.Run(analyze_workspace.Request{
-		WorkspacePath:  *workspacePath,
-		IgnorePatterns: splitCSV(*ignore),
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
-}
-
 func runScan(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	workspacePath := fs.String("workspace", ".", "workspace path")
@@ -85,7 +70,7 @@ func runScan(app *bootstrap.Application, args []string) {
 	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
 	app = rebuildApp(app, *progressMode)
-	result, err := app.Scan.Run(workspace_scan.Request{
+	result, err := app.Scan.Run(analyze_workspace.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
 	})
@@ -146,6 +131,7 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 	if *workspaceID == "" || *snapshotID == "" || *symbol == "" {
 		fatal(fmt.Errorf("--workspace-id, --snapshot-id and --symbol are required"))
 	}
+	
 	dir := *outDir
 	if dir == "" {
 		dir = filepath.Join(app.Config.ArtifactRoot, "workspaces", *workspaceID, "snapshots", *snapshotID, "review")
@@ -161,21 +147,26 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 	if err != nil {
 		fatal(err)
 	}
+	
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fatal(err)
 	}
 	flowPath := filepath.Join(dir, "flow.json")
 	evidencePath := filepath.Join(dir, "evidence.json")
 	uncertaintyPath := filepath.Join(dir, "uncertainty.md")
+	
 	if err := writeJSONFile(flowPath, result.Flow); err != nil {
 		fatal(err)
 	}
+	
 	if err := writeJSONFile(evidencePath, result.Flow.Steps); err != nil {
 		fatal(err)
 	}
+	
 	if err := os.WriteFile(uncertaintyPath, []byte(strings.Join(result.Flow.UncertaintyNotes, "\n")), 0o644); err != nil {
 		fatal(err)
 	}
+	
 	write(map[string]any{
 		"flow":           result.Flow,
 		"flow_path":      flowPath,
@@ -209,80 +200,6 @@ func runExportMarkdown(app *bootstrap.Application, args []string) {
 	})
 }
 
-func runBuildSnapshot(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("build-snapshot", flag.ExitOnError)
-	workspacePath := fs.String("workspace", ".", "workspace path")
-	ignore := fs.String("ignore", "", "comma separated ignore patterns")
-	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
-	_ = fs.Parse(args)
-	app = rebuildApp(app, *progressMode)
-	result, err := app.BuildSnapshot.Run(build_snapshot.Request{
-		WorkspacePath:  *workspacePath,
-		IgnorePatterns: splitCSV(*ignore),
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
-}
-
-func runBuildReviewBundle(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("build-review-bundle", flag.ExitOnError)
-	workspacePath := fs.String("workspace", ".", "workspace path")
-	ignore := fs.String("ignore", "", "comma separated ignore patterns")
-	outDir := fs.String("out", "", "bundle output directory")
-	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
-	_ = fs.Parse(args)
-	app = rebuildApp(app, *progressMode)
-	result, err := app.BuildReviewBundle.Run(build_review_bundle.Request{
-		WorkspacePath:  *workspacePath,
-		IgnorePatterns: splitCSV(*ignore),
-		OutDir:         *outDir,
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
-}
-
-func runBlastRadius(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("blast-radius", flag.ExitOnError)
-	workspaceID := fs.String("workspace-id", "", "workspace id")
-	snapshotID := fs.String("snapshot-id", "", "snapshot id")
-	target := fs.String("target", "", "target canonical name or node id")
-	maxDepth := fs.Int("max-depth", 3, "max traversal depth")
-	_ = fs.Parse(args)
-	result, err := app.BlastRadius.Run(blast_radius.Request{
-		WorkspaceID: *workspaceID,
-		SnapshotID:  *snapshotID,
-		Target:      *target,
-		MaxDepth:    *maxDepth,
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
-}
-
-func runImpactedTests(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("impacted-tests", flag.ExitOnError)
-	workspaceID := fs.String("workspace-id", "", "workspace id")
-	snapshotID := fs.String("snapshot-id", "", "snapshot id")
-	target := fs.String("target", "", "target canonical name or node id")
-	maxDepth := fs.Int("max-depth", 3, "max traversal depth")
-	_ = fs.Parse(args)
-	result, err := app.ImpactedTests.Run(impacted_tests.Request{
-		WorkspaceID: *workspaceID,
-		SnapshotID:  *snapshotID,
-		Target:      *target,
-		MaxDepth:    *maxDepth,
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
-}
-
 func runExportMermaid(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("export-mermaid", flag.ExitOnError)
 	reviewPath := fs.String("review", "", "flow.json path to render reviewed flow")
@@ -297,151 +214,19 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	if err != nil {
 		fatal(err)
 	}
+	
 	diagram := app.FlowMermaid.Render(flow)
 	target := *outPath
 	if target == "" {
 		target = filepath.Join(filepath.Dir(*reviewPath), "flow.mmd")
 	}
+	
 	if err := os.WriteFile(target, []byte(diagram), 0o644); err != nil {
 		fatal(err)
 	}
 	write(map[string]any{
 		"out": target,
 	})
-}
-
-func runBuildAllMermaid(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("build-all-mermaid", flag.ExitOnError)
-	workspacePath := fs.String("workspace", ".", "workspace path")
-	ignore := fs.String("ignore", "", "comma separated ignore patterns")
-	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
-	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
-	maxBranches := fs.Int("max-branches", 5, "max branch limit")
-	_ = fs.Parse(args)
-	app = rebuildApp(app, *progressMode)
-
-	// Step 1: Build Snapshot
-	app.Logger.Info("Building snapshot...")
-	snapResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
-		WorkspacePath:  *workspacePath,
-		IgnorePatterns: splitCSV(*ignore),
-	})
-	if err != nil {
-		fatal(fmt.Errorf("failed to build snapshot: %w", err))
-	}
-	app.Logger.Info("Snapshot built", "workspace_id", snapResult.WorkspaceID, "snapshot_id", snapResult.Snapshot.ID)
-
-	var allResults []legacymermaid.Result
-
-	// Step 2: Pass A - Bootstrap
-	app.Logger.Info("Exporting 'bootstrap' flows...")
-	resBoot, err := app.ExportMermaid.Run(legacymermaid.Request{
-		WorkspaceID:  snapResult.WorkspaceID,
-		SnapshotID:   snapResult.Snapshot.ID,
-		RootType:     legacymermaid.RootFilterBootstrap,
-		MaxDepth:     *maxDepth,
-		MaxBranches:  *maxBranches,
-		CollapseMode: "default",
-	}, snapResult.Inventory, snapResult.Snapshot)
-	if err != nil {
-		app.Logger.Error("bootstrap export failed", "error", err)
-	} else {
-		allResults = append(allResults, resBoot)
-	}
-
-	// Step 3: Pass B - HTTP
-	app.Logger.Info("Exporting 'http' endpoint flows...")
-	resHTTP, err := app.ExportMermaid.Run(legacymermaid.Request{
-		WorkspaceID:  snapResult.WorkspaceID,
-		SnapshotID:   snapResult.Snapshot.ID,
-		RootType:     legacymermaid.RootFilterHTTP,
-		RenderMode:   legacymermaid.RenderModeReview,
-		MaxDepth:     *maxDepth,
-		CollapseMode: "default",
-	}, snapResult.Inventory, snapResult.Snapshot)
-	if err != nil {
-		app.Logger.Error("http export failed", "error", err)
-	} else {
-		allResults = append(allResults, resHTTP)
-	}
-
-	// Step 4: Pass C - Worker
-	app.Logger.Info("Exporting 'worker' flows...")
-	resWorker, err := app.ExportMermaid.Run(legacymermaid.Request{
-		WorkspaceID:  snapResult.WorkspaceID,
-		SnapshotID:   snapResult.Snapshot.ID,
-		RootType:     legacymermaid.RootFilterWorker,
-		MaxDepth:     *maxDepth,
-		CollapseMode: "aggressive",
-	}, snapResult.Inventory, snapResult.Snapshot)
-	if err != nil {
-		app.Logger.Error("worker export failed", "error", err)
-	} else {
-		allResults = append(allResults, resWorker)
-	}
-
-	write(map[string]any{
-		"snapshot": snapResult,
-		"exports":  allResults,
-	})
-}
-
-func runGraph(app *bootstrap.Application, args []string) {
-	if len(args) == 0 {
-		fatal(fmt.Errorf("expected legacy graph subcommand: import-sqlite | list-startpoints | export-markdown-review"))
-	}
-	switch args[0] {
-	case "import-sqlite":
-		runGraphImportSQLite(app, args[1:])
-	case "list-startpoints":
-		runGraphListStartpoints(app, args[1:])
-	case "export-markdown-review":
-		runGraphExportMarkdownReview(app, args[1:])
-	default:
-		fatal(fmt.Errorf("unknown legacy graph subcommand: %s", args[0]))
-	}
-}
-
-func runGraphImportSQLite(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("graph import-sqlite", flag.ExitOnError)
-	workspaceID := fs.String("workspace-id", "", "workspace id")
-	snapshotID := fs.String("snapshot-id", "", "snapshot id")
-	nodesPath := fs.String("nodes", "", "legacy graph nodes jsonl path")
-	edgesPath := fs.String("edges", "", "legacy graph edges jsonl path")
-	repoManifestPath := fs.String("repo-manifest", "", "repository manifests json path")
-	serviceManifestPath := fs.String("service-manifest", "", "service manifests json path")
-	qualityReportPath := fs.String("quality-report", "", "quality report json path")
-	ignoreFilePath := fs.String("ignore-file", "", "optional text review ignore file")
-	outDBPath := fs.String("out", "", "review graph sqlite output path")
-	_ = fs.Parse(args)
-	fatal(fmt.Errorf("legacy command not supported"))
-}
-
-func runGraphListStartpoints(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("graph list-startpoints", flag.ExitOnError)
-	dbPath := fs.String("db", "", "review graph sqlite path")
-	mode := fs.String("mode", "workflow", "selection mode: manual|workflow|entrypoints")
-	symbol := fs.String("symbol", "", "manual symbol selector")
-	file := fs.String("file", "", "manual file selector")
-	topic := fs.String("topic", "", "manual topic selector")
-	outPath := fs.String("out", "", "resolved targets output file")
-	_ = fs.Parse(args)
-	fatal(fmt.Errorf("legacy command not supported"))
-}
-
-func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
-	fs := flag.NewFlagSet("graph export-markdown-review", flag.ExitOnError)
-	dbPath := fs.String("db", "", "review graph sqlite path")
-	targetsFile := fs.String("targets-file", "", "resolved targets json file")
-	mode := fs.String("mode", "full-flow", "traversal mode: full-flow|bounded")
-	renderMode := fs.String("render-mode", "grouped", "render mode: grouped|raw")
-	companionView := fs.String("companion-view", "none", "companion view generation: none|overview|all")
-	includeAsync := fs.Bool("include-async", true, "include async traversal")
-	forwardDepth := fs.Int("forward-depth", 2, "bounded forward depth")
-	reverseDepth := fs.Int("reverse-depth", 2, "bounded reverse depth")
-	outDir := fs.String("out", "", "review directory output path")
-	_ = fs.Parse(args)
-	fatal(fmt.Errorf("legacy command not supported"))
 }
 
 func rebuildApp(existing *bootstrap.Application, progressMode string) *bootstrap.Application {

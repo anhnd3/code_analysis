@@ -1,6 +1,0 @@
-{
-  "name": "ignored-service",
-  "scripts": {
-    "start": "node server.ts"
-  }
-}

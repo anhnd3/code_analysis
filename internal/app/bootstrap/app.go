@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"log/slog" 	
+	"log/slog"	
 	"time"
 
 	artifactfs "analysis-module/internal/adapters/artifactstore/filesystem"
@@ -17,6 +17,11 @@ import (
 	"analysis-module/internal/services/workspace_scan"
 	"analysis-module/internal/workflows/analyze_workspace"
 	"analysis-module/internal/workflows/facts_index"
+	"analysis-module/internal/adapters/scanner/detectors"
+	"analysis-module/internal/services/repo_inventory"
+	"analysis-module/internal/services/symbol_index"
+	boundary "analysis-module/internal/adapters/boundary/go"
+	"analysis-module/internal/adapters/boundary/go/frameworks"
 )
 
 type Application struct {
@@ -36,9 +41,13 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	reporter := progress.NewStderrReporter(cfg.ProgressMode)
 	snapshotManageSvc := snapshot_manage.New()
 	workspaceScanSvc := workspace_scan.New(
+		detectors.NewRepoRootDetector(reporter),
+		detectors.NewTechStackDetector(),
+		detectors.NewServiceDetector(),
 		reporter,
 	)
-	analyzeWorkflow := analyze_workspace.New(workspaceScanSvc, artifactStore, snapshotManageSvc)
+	inventory := repo_inventory.New()
+	analyzeWorkflow := analyze_workspace.New(workspaceScanSvc, inventory, artifactStore, snapshotManageSvc)
 
 	boundaryRegistry := boundary.NewRegistry()
 	boundaryRegistry.Register(frameworks.NewGinDetector())
@@ -46,7 +55,8 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	boundaryRegistry.Register(frameworks.NewGRPCGatewayDetector())
 	boundaryDetectSvc := boundary_detect.New(boundaryRegistry)
 
-	factsIndexWorkflow := facts_index.New(analyzeWorkflow, boundaryDetectSvc, snapshotManageSvc, artifactStore, cfg.ArtifactRoot)
+	symbolIdx := symbol_index.New(reporter)
+	factsIndexWorkflow := facts_index.New(analyzeWorkflow, symbolIdx, boundaryDetectSvc, snapshotManageSvc, artifactStore, cfg.ArtifactRoot)
 	factsQuerySvc := factquery.New(cfg.ArtifactRoot)
 	var llmClient llm.Client = llm.NoopClient{}
 	if cfg.LLMBaseURL != "" && cfg.LLMModel != "" {
