@@ -11,19 +11,9 @@ import (
 	"analysis-module/internal/app/bootstrap"
 	"analysis-module/internal/app/config"
 	"analysis-module/internal/app/logging"
-	"analysis-module/internal/domain/graph"
-	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/facts"
-	legacymermaid "analysis-module/internal/legacy/mermaid_old"
-	legacyreviewgraph "analysis-module/internal/legacy/reviewgraph"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
-	"analysis-module/internal/workflows/analyze_workspace"
-	"analysis-module/internal/workflows/blast_radius"
-	"analysis-module/internal/workflows/build_review_bundle"
-	"analysis-module/internal/workflows/build_snapshot"
-	"analysis-module/internal/workflows/facts_index"
-	"analysis-module/internal/workflows/impacted_tests"
 )
 
 func main() {
@@ -47,22 +37,8 @@ func main() {
 		runReviewFlow(app, os.Args[2:])
 	case "export-md":
 		runExportMarkdown(app, os.Args[2:])
-	case "analyze-workspace":
-		runAnalyzeWorkspace(app, os.Args[2:])
-	case "build-snapshot":
-		runBuildSnapshot(app, os.Args[2:])
-	case "build-review-bundle":
-		runBuildReviewBundle(app, os.Args[2:])
-	case "blast-radius":
-		runBlastRadius(app, os.Args[2:])
-	case "impacted-tests":
-		runImpactedTests(app, os.Args[2:])
 	case "export-mermaid":
 		runExportMermaid(app, os.Args[2:])
-	case "build-all-mermaid":
-		runBuildAllMermaid(app, os.Args[2:])
-	case "graph":
-		runGraph(app, os.Args[2:])
 	default:
 		printUsage()
 		fatal(fmt.Errorf("unknown subcommand: %s", os.Args[1]))
@@ -321,105 +297,27 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("export-mermaid", flag.ExitOnError)
 	reviewPath := fs.String("review", "", "flow.json path to render reviewed flow")
 	outPath := fs.String("out", "", "mermaid output path")
-	workspacePath := fs.String("workspace", "", "workspace path to analyze and export")
-	snapshotFile := fs.String("snapshot", "", "JSON snapshot path to load and export")
-	rootType := fs.String("root-type", "master", "root type: bootstrap|http|worker|symbol|master")
-	rootSelector := fs.String("root-selector", "", "target canonical name or node id")
-	reviewScope := fs.String("review-scope", "root", "review scope: root|service_pack")
-	expectedRootsFile := fs.String("expected-roots-file", "", "path to expected roots JSON manifest for service_pack mode")
-	renderMode := fs.String("render-mode", "auto", "render mode: auto|review|reduced_debug")
-	reviewStrict := fs.Bool("review-strict", false, "fail review mode instead of silently falling back")
-	maxDepth := fs.Int("max-depth", 30, "max traversal depth")
-	maxBranches := fs.Int("max-branches", 5, "max branch limit")
-	collapseMode := fs.String("collapse-mode", "default", "collapse mode: default|none|aggressive")
-	serviceName := fs.String("service-name", "", "service short name")
-	incCandidates := fs.Bool("include-candidates", false, "include candidate boundary links")
-	emitDebug := fs.Bool("emit-debug-bundle", false, "emit debug bundle files")
-	debugOut := fs.String("debug-out", "./analysis-debug/", "debug bundle output directory")
 	_ = fs.Parse(args)
 
-	if *reviewPath != "" {
-		flow, err := readReviewFlow(*reviewPath)
-		if err != nil {
-			fatal(err)
-		}
-		diagram := app.FlowMermaid.Render(flow)
-		target := *outPath
-		if target == "" {
-			target = filepath.Join(filepath.Dir(*reviewPath), "flow.mmd")
-		}
-		if err := os.WriteFile(target, []byte(diagram), 0o644); err != nil {
-			fatal(err)
-		}
-		write(map[string]any{
-			"out": target,
-		})
-		return
+	if *reviewPath == "" {
+		fatal(fmt.Errorf("--review is required"))
 	}
 
-	if *workspacePath == "" && *snapshotFile == "" {
-		fatal(fmt.Errorf("either --workspace or --snapshot must be provided"))
-	}
-	if *workspacePath != "" && *snapshotFile != "" {
-		fatal(fmt.Errorf("only one of --workspace or --snapshot can be provided"))
-	}
-
-	var inventory repository.Inventory
-	var snapshot graph.GraphSnapshot
-	var workspaceID string
-
-	if *workspacePath != "" {
-		app.Logger.Info("Analyzing workspace...", "path", *workspacePath)
-		snapResult, err := app.BuildSnapshot.Run(build_snapshot.Request{
-			WorkspacePath: *workspacePath,
-		})
-		if err != nil {
-			fatal(fmt.Errorf("failed to build snapshot: %w", err))
-		}
-		inventory = snapResult.Inventory
-		snapshot = snapResult.Snapshot
-		workspaceID = snapResult.WorkspaceID
-	} else {
-		app.Logger.Info("Loading snapshot file...", "path", *snapshotFile)
-		data, err := os.ReadFile(*snapshotFile)
-		if err != nil {
-			fatal(fmt.Errorf("failed to read snapshot file: %w", err))
-		}
-		var snapResult build_snapshot.Result
-		if err := json.Unmarshal(data, &snapResult); err != nil {
-			fatal(fmt.Errorf("failed to unmarshal snapshot: %w", err))
-		}
-		inventory = snapResult.Inventory
-		snapshot = snapResult.Snapshot
-		workspaceID = snapResult.WorkspaceID
-	}
-
-	debugDir := ""
-	if *emitDebug {
-		debugDir = *debugOut
-	}
-
-	result, err := app.ExportMermaid.Run(legacymermaid.Request{
-		WorkspaceID:       workspaceID,
-		SnapshotID:        snapshot.ID,
-		RootType:          legacymermaid.RootTypeFilter(*rootType),
-		RootSelector:      *rootSelector,
-		ReviewScope:       legacymermaid.ReviewScope(*reviewScope),
-		ExpectedRootsFile: *expectedRootsFile,
-		RenderMode:        legacymermaid.RenderMode(*renderMode),
-		ReviewStrict:      *reviewStrict,
-		MaxDepth:          *maxDepth,
-		MaxBranches:       *maxBranches,
-		CollapseMode:      *collapseMode,
-		ServiceShortName:  *serviceName,
-		IncludeCandidates: *incCandidates,
-		DebugBundleDir:    debugDir,
-	}, inventory, snapshot)
+	flow, err := readReviewFlow(*reviewPath)
 	if err != nil {
 		fatal(err)
 	}
-	// Print JSON result structure output
-	write(result)
+	diagram := app.FlowMermaid.Render(flow)
+	target := *outPath
+	if target == "" {
+		target = filepath.Join(filepath.Dir(*reviewPath), "flow.mmd")
+	}
+	if err := os.WriteFile(target, []byte(diagram), 0o644); err != nil {
+		fatal(err)
+	}
+	write(map[string]any{
+		"out": target,
+	})
 }
 
 func runBuildAllMermaid(app *bootstrap.Application, args []string) {
