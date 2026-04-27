@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"log/slog"	
+	"log/slog" 	
 	"time"
 
 	artifactfs "analysis-module/internal/adapters/artifactstore/filesystem"
@@ -69,7 +69,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 		FactsIndex:   factsIndexWorkflow,
 		FactsQuery:   factsQuerySvc,
 		FlowReview:   flowReviewSvc,
-		FlowMarkdown: factMarkdownSvc,
+		FlowMarkdown: flowMarkdownSvc,
 		FlowMermaid:  flowMermaidSvc,
 	}, nil
 }

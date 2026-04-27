@@ -18,7 +18,6 @@ import (
 	"analysis-module/internal/domain/quality"
 	"analysis-module/internal/domain/reduced"
 	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/domain/reviewflow"
 	"analysis-module/internal/domain/sequence"
 	"analysis-module/internal/domain/symbol"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
@@ -28,7 +27,6 @@ import (
 	"analysis-module/internal/services/entrypoint_resolve"
 	"analysis-module/internal/services/flow_stitch"
 	"analysis-module/internal/services/mermaid_emit"
-	"analysis-module/internal/services/reviewflow_build"
 	"analysis-module/internal/services/sequence_model_build"
 )
 

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"analysis-module/internal/domain/reviewgraph"
 
 	_ "modernc.org/sqlite"
 )
@@ -40,7 +39,7 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) ReplaceSnapshot(snapshotID string, nodes []reviewgraph.Node, edges []reviewgraph.Edge, artifacts []reviewgraph.Artifact) error {
+func (s *Store) ReplaceSnapshot(snapshotID string, nodes [], edges []Edge, artifacts []Artifact) error {
 	if _, err := s.db.Exec(`pragma journal_mode = WAL`); err != nil {
 		return err
 	}
@@ -105,14 +104,14 @@ func (s *Store) ReplaceSnapshot(snapshotID string, nodes []reviewgraph.Node, edg
 	return tx.Commit()
 }
 
-func (s *Store) UpsertArtifact(artifact reviewgraph.Artifact) error {
+func (s *Store) UpsertArtifact(artifact Artifact) error {
 	_, err := s.db.Exec(`insert into artifacts(id, snapshot_id, artifact_type, target_node_id, path, metadata_json) values(?, ?, ?, ?, ?, ?)
 	on conflict(id) do update set snapshot_id = excluded.snapshot_id, artifact_type = excluded.artifact_type, target_node_id = excluded.target_node_id, path = excluded.path, metadata_json = excluded.metadata_json`,
 		artifact.ID, artifact.SnapshotID, string(artifact.ArtifactType), artifact.TargetNodeID, artifact.Path, artifact.MetadataJSON)
 	return err
 }
 
-func (s *Store) ReplaceDerivedForAnchor(snapshotID, anchorTargetID string, nodes []reviewgraph.DerivedNode, edges []reviewgraph.DerivedEdge) error {
+func (s *Store) ReplaceDerivedForAnchor(snapshotID, anchorTargetID string, nodes []DerivedNode, edges []DerivedEdge) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -166,7 +165,7 @@ func (s *Store) SnapshotID() (string, error) {
 	return "", sql.ErrNoRows
 }
 
-func (s *Store) ListNodes() ([]reviewgraph.Node, error) {
+func (s *Store) ListNodes() ([], error) {
 	rows, err := s.db.Query(`select id, snapshot_id, repo, service, language, kind, symbol, file_path, start_line, end_line, signature, visibility, node_role, metadata_json from nodes order by id`)
 	if err != nil {
 		return nil, err
@@ -174,96 +173,96 @@ func (s *Store) ListNodes() ([]reviewgraph.Node, error) {
 	return scanNodes(rows)
 }
 
-func (s *Store) ListEdges() ([]reviewgraph.Edge, error) {
+func (s *Store) ListEdges() ([]Edge, error) {
 	rows, err := s.db.Query(`select id, snapshot_id, src_id, dst_id, edge_type, flow_kind, confidence, evidence_file, evidence_line, evidence_text, transport, topic_or_channel, metadata_json from edges order by id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []reviewgraph.Edge{}
+	result := []Edge{}
 	for rows.Next() {
-		var edge reviewgraph.Edge
+		var edge Edge
 		var edgeType, flowKind string
 		if err := rows.Scan(&edge.ID, &edge.SnapshotID, &edge.SrcID, &edge.DstID, &edgeType, &flowKind, &edge.Confidence, &edge.EvidenceFile, &edge.EvidenceLine, &edge.EvidenceText, &edge.Transport, &edge.TopicOrChannel, &edge.MetadataJSON); err != nil {
 			return nil, err
 		}
-		edge.EdgeType = reviewgraph.EdgeType(edgeType)
-		edge.FlowKind = reviewgraph.FlowKind(flowKind)
+		edge.EdgeType = EdgeType(edgeType)
+		edge.FlowKind = FlowKind(flowKind)
 		result = append(result, edge)
 	}
 	return result, rows.Err()
 }
 
-func (s *Store) ListArtifacts() ([]reviewgraph.Artifact, error) {
+func (s *Store) ListArtifacts() ([]Artifact, error) {
 	rows, err := s.db.Query(`select id, snapshot_id, artifact_type, target_node_id, path, metadata_json from artifacts order by id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []reviewgraph.Artifact{}
+	result := []Artifact{}
 	for rows.Next() {
-		var artifact reviewgraph.Artifact
+		var artifact Artifact
 		var artifactType string
 		if err := rows.Scan(&artifact.ID, &artifact.SnapshotID, &artifactType, &artifact.TargetNodeID, &artifact.Path, &artifact.MetadataJSON); err != nil {
 			return nil, err
 		}
-		artifact.ArtifactType = reviewgraph.ArtifactType(artifactType)
+		artifact.ArtifactType = ArtifactType(artifactType)
 		result = append(result, artifact)
 	}
 	return result, rows.Err()
 }
 
-func (s *Store) ListDerivedNodesByAnchor(anchorTargetID string) ([]reviewgraph.DerivedNode, error) {
+func (s *Store) ListDerivedNodesByAnchor(anchorTargetID string) ([]DerivedNode, error) {
 	rows, err := s.db.Query(`select id, snapshot_id, anchor_target_id, kind, label, metadata_json from derived_nodes where anchor_target_id = ? order by kind, label, id`, anchorTargetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []reviewgraph.DerivedNode{}
+	result := []DerivedNode{}
 	for rows.Next() {
-		var node reviewgraph.DerivedNode
+		var node DerivedNode
 		var kind string
 		if err := rows.Scan(&node.ID, &node.SnapshotID, &node.AnchorTargetID, &kind, &node.Label, &node.MetadataJSON); err != nil {
 			return nil, err
 		}
-		node.Kind = reviewgraph.NodeKind(kind)
+		node.Kind = Kind(kind)
 		result = append(result, node)
 	}
 	return result, rows.Err()
 }
 
-func (s *Store) ListDerivedEdgesByAnchor(anchorTargetID string) ([]reviewgraph.DerivedEdge, error) {
+func (s *Store) ListDerivedEdgesByAnchor(anchorTargetID string) ([]DerivedEdge, error) {
 	rows, err := s.db.Query(`select id, snapshot_id, anchor_target_id, src_id, dst_id, edge_type, metadata_json from derived_edges where anchor_target_id = ? order by edge_type, src_id, dst_id, id`, anchorTargetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []reviewgraph.DerivedEdge{}
+	result := []DerivedEdge{}
 	for rows.Next() {
-		var edge reviewgraph.DerivedEdge
+		var edge DerivedEdge
 		var edgeType string
 		if err := rows.Scan(&edge.ID, &edge.SnapshotID, &edge.AnchorTargetID, &edge.SrcID, &edge.DstID, &edgeType, &edge.MetadataJSON); err != nil {
 			return nil, err
 		}
-		edge.EdgeType = reviewgraph.EdgeType(edgeType)
+		edge.EdgeType = EdgeType(edgeType)
 		result = append(result, edge)
 	}
 	return result, rows.Err()
 }
 
-func (s *Store) FindNodeByID(id string) (reviewgraph.Node, error) {
+func (s *Store) FindNodeByID(id string) (, error) {
 	row := s.db.QueryRow(`select id, snapshot_id, repo, service, language, kind, symbol, file_path, start_line, end_line, signature, visibility, node_role, metadata_json from nodes where id = ?`, id)
-	var node reviewgraph.Node
+	var node 
 	var kind, role string
 	if err := row.Scan(&node.ID, &node.SnapshotID, &node.Repo, &node.Service, &node.Language, &kind, &node.Symbol, &node.FilePath, &node.StartLine, &node.EndLine, &node.Signature, &node.Visibility, &role, &node.MetadataJSON); err != nil {
-		return reviewgraph.Node{}, err
+		return {}, err
 	}
-	node.Kind = reviewgraph.NodeKind(kind)
-	node.NodeRole = reviewgraph.NodeRole(role)
+	node.Kind = Kind(kind)
+	node.NodeRole = Role(role)
 	return node, nil
 }
 
-func (s *Store) FindNodesBySymbol(symbol string) ([]reviewgraph.Node, error) {
+func (s *Store) FindNodesBySymbol(symbol string) ([], error) {
 	rows, err := s.db.Query(`select id, snapshot_id, repo, service, language, kind, symbol, file_path, start_line, end_line, signature, visibility, node_role, metadata_json from nodes where symbol = ? or lower(symbol) = lower(?) order by file_path, id`, symbol, symbol)
 	if err != nil {
 		return nil, err
@@ -271,7 +270,7 @@ func (s *Store) FindNodesBySymbol(symbol string) ([]reviewgraph.Node, error) {
 	return scanNodes(rows)
 }
 
-func (s *Store) FindNodesByFile(filePath string) ([]reviewgraph.Node, error) {
+func (s *Store) FindNodesByFile(filePath string) ([], error) {
 	rows, err := s.db.Query(`select id, snapshot_id, repo, service, language, kind, symbol, file_path, start_line, end_line, signature, visibility, node_role, metadata_json from nodes where file_path = ? order by kind, symbol, id`, filepath.ToSlash(filePath))
 	if err != nil {
 		return nil, err
@@ -279,7 +278,7 @@ func (s *Store) FindNodesByFile(filePath string) ([]reviewgraph.Node, error) {
 	return scanNodes(rows)
 }
 
-func (s *Store) FindNodesByKinds(kinds ...reviewgraph.NodeKind) ([]reviewgraph.Node, error) {
+func (s *Store) FindNodesByKinds(kinds ...Kind) ([], error) {
 	if len(kinds) == 0 {
 		return nil, nil
 	}
@@ -295,7 +294,7 @@ func (s *Store) FindNodesByKinds(kinds ...reviewgraph.NodeKind) ([]reviewgraph.N
 	return scanNodes(rows)
 }
 
-func (s *Store) FindNodesByRoles(roles ...reviewgraph.NodeRole) ([]reviewgraph.Node, error) {
+func (s *Store) FindNodesByRoles(roles ...Role) ([], error) {
 	if len(roles) == 0 {
 		return nil, nil
 	}
@@ -311,44 +310,44 @@ func (s *Store) FindNodesByRoles(roles ...reviewgraph.NodeRole) ([]reviewgraph.N
 	return scanNodes(rows)
 }
 
-func (s *Store) FindArtifactsByType(artifactType reviewgraph.ArtifactType) ([]reviewgraph.Artifact, error) {
+func (s *Store) FindArtifactsByType(artifactType ArtifactType) ([]Artifact, error) {
 	rows, err := s.db.Query(`select id, snapshot_id, artifact_type, target_node_id, path, metadata_json from artifacts where artifact_type = ? order by id`, string(artifactType))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []reviewgraph.Artifact{}
+	result := []Artifact{}
 	for rows.Next() {
-		var artifact reviewgraph.Artifact
+		var artifact Artifact
 		var rawType string
 		if err := rows.Scan(&artifact.ID, &artifact.SnapshotID, &rawType, &artifact.TargetNodeID, &artifact.Path, &artifact.MetadataJSON); err != nil {
 			return nil, err
 		}
-		artifact.ArtifactType = reviewgraph.ArtifactType(rawType)
+		artifact.ArtifactType = ArtifactType(rawType)
 		result = append(result, artifact)
 	}
 	return result, rows.Err()
 }
 
-func (s *Store) FindArtifactByTypeAndTarget(artifactType reviewgraph.ArtifactType, targetNodeID string) (reviewgraph.Artifact, error) {
+func (s *Store) FindArtifactByTypeAndTarget(artifactType ArtifactType, targetNodeID string) (Artifact, error) {
 	row := s.db.QueryRow(`select id, snapshot_id, artifact_type, target_node_id, path, metadata_json from artifacts where artifact_type = ? and target_node_id = ? limit 1`, string(artifactType), targetNodeID)
-	var artifact reviewgraph.Artifact
+	var artifact Artifact
 	var rawType string
 	if err := row.Scan(&artifact.ID, &artifact.SnapshotID, &rawType, &artifact.TargetNodeID, &artifact.Path, &artifact.MetadataJSON); err != nil {
-		return reviewgraph.Artifact{}, err
+		return Artifact{}, err
 	}
-	artifact.ArtifactType = reviewgraph.ArtifactType(rawType)
+	artifact.ArtifactType = ArtifactType(rawType)
 	return artifact, nil
 }
 
-func (s *Store) FindArtifactByTypeAndPath(artifactType reviewgraph.ArtifactType, path string) (reviewgraph.Artifact, error) {
+func (s *Store) FindArtifactByTypeAndPath(artifactType ArtifactType, path string) (Artifact, error) {
 	row := s.db.QueryRow(`select id, snapshot_id, artifact_type, target_node_id, path, metadata_json from artifacts where artifact_type = ? and path = ? limit 1`, string(artifactType), filepath.Clean(path))
-	var artifact reviewgraph.Artifact
+	var artifact Artifact
 	var rawType string
 	if err := row.Scan(&artifact.ID, &artifact.SnapshotID, &rawType, &artifact.TargetNodeID, &artifact.Path, &artifact.MetadataJSON); err != nil {
-		return reviewgraph.Artifact{}, err
+		return Artifact{}, err
 	}
-	artifact.ArtifactType = reviewgraph.ArtifactType(rawType)
+	artifact.ArtifactType = ArtifactType(rawType)
 	return artifact, nil
 }
 
@@ -383,17 +382,17 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-func scanNodes(rows *sql.Rows) ([]reviewgraph.Node, error) {
+func scanNodes(rows *sql.Rows) ([], error) {
 	defer rows.Close()
-	result := []reviewgraph.Node{}
+	result := []{}
 	for rows.Next() {
-		var node reviewgraph.Node
+		var node 
 		var kind, role string
 		if err := rows.Scan(&node.ID, &node.SnapshotID, &node.Repo, &node.Service, &node.Language, &kind, &node.Symbol, &node.FilePath, &node.StartLine, &node.EndLine, &node.Signature, &node.Visibility, &role, &node.MetadataJSON); err != nil {
 			return nil, err
 		}
-		node.Kind = reviewgraph.NodeKind(kind)
-		node.NodeRole = reviewgraph.NodeRole(role)
+		node.Kind = Kind(kind)
+		node.NodeRole = Role(role)
 		result = append(result, node)
 	}
 	return result, rows.Err()

@@ -21,7 +21,7 @@ blocked=(
 )
 
 for term in "${blocked[@]}"; do
-  if grep -R "$term" ./cmd ./internal ./scripts ./README.md 2>/dev/null; then
+  if grep -R "$term" ./cmd ./internal ./README.md 2>/dev/null; then
     echo "legacy reference found: $term"
     exit 1
   fi

@@ -52,19 +52,9 @@ func printUsage() {
 		"Primary path:",
 		"  scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid --review",
 		"",
-		"Compatibility only:",
-		"  analyze-workspace",
-		"  build-snapshot",
-		"  build-review-bundle",
-		"  blast-radius",
-		"  impacted-tests",
-		"  export-mermaid (workspace/snapshot/root/debug legacy modes)",
-		"  build-all-mermaid",
-		"  graph <subcommand>",
-		"",
 		"Notes:",
-		"  scan is the primary alias for workspace discovery; analyze-workspace remains compatibility only.",
-		"  export-mermaid is primary only with --review; all other export-mermaid entry modes are legacy compatibility.",
+		"  scan is the primary alias for workspace discovery.",
+		"  export-mermaid is primary only with --review flag.",
 	}
 	for _, line := range lines {
 		fmt.Fprintln(os.Stderr, line)
@@ -95,7 +85,7 @@ func runScan(app *bootstrap.Application, args []string) {
 	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
 	app = rebuildApp(app, *progressMode)
-	result, err := app.AnalyzeWorkspace.Run(analyze_workspace.Request{
+	result, err := app.Scan.Run(workspace_scan.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
 	})
@@ -424,21 +414,7 @@ func runGraphImportSQLite(app *bootstrap.Application, args []string) {
 	ignoreFilePath := fs.String("ignore-file", "", "optional text review ignore file")
 	outDBPath := fs.String("out", "", "review graph sqlite output path")
 	_ = fs.Parse(args)
-	result, err := app.ReviewGraphImport.Run(legacyreviewgraph.ImportRequest{
-		WorkspaceID:         *workspaceID,
-		SnapshotID:          *snapshotID,
-		NodesPath:           *nodesPath,
-		EdgesPath:           *edgesPath,
-		RepoManifestPath:    *repoManifestPath,
-		ServiceManifestPath: *serviceManifestPath,
-		QualityReportPath:   *qualityReportPath,
-		IgnoreFilePath:      *ignoreFilePath,
-		OutDBPath:           *outDBPath,
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
+	fatal(fmt.Errorf("legacy command not supported"))
 }
 
 func runGraphListStartpoints(app *bootstrap.Application, args []string) {
@@ -450,25 +426,14 @@ func runGraphListStartpoints(app *bootstrap.Application, args []string) {
 	topic := fs.String("topic", "", "manual topic selector")
 	outPath := fs.String("out", "", "resolved targets output file")
 	_ = fs.Parse(args)
-	result, err := app.ReviewGraphListStartpoints.Run(legacyreviewgraph.SelectRequest{
-		DBPath:  *dbPath,
-		Mode:    *mode,
-		Symbol:  *symbol,
-		File:    *file,
-		Topic:   *topic,
-		OutPath: *outPath,
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
+	fatal(fmt.Errorf("legacy command not supported"))
 }
 
 func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	fs := flag.NewFlagSet("graph export-markdown-review", flag.ExitOnError)
 	dbPath := fs.String("db", "", "review graph sqlite path")
 	targetsFile := fs.String("targets-file", "", "resolved targets json file")
-	mode := fs.String("mode", string(legacyreviewgraph.TraversalFullFlow), "traversal mode: full-flow|bounded")
+	mode := fs.String("mode", "full-flow", "traversal mode: full-flow|bounded")
 	renderMode := fs.String("render-mode", "grouped", "render mode: grouped|raw")
 	companionView := fs.String("companion-view", "none", "companion view generation: none|overview|all")
 	includeAsync := fs.Bool("include-async", true, "include async traversal")
@@ -476,21 +441,7 @@ func runGraphExportMarkdownReview(app *bootstrap.Application, args []string) {
 	reverseDepth := fs.Int("reverse-depth", 2, "bounded reverse depth")
 	outDir := fs.String("out", "", "review directory output path")
 	_ = fs.Parse(args)
-	result, err := app.ReviewGraphExport.Run(legacyreviewgraph.ExportRequest{
-		DBPath:        *dbPath,
-		TargetsFile:   *targetsFile,
-		Mode:          *mode,
-		RenderMode:    *renderMode,
-		CompanionView: *companionView,
-		IncludeAsync:  *includeAsync,
-		ForwardDepth:  *forwardDepth,
-		ReverseDepth:  *reverseDepth,
-		OutDir:        *outDir,
-	})
-	if err != nil {
-		fatal(err)
-	}
-	write(result)
+	fatal(fmt.Errorf("legacy command not supported"))
 }
 
 func rebuildApp(existing *bootstrap.Application, progressMode string) *bootstrap.Application {
