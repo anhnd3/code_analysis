@@ -15,16 +15,16 @@ import (
 	"analysis-module/internal/app/progress"
 	factmarkdown "analysis-module/internal/export/markdown"
 	factmermaid "analysis-module/internal/export/mermaid"
+	"analysis-module/internal/indexer/extract/boundaries"
+	"analysis-module/internal/indexer/extract/symbols"
+	"analysis-module/internal/indexer/scan/inventory"
+	"analysis-module/internal/indexer/scan/workspace"
+	"analysis-module/internal/indexer/workflow/index"
+	"analysis-module/internal/indexer/workflow/scan"
 	"analysis-module/internal/llm"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
-	"analysis-module/internal/indexer/extract/boundaries"
-	"analysis-module/internal/indexer/scan/inventory"
 	"analysis-module/internal/services/snapshot_manage"
-	"analysis-module/internal/indexer/extract/symbols"
-	"analysis-module/internal/indexer/scan/workspace"
-	"analysis-module/internal/indexer/workflow/scan"
-	"analysis-module/internal/indexer/workflow/index"
 )
 
 type Application struct {

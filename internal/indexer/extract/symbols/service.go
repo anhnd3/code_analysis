@@ -1,4 +1,4 @@
-package symbol_index
+package symbols
 
 import (
 	"path/filepath"

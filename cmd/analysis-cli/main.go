@@ -12,10 +12,10 @@ import (
 	"analysis-module/internal/app/config"
 	"analysis-module/internal/app/logging"
 	"analysis-module/internal/facts"
+	"analysis-module/internal/indexer/workflow/index"
+	"analysis-module/internal/indexer/workflow/scan"
 	factquery "analysis-module/internal/query"
 	factreview "analysis-module/internal/review"
-	"analysis-module/internal/indexer/workflow/scan"
-	"analysis-module/internal/indexer/workflow/index"
 )
 
 func main() {

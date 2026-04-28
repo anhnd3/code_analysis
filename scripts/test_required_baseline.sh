@@ -11,15 +11,14 @@ GO_BIN="${GO_BIN:-go}"
 
 packages=(
 	./cmd/analysis-cli
-	./internal/facts
-	./internal/store/...
+	./internal/app/bootstrap
+	./internal/indexer/...
+	./internal/facts/...
 	./internal/query
 	./internal/llm
 	./internal/review
 	./internal/export/...
-	./internal/scan
-	./internal/extract
-	./internal/workflows/facts_index
+	./internal/flow/...
 )
 
 "$GO_BIN" test -mod=mod "${packages[@]}"

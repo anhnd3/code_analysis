@@ -1,4 +1,4 @@
-package facts_index
+package indexworkflow
 
 import (
 	"time"
@@ -6,13 +6,13 @@ import (
 	"analysis-module/internal/domain/artifact"
 	"analysis-module/internal/domain/symbol"
 	"analysis-module/internal/facts"
-	artifactstoreport "analysis-module/internal/ports/artifactstore"
+	factjsonl "analysis-module/internal/facts/store/jsonl"
+	factsqlite "analysis-module/internal/facts/store/sqlite"
 	"analysis-module/internal/indexer/extract/boundaries"
-	"analysis-module/internal/services/snapshot_manage"
 	"analysis-module/internal/indexer/extract/symbols"
-factjsonl "analysis-module/internal/facts/store/jsonl"
-factsqlite "analysis-module/internal/facts/store/sqlite"
 	"analysis-module/internal/indexer/workflow/scan"
+	artifactstoreport "analysis-module/internal/ports/artifactstore"
+	"analysis-module/internal/services/snapshot_manage"
 )
 
 type Request struct {

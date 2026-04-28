@@ -1,4 +1,4 @@
-package analyze_workspace
+package scanworkflow
 
 import (
 	"path/filepath"
@@ -9,11 +9,11 @@ import (
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/service"
 	"analysis-module/internal/domain/workspace"
+	"analysis-module/internal/indexer/scan/inventory"
+	"analysis-module/internal/indexer/scan/workspace"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	scannerport "analysis-module/internal/ports/scanner"
-	"analysis-module/internal/indexer/scan/inventory"
 	"analysis-module/internal/services/snapshot_manage"
-	"analysis-module/internal/indexer/scan/workspace"
 )
 
 type Request struct {

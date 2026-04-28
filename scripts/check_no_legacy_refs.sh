@@ -18,6 +18,14 @@ blocked=(
   "graph export-markdown-review"
   "HTTPHandler"
   "graphstore"
+  "internal/store/"
+  "workflows/facts_index"
+  "workflows/build_snapshot"
+  "workflows/export_mermaid"
+  "domain/packet"
+  "analysis-module/internal/workflows"
+  "analysis-module/internal/store"
+  "domain/flow"
 )
 
 for term in "${blocked[@]}"; do
