@@ -2,8 +2,8 @@ package dto
 
 import (
 	"analysis-module/internal/indexer/workflow/scan"
-	"analysis-module/internal/workflows/blast_radius"
-	"analysis-module/internal/workflows/build_snapshot"
+	"internal/workflows/blast_radius"
+	// Removed legacy reference
 	"analysis-module/internal/workflows/impacted_tests"
 )
 
