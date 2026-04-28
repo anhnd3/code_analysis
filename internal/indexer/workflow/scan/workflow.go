@@ -8,9 +8,9 @@ import (
 	"analysis-module/internal/domain/artifact"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/service"
-	"analysis-module/internal/domain/workspace"
-	"analysis-module/internal/indexer/scan/inventory"
-	"analysis-module/internal/indexer/scan/workspace"
+	domainworkspace "analysis-module/internal/domain/workspace"
+	inventoryidx "analysis-module/internal/indexer/scan/inventory"
+	workspaceidx "analysis-module/internal/indexer/scan/workspace"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	scannerport "analysis-module/internal/ports/scanner"
 	"analysis-module/internal/services/snapshot_manage"
@@ -31,13 +31,13 @@ type Result struct {
 }
 
 type Workflow struct {
-	scanner        workspace_scan.Service
-	inventory      repo_inventory.Service
+	scanner        workspaceidx.Service
+	inventory      inventoryidx.Service
 	artifactStore  artifactstoreport.Store
 	snapshotManage snapshot_manage.Service
 }
 
-func New(scanner workspace_scan.Service, inventory repo_inventory.Service, artifactStore artifactstoreport.Store, snapshotManage snapshot_manage.Service) Workflow {
+func New(scanner workspaceidx.Service, inventory inventoryidx.Service, artifactStore artifactstoreport.Store, snapshotManage snapshot_manage.Service) Workflow {
 	return Workflow{
 		scanner:        scanner,
 		inventory:      inventory,
@@ -73,9 +73,9 @@ func (w Workflow) Run(req Request) (Result, error) {
 	sort.Strings(repoIDs)
 	sort.Strings(languages)
 	warnings := append([]string{}, scanResult.Warnings...)
-	manifest := workspace.Manifest{
-		ID:              workspace.ID(workspaceID),
-		RootPath:        workspace.Path(workspacePath),
+	manifest := domainworkspace.Manifest{
+		ID:              domainworkspace.ID(workspaceID),
+		RootPath:        domainworkspace.Path(workspacePath),
 		IgnoreSignature: inventory.IgnoreSignature,
 		RepositoryIDs:   repoIDs,
 		Languages:       languages,

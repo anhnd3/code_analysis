@@ -26,7 +26,30 @@ blocked=(
   "analysis-module/internal/workflows"
   "analysis-module/internal/store"
   "domain/flow"
+
+  # Phase B legacy identifiers
+  "analyze_workspace"
+  "facts_index"
+  "workspace_scan"
+  "repo_inventory"
+  "symbol_index"
+  "boundary_detect"
 )
+
+# Explicit blocked paths check
+blocked_paths=(
+  "./internal/domain/flow"
+  "./internal/domain/packet"
+  "./internal/store"
+  "./internal/workflows"
+)
+
+for path in "${blocked_paths[@]}"; do
+  if [ -e "$path" ]; then
+    echo "legacy path exists: $path"
+    exit 1
+  fi
+done
 
 for term in "${blocked[@]}"; do
   if grep -R "$term" ./cmd ./internal ./README.md 2>/dev/null; then
@@ -34,5 +57,6 @@ for term in "${blocked[@]}"; do
     exit 1
   fi
 done
+
 
 echo "no active legacy references found"

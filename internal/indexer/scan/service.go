@@ -21,14 +21,13 @@ type Result struct {
 	Inventory   repository.Inventory `json:"inventory"`
 	Warnings    []string             `json:"warnings"`
 }
-
 type Service struct {
-	scanner        workspace_scan.Service
-	inventory      repo_inventory.Service
+	scanner        workspaceidx.Service
+	inventory      inventoryidx.Service
 	snapshotManage snapshot_manage.Service
 }
 
-func New(scanner workspace_scan.Service, inventory repo_inventory.Service, snapshotManage snapshot_manage.Service) Service {
+func New(scanner workspaceidx.Service, inventory inventoryidx.Service, snapshotManage snapshot_manage.Service) Service {
 	return Service{
 		scanner:        scanner,
 		inventory:      inventory,

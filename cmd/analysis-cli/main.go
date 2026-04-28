@@ -1,23 +1,5 @@
 package main
 
-import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"analysis-module/internal/app/bootstrap"
-	"analysis-module/internal/app/config"
-	"analysis-module/internal/app/logging"
-	"analysis-module/internal/facts"
-	"analysis-module/internal/indexer/workflow/index"
-	"analysis-module/internal/indexer/workflow/scan"
-	factquery "analysis-module/internal/query"
-	factreview "analysis-module/internal/review"
-)
-
 func main() {
 	logger := logging.New()
 	app, err := bootstrap.New(config.Default(), logger)
@@ -70,7 +52,7 @@ func runScan(app *bootstrap.Application, args []string) {
 	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
 	app = rebuildApp(app, *progressMode)
-	result, err := app.Scan.Run(analyze_workspace.Request{
+	result, err := app.Scan.Run(scanworkflow.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
 	})
@@ -87,7 +69,7 @@ func runIndex(app *bootstrap.Application, args []string) {
 	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
 	app = rebuildApp(app, *progressMode)
-	result, err := app.FactsIndex.Run(facts_index.Request{
+	result, err := app.FactsIndex.Run(indexworkflow.Request{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
 	})

@@ -8,9 +8,9 @@ import (
 	"analysis-module/internal/facts"
 	factjsonl "analysis-module/internal/facts/store/jsonl"
 	factsqlite "analysis-module/internal/facts/store/sqlite"
-	"analysis-module/internal/indexer/extract/boundaries"
-	"analysis-module/internal/indexer/extract/symbols"
-	"analysis-module/internal/indexer/workflow/scan"
+	boundaries "analysis-module/internal/indexer/extract/boundaries"
+	symbols "analysis-module/internal/indexer/extract/symbols"
+	scanworkflow "analysis-module/internal/indexer/workflow/scan"
 	artifactstoreport "analysis-module/internal/ports/artifactstore"
 	"analysis-module/internal/services/snapshot_manage"
 )
@@ -34,18 +34,18 @@ type Result struct {
 }
 
 type Workflow struct {
-	analyze        analyze_workspace.Workflow
-	symbolIndex    symbol_index.Service
-	boundaryDetect boundary_detect.Service
+	analyze        scanworkflow.Workflow
+	symbolIndex    symbols.Service
+	boundaryDetect boundaries.Service
 	snapshotManage snapshot_manage.Service
 	artifactStore  artifactstoreport.Store
 	artifactRoot   string
 }
 
 func New(
-	analyze analyze_workspace.Workflow,
-	symbolIndex symbol_index.Service,
-	boundaryDetect boundary_detect.Service,
+	analyze scanworkflow.Workflow,
+	symbolIndex symbols.Service,
+	boundaryDetect boundaries.Service,
 	snapshotManage snapshot_manage.Service,
 	artifactStore artifactstoreport.Store,
 	artifactRoot string,
@@ -61,7 +61,7 @@ func New(
 }
 
 func (w Workflow) Run(req Request) (Result, error) {
-	analyzeResult, err := w.analyze.Run(analyze_workspace.Request{
+	analyzeResult, err := w.analyze.Run(scanworkflow.Request{
 		WorkspacePath:  req.WorkspacePath,
 		IgnorePatterns: req.IgnorePatterns,
 		TargetHints:    req.TargetHints,
