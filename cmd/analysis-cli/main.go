@@ -1,5 +1,23 @@
 package main
 
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"analysis-module/internal/app/bootstrap"
+	"analysis-module/internal/app/config"
+	"analysis-module/internal/app/logging"
+	"analysis-module/internal/facts"
+	indexworkflow "analysis-module/internal/indexer/workflow/index"
+	scanworkflow "analysis-module/internal/indexer/workflow/scan"
+	factquery "analysis-module/internal/query"
+	factreview "analysis-module/internal/review"
+)
+
 func main() {
 	logger := logging.New()
 	app, err := bootstrap.New(config.Default(), logger)
