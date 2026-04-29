@@ -1,4 +1,4 @@
-package workspace_scan
+package workspace
 
 import (
 	"testing"

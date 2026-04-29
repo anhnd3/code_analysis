@@ -1,4 +1,4 @@
-package boundary_detect
+package boundaries
 
 import (
 	"os"
