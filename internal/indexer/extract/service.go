@@ -9,7 +9,7 @@ import (
 )
 
 type Result struct {
-	Extraction symbols.Result `json:"extraction"`
+	Extraction symbols.Result      `json:"extraction"`
 	Boundaries []boundaryroot.Root `json:"boundaries"`
 }
 
