@@ -6,7 +6,7 @@ import (
 
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
-	"analysis-module/internal/indexer/extract/symbols"
+	symbolidx "analysis-module/internal/indexer/extract/symbols"
 )
 
 func TestBuildIndexResolvesImportSelectorTargetsSafely(t *testing.T) {
@@ -23,8 +23,8 @@ func TestBuildIndexResolvesImportSelectorTargetsSafely(t *testing.T) {
 		Inventory: repository.Inventory{
 			Repositories: []repository.Manifest{repo},
 		},
-		Extraction: symbol_index.Result{
-			Repositories: []symbol_index.RepositoryExtraction{
+		Extraction: symbolidx.Result{
+			Repositories: []symbolidx.RepositoryExtraction{
 				{
 					Repository: repo,
 					Files: []symbol.FileExtractionResult{

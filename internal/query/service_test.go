@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"analysis-module/internal/facts"
-	factsqlite "internal/facts/store/sqlite"
+	factsqlite "factstore/internal/facts/store/sqlite"
 )
 
 func TestInspectFunctionBuildsPacketAndSlicesContext(t *testing.T) {

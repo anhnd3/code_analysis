@@ -9,16 +9,16 @@ import (
 )
 
 type Result struct {
-	Extraction symbol_index.Result `json:"extraction"`
+	Extraction symbols.Result `json:"extraction"`
 	Boundaries []boundaryroot.Root `json:"boundaries"`
 }
 
 type Service struct {
-	symbolIndex    symbol_index.Service
-	boundaryDetect boundary_detect.Service
+	symbolIndex    symbols.Service
+	boundaryDetect boundaries.Service
 }
 
-func New(symbolIndex symbol_index.Service, boundaryDetect boundary_detect.Service) Service {
+func New(symbolIndex symbols.Service, boundaryDetect boundaries.Service) Service {
 	return Service{
 		symbolIndex:    symbolIndex,
 		boundaryDetect: boundaryDetect,

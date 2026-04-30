@@ -26,14 +26,7 @@ blocked=(
   "analysis-module/internal/workflows"
   "analysis-module/internal/store"
   "domain/flow"
-
-  # Phase B legacy identifiers
-  "analyze_workspace"
-  "facts_index"
   "workspace_scan"
-  "repo_inventory"
-  "symbol_index"
-  "boundary_detect"
 )
 
 # Explicit blocked paths check
@@ -42,6 +35,11 @@ blocked_paths=(
   "./internal/domain/packet"
   "./internal/store"
   "./internal/workflows"
+  "./internal/adapters/api"
+  "./internal/adapters/cache"
+  "./internal/ports/api"
+  "./internal/ports/cache"
+  "./internal/ports/query"
 )
 
 for path in "${blocked_paths[@]}"; do

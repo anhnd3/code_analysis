@@ -23,7 +23,7 @@ type Request struct {
 }
 
 type Result struct {
-	WorkspaceManifest workspace.Manifest   `json:"workspace_manifest"`
+	WorkspaceManifest domainworkspace.Manifest   `json:"workspace_manifest"`
 	Inventory         repository.Inventory `json:"inventory"`
 	ServiceManifests  []service.Manifest   `json:"service_manifests"`
 	ArtifactRefs      []artifact.Ref       `json:"artifact_refs"`

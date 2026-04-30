@@ -11,7 +11,7 @@ import (
 	"analysis-module/internal/domain/boundaryroot"
 	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/symbol"
-	"analysis-module/internal/indexer/extract/symbols"
+	symbolidx "analysis-module/internal/indexer/extract/symbols"
 	"analysis-module/pkg/ids"
 )
 
@@ -19,7 +19,7 @@ type BuildInput struct {
 	WorkspaceID string
 	SnapshotID  string
 	Inventory   repository.Inventory
-	Extraction  symbol_index.Result
+	Extraction  symbolidx.Result
 	Boundaries  []boundaryroot.Root
 	GeneratedAt time.Time
 }
