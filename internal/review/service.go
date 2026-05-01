@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"analysis-module/internal/facts"
-	factsqlite "analysis-module/internal/facts/store/sqlite"
+	factquery "analysis-module/internal/facts/query"
+	factsqlite "analysis-module/internal/facts/sqlite"
 	"analysis-module/internal/llm"
-	factquery "analysis-module/internal/query"
 	"analysis-module/pkg/ids"
 )
 

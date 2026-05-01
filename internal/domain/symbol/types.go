@@ -2,6 +2,7 @@ package symbol
 
 import (
 	"analysis-module/internal/domain/executionhint"
+	"analysis-module/internal/domain/repository"
 	"analysis-module/internal/domain/targetref"
 )
 
@@ -106,4 +107,15 @@ type FileExtractionResult struct {
 	Hints          []executionhint.Hint `json:"hints,omitempty"`
 	Diagnostics    []Diagnostic         `json:"diagnostics,omitempty"`
 	Warnings       []string             `json:"warnings"`
+}
+
+// RepositoryExtraction groups file-level extraction results per repository.
+type RepositoryExtraction struct {
+	Repository repository.Manifest    `json:"repository"`
+	Files      []FileExtractionResult `json:"files"`
+}
+
+// ExtractionResult is the aggregate result of symbol extraction across all repositories.
+type ExtractionResult struct {
+	Repositories []RepositoryExtraction `json:"repositories"`
 }

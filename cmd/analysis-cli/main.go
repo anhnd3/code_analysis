@@ -8,19 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"analysis-module/internal/app/bootstrap"
-	"analysis-module/internal/app/config"
-	"analysis-module/internal/app/logging"
+	"analysis-module/internal/app"
 	"analysis-module/internal/facts"
-	indexworkflow "analysis-module/internal/indexer/workflow/index"
-	scanworkflow "analysis-module/internal/indexer/workflow/scan"
-	factquery "analysis-module/internal/query"
+	factquery "analysis-module/internal/facts/query"
+	"analysis-module/internal/indexer"
 	factreview "analysis-module/internal/review"
 )
 
 func main() {
-	logger := logging.New()
-	app, err := bootstrap.New(config.Default(), logger)
+	logger := app.NewLogger()
+	a, err := app.New(app.DefaultConfig(), logger)
 	if err != nil {
 		fatal(err)
 	}
@@ -30,17 +27,19 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "scan":
-		runScan(app, os.Args[2:])
+		runScan(a, os.Args[2:])
 	case "index":
-		runIndex(app, os.Args[2:])
+		runIndex(a, os.Args[2:])
 	case "inspect-function":
-		runInspectFunction(app, os.Args[2:])
+		runInspectFunction(a, os.Args[2:])
 	case "review-flow":
-		runReviewFlow(app, os.Args[2:])
+		runReviewFlow(a, os.Args[2:])
 	case "export-md":
-		runExportMarkdown(app, os.Args[2:])
+		runExportMarkdown(a, os.Args[2:])
 	case "export-mermaid":
-		runExportMermaid(app, os.Args[2:])
+		runExportMermaid(a, os.Args[2:])
+	case "export-graphjson":
+		runExportGraphJSON(a, os.Args[2:])
 	default:
 		printUsage()
 		fatal(fmt.Errorf("unknown subcommand: %s", os.Args[1]))
@@ -52,7 +51,7 @@ func printUsage() {
 		"Analysis Module CLI",
 		"",
 		"Primary path:",
-		"  scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid --review",
+		"  scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid/export-graphjson --review",
 		"",
 		"Notes:",
 		"  scan is the primary alias for workspace discovery.",
@@ -63,14 +62,14 @@ func printUsage() {
 	}
 }
 
-func runScan(app *bootstrap.Application, args []string) {
+func runScan(a *app.Application, args []string) {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	workspacePath := fs.String("workspace", ".", "workspace path")
 	ignore := fs.String("ignore", "", "comma separated ignore patterns")
 	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
-	app = rebuildApp(app, *progressMode)
-	result, err := app.Scan.Run(scanworkflow.Request{
+	a = rebuildApp(a, *progressMode)
+	result, err := a.Scan.Run(indexer.ScanRequest{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
 	})
@@ -80,14 +79,14 @@ func runScan(app *bootstrap.Application, args []string) {
 	write(result)
 }
 
-func runIndex(app *bootstrap.Application, args []string) {
+func runIndex(a *app.Application, args []string) {
 	fs := flag.NewFlagSet("index", flag.ExitOnError)
 	workspacePath := fs.String("workspace", ".", "workspace path")
 	ignore := fs.String("ignore", "", "comma separated ignore patterns")
 	progressMode := fs.String("progress-mode", "auto", "progress mode: auto|tty|plain|quiet")
 	_ = fs.Parse(args)
-	app = rebuildApp(app, *progressMode)
-	result, err := app.FactsIndex.Run(indexworkflow.Request{
+	a = rebuildApp(a, *progressMode)
+	result, err := a.FactsIndex.Run(indexer.IndexRequest{
 		WorkspacePath:  *workspacePath,
 		IgnorePatterns: splitCSV(*ignore),
 	})
@@ -97,7 +96,7 @@ func runIndex(app *bootstrap.Application, args []string) {
 	write(result)
 }
 
-func runInspectFunction(app *bootstrap.Application, args []string) {
+func runInspectFunction(a *app.Application, args []string) {
 	fs := flag.NewFlagSet("inspect-function", flag.ExitOnError)
 	workspaceID := fs.String("workspace-id", "", "workspace id")
 	snapshotID := fs.String("snapshot-id", "", "snapshot id")
@@ -107,7 +106,7 @@ func runInspectFunction(app *bootstrap.Application, args []string) {
 	if *workspaceID == "" || *snapshotID == "" || *symbol == "" {
 		fatal(fmt.Errorf("--workspace-id, --snapshot-id and --symbol are required"))
 	}
-	packet, err := app.FactsQuery.InspectFunction(factquery.InspectRequest{
+	packet, err := a.FactsQuery.InspectFunction(factquery.InspectRequest{
 		WorkspaceID:   *workspaceID,
 		SnapshotID:    *snapshotID,
 		Symbol:        *symbol,
@@ -119,7 +118,7 @@ func runInspectFunction(app *bootstrap.Application, args []string) {
 	write(packet)
 }
 
-func runReviewFlow(app *bootstrap.Application, args []string) {
+func runReviewFlow(a *app.Application, args []string) {
 	fs := flag.NewFlagSet("review-flow", flag.ExitOnError)
 	workspaceID := fs.String("workspace-id", "", "workspace id")
 	snapshotID := fs.String("snapshot-id", "", "snapshot id")
@@ -134,9 +133,9 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 
 	dir := *outDir
 	if dir == "" {
-		dir = filepath.Join(app.Config.ArtifactRoot, "workspaces", *workspaceID, "snapshots", *snapshotID, "review")
+		dir = filepath.Join(a.Config.ArtifactRoot, "workspaces", *workspaceID, "snapshots", *snapshotID, "review")
 	}
-	result, err := app.FlowReview.Run(factreview.Request{
+	result, err := a.FlowReview.Run(factreview.Request{
 		WorkspaceID: *workspaceID,
 		SnapshotID:  *snapshotID,
 		Symbol:      *symbol,
@@ -175,7 +174,7 @@ func runReviewFlow(app *bootstrap.Application, args []string) {
 	})
 }
 
-func runExportMarkdown(app *bootstrap.Application, args []string) {
+func runExportMarkdown(a *app.Application, args []string) {
 	fs := flag.NewFlagSet("export-md", flag.ExitOnError)
 	reviewPath := fs.String("review", "", "path to flow.json")
 	outPath := fs.String("out", "", "markdown output path")
@@ -187,7 +186,7 @@ func runExportMarkdown(app *bootstrap.Application, args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	body := app.FlowMarkdown.Render(flow)
+	body := a.FlowMarkdown.Render(flow)
 	target := *outPath
 	if target == "" {
 		target = filepath.Join(filepath.Dir(*reviewPath), "flow.md")
@@ -200,7 +199,7 @@ func runExportMarkdown(app *bootstrap.Application, args []string) {
 	})
 }
 
-func runExportMermaid(app *bootstrap.Application, args []string) {
+func runExportMermaid(a *app.Application, args []string) {
 	fs := flag.NewFlagSet("export-mermaid", flag.ExitOnError)
 	reviewPath := fs.String("review", "", "flow.json path to render reviewed flow")
 	outPath := fs.String("out", "", "mermaid output path")
@@ -215,7 +214,7 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 		fatal(err)
 	}
 
-	diagram := app.FlowMermaid.Render(flow)
+	diagram := a.FlowMermaid.Render(flow)
 	target := *outPath
 	if target == "" {
 		target = filepath.Join(filepath.Dir(*reviewPath), "flow.mmd")
@@ -229,14 +228,42 @@ func runExportMermaid(app *bootstrap.Application, args []string) {
 	})
 }
 
-func rebuildApp(existing *bootstrap.Application, progressMode string) *bootstrap.Application {
-	cfg := existing.Config
-	cfg.ProgressMode = progressMode
-	app, err := bootstrap.New(cfg, existing.Logger)
+func runExportGraphJSON(a *app.Application, args []string) {
+	fs := flag.NewFlagSet("export-graphjson", flag.ExitOnError)
+	reviewPath := fs.String("review", "", "path to flow.json")
+	outPath := fs.String("out", "", "graph JSON output path")
+	_ = fs.Parse(args)
+	if *reviewPath == "" {
+		fatal(fmt.Errorf("--review is required"))
+	}
+	flow, err := readReviewFlow(*reviewPath)
 	if err != nil {
 		fatal(err)
 	}
-	return app
+	data, err := a.FlowGraphJSON.Render(flow)
+	if err != nil {
+		fatal(err)
+	}
+	target := *outPath
+	if target == "" {
+		target = filepath.Join(filepath.Dir(*reviewPath), "graph.json")
+	}
+	if err := os.WriteFile(target, data, 0o644); err != nil {
+		fatal(err)
+	}
+	write(map[string]any{
+		"out": target,
+	})
+}
+
+func rebuildApp(existing *app.Application, progressMode string) *app.Application {
+	cfg := existing.Config
+	cfg.ProgressMode = progressMode
+	a, err := app.New(cfg, existing.Logger)
+	if err != nil {
+		fatal(err)
+	}
+	return a
 }
 
 func splitCSV(raw string) []string {

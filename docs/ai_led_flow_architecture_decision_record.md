@@ -71,7 +71,7 @@ The repository has already moved into a facts-first direction.
 The active product surface is now:
 
 ```text
-scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid
+scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid/export-graphjson
 ```
 
 The currently retained foundation is:
@@ -153,18 +153,20 @@ This layer should stay deterministic. It should not depend on LLM reasoning.
 Recommended packages to keep as foundation:
 
 ```text
-internal/services/workspace_scan
-internal/services/repo_inventory
-internal/services/symbol_index
-internal/services/boundary_detect
-internal/workflows/analyze_workspace
-internal/workflows/facts_index
-internal/store/sqlite
-internal/store/jsonl
-internal/query
+internal/app
+internal/indexer
+internal/indexer/detector
+internal/indexer/extractor/go
+internal/indexer/extractor/python
+internal/indexer/extractor/javascript
+internal/indexer/extractor/treesitter
+internal/indexer/boundary/go
+internal/indexer/boundary/frameworks
+internal/facts
+internal/facts/sqlite
+internal/facts/query
 internal/review
-internal/export/markdown
-internal/export/mermaid
+internal/export (contains markdown, mermaid, graphjson services)
 ```
 
 ### 6.2 New AI-led Flow Orchestrator Layer
@@ -982,4 +984,3 @@ Final implementation sequence:
 ```
 
 This gives the project a controlled AI-led architecture without making the system dependent on hallucinated LLM output.
-
