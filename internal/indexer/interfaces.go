@@ -1,12 +1,8 @@
 package indexer
 
-import (
-	scannerport "analysis-module/internal/ports/scanner"
-)
-
-// WorkspaceScanner wraps the port interface for workspace scanning.
+// WorkspaceScanner is used to scan a workspace for repositories.
 type WorkspaceScanner interface {
-	Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWorkspaceResult, error)
+	Scan(req ScanWorkspaceRequest) (ScanWorkspaceResult, error)
 }
 
 // Reporter defines the interface for reporting progress during long-running stages.
@@ -16,11 +12,3 @@ type Reporter interface {
 	Status(message string)
 	FinishStage(message string)
 }
-
-// noopReporter discards all output.
-type noopReporter struct{}
-
-func (noopReporter) StartStage(string, int) {}
-func (noopReporter) Advance(int)            {}
-func (noopReporter) Status(string)          {}
-func (noopReporter) FinishStage(string)     {}

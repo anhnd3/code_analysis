@@ -26,15 +26,8 @@ scan -> index -> inspect-function -> review-flow -> export-md/export-mermaid/exp
 cmd/analysis-cli          — CLI entry point
 internal/app              — Application bootstrap, config, lifecycle, logging
 internal/facts            — Fact model types & builders
-internal/facts/query      — SQLite query helpers
-internal/facts/sqlite     — SQLite persistence layer
 internal/indexer          — Workspace scanning & symbol extraction
-internal/indexer/boundary — Framework detection (Go: Gin, net/http, gRPC)
-internal/indexer/detector — Language/tech-stack detectors
-internal/indexer/extractor— Per-language extractors (Go, Python, JS, treesitter)
 internal/review           — LLM-led review service (transitional; superseded by internal/flow in Phase 4)
-internal/export           — Export services: markdown.go, mermaid.go, graphjson.go
-internal/flow             — Flow skeleton (types, trace, resolver, verifier) — Phase 4 root package
 ```
 
 ## Artifact Layout
@@ -61,21 +54,29 @@ The `review-flow` command uses an LLM planner for candidate edge resolution. Con
 
 ## Required Baseline
 
-Run before merging any change:
+The single command below is the authoritative gate for "is this stabilized?":
 
 ```bash
-./scripts/check_no_legacy_refs.sh
 ./scripts/test_required_baseline.sh
-go test -mod=mod ./cmd/... ./internal/...
 ```
 
-## Final Gate (Phase 5)
+This script runs:
+1. `gofmt -l internal/facts internal/indexer internal/review internal/app cmd/analysis-cli` — check formatting
+2. `./scripts/check_no_legacy_refs.sh` — verify no forbidden legacy references
+3. Compile-focused tests (`go test -run '^$'`) on core packages
+4. Full package tests (`go test ./cmd/... ./internal/...`)
+5. CLI smoke tests: `scan`, `index`, `inspect-function`, and export commands
+6. Artifact verification: SQLite, JSON, and JSONL files exist and are non-empty
 
-```bash
-gofmt -w ./cmd ./internal
-./scripts/check_no_legacy_refs.sh
-./scripts/test_required_baseline.sh
-go test -mod=mod ./cmd/... ./internal/...
-```
+All checks must pass for the gate to succeed.
 
-All four steps must succeed.
+## Repair-Loop Process
+
+When stabilizing this repository, follow this disciplined loop:
+
+1. **Run the command first.** Always start with `./scripts/test_required_baseline.sh`
+2. **Fix only the first meaningful failure class.** Do not attempt multiple repairs in parallel.
+3. **Rerun the same command.** Verify your fix before proceeding.
+4. **Repeat until PASS.** Stabilization is complete only when the gate passes cleanly.
+
+> Note: `review-flow` is excluded from smoke tests because it requires LLM configuration; export smoke uses handcrafted ReviewFlow fixtures instead.

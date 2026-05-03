@@ -5,16 +5,12 @@
 ```text
 cmd/analysis-cli          — CLI entry point
 internal/app              — Bootstrap, config, lifecycle, logging
-internal/facts            — Fact model types & builders
-internal/facts/query      — SQLite query helpers
-internal/facts/sqlite     — SQLite persistence layer
 internal/indexer          — Workspace scanning & symbol extraction
-internal/indexer/boundary — Framework detection (Go: Gin, net/http, gRPC)
-internal/indexer/detector — Language/tech-stack detectors
-internal/indexer/extractor— Per-language extractors (Go, Python, JS, treesitter)
+internal/facts            — Fact model types & builders
+internal/flow             — Flow skeleton (types, trace, resolver, verifier) — Phase 4 root package
 internal/review           — LLM-led review service (transitional; superseded by internal/flow in Phase 4)
 internal/export           — Export services: markdown.go, mermaid.go, graphjson.go
-internal/flow             — Flow skeleton (types, trace, resolver, verifier) — Phase 4 root package
+internal/llm              — LLM integration for analysis
 ```
 
 ## Primary Flow
@@ -44,7 +40,7 @@ scan -> index -> inspect-function -> review-flow -> export-md / export-mermaid /
 gofmt -w ./cmd ./internal
 ./scripts/check_no_legacy_refs.sh
 ./scripts/test_required_baseline.sh
-go test -mod=mod ./cmd/... ./internal/...
+go test -mod=readonly ./cmd/... ./internal/...
 ```
 
 All four steps must succeed before merging any change.

@@ -10,7 +10,7 @@ import (
 
 	"analysis-module/internal/app"
 	"analysis-module/internal/facts"
-	factquery "analysis-module/internal/facts/query"
+
 	"analysis-module/internal/indexer"
 	factreview "analysis-module/internal/review"
 )
@@ -106,7 +106,7 @@ func runInspectFunction(a *app.Application, args []string) {
 	if *workspaceID == "" || *snapshotID == "" || *symbol == "" {
 		fatal(fmt.Errorf("--workspace-id, --snapshot-id and --symbol are required"))
 	}
-	packet, err := a.FactsQuery.InspectFunction(factquery.InspectRequest{
+	packet, err := a.FactsQuery.InspectFunction(facts.InspectRequest{
 		WorkspaceID:   *workspaceID,
 		SnapshotID:    *snapshotID,
 		Symbol:        *symbol,

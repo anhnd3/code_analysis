@@ -9,10 +9,7 @@ import (
 	"time"
 
 	"analysis-module/internal/facts"
-	factquery "analysis-module/internal/facts/query"
-	factsqlite "analysis-module/internal/facts/sqlite"
 	"analysis-module/internal/llm"
-	"analysis-module/pkg/ids"
 )
 
 type Request struct {
@@ -30,11 +27,11 @@ type Result struct {
 
 type Service struct {
 	artifactRoot string
-	query        factquery.Service
+	query        facts.QueryService
 	client       llm.Client
 }
 
-func New(artifactRoot string, query factquery.Service, client llm.Client) Service {
+func New(artifactRoot string, query facts.QueryService, client llm.Client) Service {
 	return Service{
 		artifactRoot: artifactRoot,
 		query:        query,
@@ -50,7 +47,7 @@ func (s Service) Run(req Request) (Result, error) {
 		req.MaxSteps = 80
 	}
 
-	rootPacket, err := s.query.InspectFunction(factquery.InspectRequest{
+	rootPacket, err := s.query.InspectFunction(facts.InspectRequest{
 		WorkspaceID: req.WorkspaceID,
 		SnapshotID:  req.SnapshotID,
 		Symbol:      req.Symbol,
@@ -59,7 +56,7 @@ func (s Service) Run(req Request) (Result, error) {
 		return Result{}, err
 	}
 	flow := facts.ReviewFlow{
-		ID:                ids.Stable("review", req.WorkspaceID, req.SnapshotID, rootPacket.RootSymbol.ID, time.Now().UTC().Format(time.RFC3339Nano)),
+		ID:                facts.StableID("review", req.WorkspaceID, req.SnapshotID, rootPacket.RootSymbol.ID, time.Now().UTC().Format(time.RFC3339Nano)),
 		WorkspaceID:       req.WorkspaceID,
 		SnapshotID:        req.SnapshotID,
 		RootSymbolID:      rootPacket.RootSymbol.ID,
@@ -92,7 +89,7 @@ func (s Service) Run(req Request) (Result, error) {
 			flow.UncertaintyNotes = append(flow.UncertaintyNotes, fmt.Sprintf("failed to load symbol %s: %v", item.SymbolID, err))
 			continue
 		}
-		packet, err := s.query.InspectFunction(factquery.InspectRequest{
+		packet, err := s.query.InspectFunction(facts.InspectRequest{
 			WorkspaceID: req.WorkspaceID,
 			SnapshotID:  req.SnapshotID,
 			Symbol:      symbolFact.ID,
@@ -171,11 +168,17 @@ func (s Service) Run(req Request) (Result, error) {
 				targetCanonical = candidate.TargetCanonicalName
 			}
 
+			// Ambiguous steps should not have a target symbol ID - they represent unresolved candidates
+			finalTarget := target
+			if status == facts.StepAmbiguous {
+				finalTarget = ""
+			}
+
 			step := facts.ReviewStep{
-				ID:                ids.Stable("review", "step", symbolFact.ID, target, targetCanonical, strconv.Itoa(steps)),
+				ID:                facts.StableID("review", "step", symbolFact.ID, finalTarget, targetCanonical, strconv.Itoa(steps)),
 				FromSymbolID:      symbolFact.ID,
 				FromCanonicalName: symbolFact.CanonicalName,
-				ToSymbolID:        target,
+				ToSymbolID:        finalTarget,
 				ToCanonicalName:   targetCanonical,
 				Status:            status,
 				Rationale:         rationale,
@@ -211,7 +214,8 @@ func (s Service) Run(req Request) (Result, error) {
 		}
 	}
 
-	store, err := factsqlite.New(factsqlite.PathFor(s.artifactRoot, req.WorkspaceID, req.SnapshotID))
+	sqlitePath := facts.SQLitePathFor(s.artifactRoot, req.WorkspaceID, req.SnapshotID)
+	store, err := facts.NewSQLiteStore(sqlitePath)
 	if err == nil {
 		_ = store.SaveReviewFlow(flow)
 		_ = store.Close()
@@ -240,8 +244,9 @@ func ambiguousResponseForPacket(packet facts.ContextPacket, note string) llm.Rev
 		if targetCanonical == "" {
 			targetCanonical = candidate.ID
 		}
+		// Ambiguous decisions should not have a target symbol ID - they represent unresolved candidates
 		decisions = append(decisions, llm.HopDecision{
-			TargetSymbolID:      candidate.TargetSymbolID,
+			TargetSymbolID:      "", // Clear target for ambiguous status
 			TargetCanonicalName: targetCanonical,
 			Status:              facts.StepAmbiguous,
 			Rationale:           note,

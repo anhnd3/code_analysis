@@ -6,17 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"analysis-module/internal/domain/analysis"
-	"analysis-module/internal/domain/artifact"
-	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/domain/service"
-	domainworkspace "analysis-module/internal/domain/workspace"
-	"analysis-module/internal/indexer/detector"
-	artifactstoreport "analysis-module/internal/ports/artifactstore"
-	scannerport "analysis-module/internal/ports/scanner"
-	"analysis-module/internal/services/snapshot_manage"
-	"analysis-module/pkg/ids"
 )
 
 // ScanRequest describes inputs for a workspace scan.
@@ -28,33 +17,33 @@ type ScanRequest struct {
 
 // ScanResult holds the complete output of a scan including inventory, manifests, and artifacts.
 type ScanResult struct {
-	WorkspaceManifest domainworkspace.Manifest `json:"workspace_manifest"`
-	Inventory         repository.Inventory     `json:"inventory"`
-	ServiceManifests  []service.Manifest       `json:"service_manifests"`
-	ArtifactRefs      []artifact.Ref           `json:"artifact_refs"`
-	Warnings          []string                 `json:"warnings"`
+	WorkspaceManifest WorkspaceManifest `json:"workspace_manifest"`
+	Inventory         Inventory         `json:"inventory"`
+	ServiceManifests  []ServiceManifest `json:"service_manifests"`
+	ArtifactRefs      []ArtifactRef     `json:"artifact_refs"`
+	Warnings          []string          `json:"warnings"`
 }
 
 // ScanWorkflow orchestrates workspace scanning and inventory building.
 type ScanWorkflow struct {
 	scanner        WorkspaceScanner
 	inventory      InventoryBuilder
-	artifactStore  artifactstoreport.Store
-	snapshotManage snapshot_manage.Service
+	artifactStore  ArtifactStore
+	snapshotManage SnapshotService
 }
 
 // WorkspaceScannerService performs repository discovery and file inventory generation.
 type WorkspaceScannerService struct {
-	repoRootDetector  scannerport.RepoRootDetector
-	techStackDetector scannerport.TechStackDetector
-	serviceDetector   scannerport.ServiceDetector
+	repoRootDetector  RepoRootDetector
+	techStackDetector TechStackDetector
+	serviceDetector   ServiceDetector
 	reporter          Reporter
 }
 
 func NewWorkspaceScannerService(
-	repoRootDetector scannerport.RepoRootDetector,
-	techStackDetector scannerport.TechStackDetector,
-	serviceDetector scannerport.ServiceDetector,
+	repoRootDetector RepoRootDetector,
+	techStackDetector TechStackDetector,
+	serviceDetector ServiceDetector,
 	reporter Reporter,
 ) WorkspaceScannerService {
 	if reporter == nil {
@@ -68,16 +57,16 @@ func NewWorkspaceScannerService(
 	}
 }
 
-func (s WorkspaceScannerService) Scan(req scannerport.ScanWorkspaceRequest) (scannerport.ScanWorkspaceResult, error) {
-	policy := analysis.NewIgnorePolicy(req.IgnorePatterns)
+func (s WorkspaceScannerService) Scan(req ScanWorkspaceRequest) (ScanWorkspaceResult, error) {
+	policy := NewIgnorePolicy(req.IgnorePatterns)
 	s.reporter.StartStage("scan", 0)
 	repoRoots, err := s.repoRootDetector.Detect(req.WorkspacePath, policy)
 	if err != nil {
 		s.reporter.FinishStage("scan failed")
-		return scannerport.ScanWorkspaceResult{}, err
+		return ScanWorkspaceResult{}, err
 	}
 
-	repos := make([]repository.Manifest, 0, len(repoRoots))
+	repos := make([]Manifest, 0, len(repoRoots))
 	warnings := []string{}
 	for _, root := range repoRoots {
 		s.reporter.Status("repo=" + filepath.Base(root) + " warnings=" + strconv.Itoa(len(warnings)))
@@ -93,11 +82,11 @@ func (s WorkspaceScannerService) Scan(req scannerport.ScanWorkspaceRequest) (sca
 			continue
 		}
 
-		repoManifest := repository.Manifest{
-			ID:              repository.ID(ids.Stable("repo", root)),
+		repoManifest := Manifest{
+			ID:              RepoID("repo_" + root),
 			Name:            filepath.Base(root),
 			RootPath:        root,
-			Role:            repository.RoleUnknown,
+			Role:            RoleUnknown,
 			IgnoreSignature: policy.Signature,
 			TechStack:       techStack,
 			GoFiles:         files.goFiles,
@@ -105,7 +94,7 @@ func (s WorkspaceScannerService) Scan(req scannerport.ScanWorkspaceRequest) (sca
 			JavaScriptFiles: files.javascriptFiles,
 			TypeScriptFiles: files.typeScriptFiles,
 			ConfigFiles:     files.configFiles,
-			IssueCounts:     analysis.IssueCounts{SkippedIgnoredFiles: files.skippedCount},
+			IssueCounts:     IssueCounts{SkippedIgnoredFiles: files.skippedCount},
 		}
 
 		detectedServices, hints, err := s.serviceDetector.Detect(repoManifest, policy)
@@ -121,7 +110,7 @@ func (s WorkspaceScannerService) Scan(req scannerport.ScanWorkspaceRequest) (sca
 		return repos[i].RootPath < repos[j].RootPath
 	})
 	s.reporter.FinishStage("repos=" + strconv.Itoa(len(repos)) + " warnings=" + strconv.Itoa(len(warnings)))
-	return scannerport.ScanWorkspaceResult{
+	return ScanWorkspaceResult{
 		WorkspacePath: filepath.Clean(req.WorkspacePath),
 		Repositories:  repos,
 		Warnings:      warnings,
@@ -131,8 +120,8 @@ func (s WorkspaceScannerService) Scan(req scannerport.ScanWorkspaceRequest) (sca
 func NewScanWorkflow(
 	scanner WorkspaceScanner,
 	inventory InventoryBuilder,
-	artifactStore artifactstoreport.Store,
-	snapshotManage snapshot_manage.Service,
+	artifactStore ArtifactStore,
+	snapshotManage SnapshotService,
 ) ScanWorkflow {
 	return ScanWorkflow{
 		scanner:        scanner,
@@ -146,7 +135,7 @@ func NewScanWorkflow(
 func (w ScanWorkflow) Run(req ScanRequest) (ScanResult, error) {
 	workspacePath := filepath.Clean(req.WorkspacePath)
 	workspaceID := w.snapshotManage.NewWorkspaceID(workspacePath)
-	scanResult, err := w.scanner.Scan(scannerport.ScanWorkspaceRequest{
+	scanResult, err := w.scanner.Scan(ScanWorkspaceRequest{
 		WorkspacePath:  workspacePath,
 		IgnorePatterns: req.IgnorePatterns,
 		TargetHints:    req.TargetHints,
@@ -170,9 +159,9 @@ func (w ScanWorkflow) Run(req ScanRequest) (ScanResult, error) {
 	sort.Strings(repoIDs)
 	sort.Strings(languages)
 	warnings := append([]string{}, scanResult.Warnings...)
-	manifest := domainworkspace.Manifest{
-		ID:              domainworkspace.ID(workspaceID),
-		RootPath:        domainworkspace.Path(workspacePath),
+	manifest := WorkspaceManifest{
+		ID:              workspaceID,
+		RootPath:        workspacePath,
 		IgnoreSignature: inventory.IgnoreSignature,
 		RepositoryIDs:   repoIDs,
 		Languages:       languages,
@@ -180,17 +169,17 @@ func (w ScanWorkflow) Run(req ScanRequest) (ScanResult, error) {
 		ScannedAt:       time.Now().UTC(),
 	}
 	serviceManifests := collectServiceManifests(inventory.Repositories)
-	artifactRefs := []artifact.Ref{}
-	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "workspace_manifest.json", artifact.TypeWorkspaceManifest, manifest); err == nil {
+	artifactRefs := []ArtifactRef{}
+	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "workspace_manifest.json", TypeWorkspaceManifest, manifest); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
-	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "repository_manifests.json", artifact.TypeRepositoryManifests, inventory.Repositories); err == nil {
+	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "repository_manifests.json", TypeRepositoryManifests, inventory.Repositories); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
-	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "service_manifests.json", artifact.TypeServiceManifests, serviceManifests); err == nil {
+	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "service_manifests.json", TypeServiceManifests, serviceManifests); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
-	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "scan_warnings.json", artifact.TypeScanWarnings, warnings); err == nil {
+	if ref, err := w.artifactStore.SaveJSON(workspaceID, "", "scan_warnings.json", TypeScanWarnings, warnings); err == nil {
 		artifactRefs = append(artifactRefs, ref)
 	}
 	return ScanResult{
@@ -202,14 +191,14 @@ func (w ScanWorkflow) Run(req ScanRequest) (ScanResult, error) {
 	}, nil
 }
 
-func collectServiceManifests(repositories []repository.Manifest) []service.Manifest {
-	seen := map[string]service.Manifest{}
+func collectServiceManifests(repositories []Manifest) []ServiceManifest {
+	seen := map[string]ServiceManifest{}
 	for _, repo := range repositories {
 		for _, candidate := range repo.CandidateServices {
 			seen[string(candidate.ID)] = candidate
 		}
 	}
-	result := make([]service.Manifest, 0, len(seen))
+	result := make([]ServiceManifest, 0, len(seen))
 	for _, manifest := range seen {
 		result = append(result, manifest)
 	}
@@ -234,8 +223,8 @@ type collectedRepoFiles struct {
 	skippedCount    int
 }
 
-func collectRepoFiles(root string, policy analysis.IgnorePolicy) (collectedRepoFiles, error) {
-	walkResult, err := detector.Walk(root, policy, nil)
+func collectRepoFiles(root string, policy IgnorePolicy) (collectedRepoFiles, error) {
+	walkResult, err := Walk(root, policy, nil)
 	if err != nil {
 		return collectedRepoFiles{}, err
 	}

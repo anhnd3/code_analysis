@@ -4,10 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/indexer/boundary/frameworks"
-	boundary "analysis-module/internal/indexer/boundary/go"
 )
 
 func TestDetectAllDetailedPreparesImportedGinProviderPackages(t *testing.T) {
@@ -37,19 +33,19 @@ func InitCameraV2() handler_v2.CameraV2Handler {
 }
 `))
 
-	registry := boundary.NewRegistry()
-	registry.Register(frameworks.NewGinDetector())
+	registry := NewRegistry()
+	registry.Register(NewGinDetector())
 	service := NewBoundaryDetectorService(registry)
 
-	inventory := repository.Inventory{
+	inventory := Inventory{
 		WorkspaceID: "ws_demo",
-		Repositories: []repository.Manifest{{
+		Repositories: []Manifest{{
 			ID:       "repo_demo",
 			Name:     "demo",
 			RootPath: workspace,
-			Role:     repository.RoleService,
-			TechStack: repository.TechStackProfile{
-				Languages: []repository.Language{repository.LanguageGo},
+			Role:     RoleService,
+			TechStack: TechStackProfile{
+				Languages: []Language{LanguageGo},
 			},
 			GoFiles: []string{
 				"cmd/router.go",

@@ -4,30 +4,28 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_WORKSPACE="$(cd "$ROOT_DIR/.." && pwd)"
-WORKSPACE_PATH="${1:-$DEFAULT_WORKSPACE}"
-STARTPOINT_MODE="${STARTPOINT_MODE:-workflow}"
-RENDER_MODE="${RENDER_MODE:-grouped}"
-COMPANION_VIEW="${COMPANION_VIEW:-none}"
 GO_BIN="${GO_BIN:-go}"
-PYTHON_BIN=""
+TEST_REPORT_OUT="${TEST_REPORT_OUT:-}"
 
 usage() {
 	cat <<'EOF'
 Usage:
-  bash ./scripts/run-review-report.sh [workspace]
+  bash ./scripts/run-review-report.sh --workspace <path> --symbol <name> [options]
 
-Legacy compatibility only:
-  This script drives the old review-graph export path.
+New flow: index -> inspect-function -> review-flow -> export-* --review
+
+Options:
+  --workspace <path>    Workspace path (required)
+  --symbol <name>       Symbol canonical name or ID to review (required)
+  --progress-mode <m>   Progress mode: auto|tty|plain|quiet (default: plain)
+  --out-dir <dir>       Output directory for review artifacts (optional)
 
 Environment variables:
-  STARTPOINT_MODE   Startpoint selection mode. Default: workflow
-  RENDER_MODE       Review render mode. Default: grouped
-  COMPANION_VIEW    Companion thread views. Default: none
   GO_BIN            Go binary path. Default: go
   TEST_REPORT_OUT   Optional output directory for scripts/test_report.sh
 
 Example:
-  bash ./scripts/run-review-report.sh /mnt/d/Workspace/Local_Agent/software_agent_src/analysis_module/
+  bash ./scripts/run-review-report.sh --workspace /path/to/workspace --symbol "github.com/example/pkg.MyFunc"
 EOF
 }
 
@@ -38,24 +36,10 @@ ensure_go() {
 	fi
 }
 
-ensure_python() {
-	if [[ -n "$PYTHON_BIN" ]]; then
-		return 0
-	fi
-	if command -v python3 >/dev/null 2>&1; then
-		PYTHON_BIN="python3"
-	elif command -v python >/dev/null 2>&1; then
-		PYTHON_BIN="python"
-	else
-		echo "error: python3 or python is required to parse CLI JSON output" >&2
-		exit 1
-	fi
-}
-
 json_field() {
 	local json_file="$1"
 	local dotted_path="$2"
-	"$PYTHON_BIN" - "$json_file" "$dotted_path" <<'PY'
+	python3 - "$json_file" "$dotted_path" <<'PY'
 import json
 import sys
 
@@ -75,61 +59,137 @@ else:
 PY
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+# Parse arguments
+WORKSPACE_PATH=""
+SYMBOL=""
+PROGRESS_MODE="plain"
+OUT_DIR=""
+TEMP_PARENT=""  # Track temp parent for cleanup (only set when --out-dir not provided)
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-h|--help)
+			usage
+			exit 0
+			;;
+		--workspace)
+			WORKSPACE_PATH="$2"
+			shift
+			;;
+		--symbol)
+			SYMBOL="$2"
+			shift
+			;;
+		--progress-mode)
+			PROGRESS_MODE="$2"
+			shift
+			;;
+		--out-dir)
+			OUT_DIR="$2"
+			shift
+			;;
+		*)
+			echo "error: unknown argument $1" >&2
+			usage
+			exit 1
+			;;
+	esac
+	shift
+done
+
+# Validate required arguments
+if [[ -z "$WORKSPACE_PATH" ]]; then
+	echo "error: --workspace is required" >&2
 	usage
-	exit 0
+	exit 1
+fi
+
+if [[ -z "$SYMBOL" ]]; then
+	echo "error: --symbol is required" >&2
+	usage
+	exit 1
 fi
 
 ensure_go
-ensure_python
+
 cd "$ROOT_DIR"
 
-snapshot_json="$(mktemp)"
-trap 'rm -f "$snapshot_json"' EXIT
+echo "==> Indexing workspace: $WORKSPACE_PATH"
+index_json="$(mktemp)"
 
-echo "==> Building fresh snapshot for legacy reviewgraph workspace: $WORKSPACE_PATH"
-"$GO_BIN" run -mod=mod ./cmd/analysis-cli build-snapshot \
+# Setup cleanup for temp artifacts (only when --out-dir not provided)
+cleanup_temp() {
+	if [[ -n "$TEMP_PARENT" && -d "$TEMP_PARENT" ]]; then
+		rm -rf "$TEMP_PARENT" >/dev/null 2>&1 || true
+	fi
+}
+trap cleanup_temp EXIT
+
+"$GO_BIN" run -mod=readonly ./cmd/analysis-cli index \
 	--workspace "$WORKSPACE_PATH" \
-	--progress-mode plain | tee "$snapshot_json"
+	--progress-mode "$PROGRESS_MODE" | tee "$index_json"
 
-workspace_id="$(json_field "$snapshot_json" "workspace_id")"
-snapshot_id="$(json_field "$snapshot_json" "snapshot.id")"
-db_path="artifacts/workspaces/$workspace_id/snapshots/$snapshot_id/sqlite/review_graph.sqlite"
-review_dir="artifacts/workspaces/$workspace_id/snapshots/$snapshot_id/review"
-targets_file="$review_dir/resolved_targets.json"
+# Parse workspace_id and snapshot_id from index output
+workspace_id="$(json_field "$index_json" "workspace_id" | tr -d '\r')"
+snapshot_id="$(json_field "$index_json" "snapshot_id" | tr -d '\r')"
+
+if [[ -z "$workspace_id" || -z "$snapshot_id" ]]; then
+	echo "error: failed to extract workspace_id or snapshot_id from index output" >&2
+	exit 1
+fi
 
 echo
-echo "==> Importing legacy review graph into: $db_path"
-"$GO_BIN" run -mod=mod ./cmd/analysis-cli graph import-sqlite \
+echo "==> Running inspect-function for symbol: $SYMBOL"
+"$GO_BIN" run -mod=readonly ./cmd/analysis-cli inspect-function \
 	--workspace-id "$workspace_id" \
-	--snapshot-id "$snapshot_id"
+	--snapshot-id "$snapshot_id" \
+	--symbol "$SYMBOL" \
+	--context-window 8
 
 echo
-echo "==> Resolving legacy startpoints with mode: $STARTPOINT_MODE"
-"$GO_BIN" run -mod=mod ./cmd/analysis-cli graph list-startpoints \
-	--db "$db_path" \
-	--mode "$STARTPOINT_MODE"
+echo "==> Running review-flow for symbol: $SYMBOL"
+# Respect --out-dir if provided, otherwise use temp directory with cleanup
+if [[ -n "$OUT_DIR" ]]; then
+	# Use --out-dir directly as the review directory
+	review_dir="$OUT_DIR"
+else
+	# Create temp directory that will be cleaned up on exit
+	TEMP_PARENT="$(mktemp -d)"
+	review_dir="$TEMP_PARENT/review"
+fi
+mkdir -p "$review_dir"
+
+"$GO_BIN" run -mod=readonly ./cmd/analysis-cli review-flow \
+	--workspace-id "$workspace_id" \
+	--snapshot-id "$snapshot_id" \
+	--symbol "$SYMBOL" \
+	--max-depth 3 \
+	--max-steps 80 \
+	--out "$review_dir"
+
+flow_json="$review_dir/flow.json"
 
 echo
-echo "==> Exporting legacy markdown review into: $review_dir"
-"$GO_BIN" run -mod=mod ./cmd/analysis-cli graph export-markdown-review \
-	--db "$db_path" \
-	--targets-file "$targets_file" \
-	--mode full-flow \
-	--render-mode "$RENDER_MODE" \
-	--companion-view "$COMPANION_VIEW" \
-	--include-async
+echo "==> Exporting review artifacts from: $flow_json"
+"$GO_BIN" run -mod=readonly ./cmd/analysis-cli export-md --review "$flow_json"
+"$GO_BIN" run -mod=readonly ./cmd/analysis-cli export-mermaid --review "$flow_json"
+"$GO_BIN" run -mod=readonly ./cmd/analysis-cli export-graphjson --review "$flow_json"
 
-test_report_out="${TEST_REPORT_OUT:-$review_dir/test-report}"
-echo
-echo "==> Running test report into: $test_report_out"
-GO_BIN="$GO_BIN" bash "$ROOT_DIR/scripts/test_report.sh" "$test_report_out"
+# Run test report if TEST_REPORT_OUT is set
+if [[ -n "$TEST_REPORT_OUT" ]]; then
+	echo
+	echo "==> Running test report into: $TEST_REPORT_OUT"
+	GO_BIN="$GO_BIN" bash "$ROOT_DIR/scripts/test_report.sh" "$TEST_REPORT_OUT"
+fi
 
 echo
 echo "Review report completed."
 echo "workspace_id : $workspace_id"
 echo "snapshot_id  : $snapshot_id"
-echo "db           : $db_path"
-echo "targets      : $targets_file"
-echo "review       : $review_dir"
-echo "test report  : $test_report_out"
+echo "symbol       : $SYMBOL"
+echo "review_dir   : $review_dir"
+if [[ -n "$TEST_REPORT_OUT" ]]; then
+	echo "test_report  : $TEST_REPORT_OUT"
+fi
+
+exit 0

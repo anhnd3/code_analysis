@@ -24,7 +24,12 @@ go.work.sum
 # env file
 .env
 
+# build artifacts
+analysis-cli
+
 # generated analysis outputs
 artifacts/
+bin/
+scratch/
 evaluate/
 evidence/

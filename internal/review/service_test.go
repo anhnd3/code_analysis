@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"analysis-module/internal/facts"
-	factquery "analysis-module/internal/facts/query"
-	factsqlite "analysis-module/internal/facts/sqlite"
 	"analysis-module/internal/llm"
 )
 
@@ -232,7 +230,7 @@ func newReviewFixture(t *testing.T) reviewFixture {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	store, err := factsqlite.New(factsqlite.PathFor(rootDir, "ws-1", "snap-1"))
+	store, err := facts.NewSQLiteStore(facts.SQLitePathFor(rootDir, "ws-1", "snap-1"))
 	if err != nil {
 		t.Fatalf("sqlite.New: %v", err)
 	}
@@ -401,7 +399,8 @@ func newReviewFixture(t *testing.T) reviewFixture {
 func runReviewFixture(t *testing.T, fixture reviewFixture, client llm.Client, req Request) Result {
 	t.Helper()
 
-	svc := New(fixture.rootDir, factquery.New(fixture.rootDir), client)
+	qsvc := facts.NewQueryService(fixture.rootDir)
+	svc := New(fixture.rootDir, qsvc, client)
 	result, err := svc.Run(req)
 	if err != nil {
 		t.Fatalf("Run: %v", err)

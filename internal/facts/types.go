@@ -25,13 +25,14 @@ type Index struct {
 }
 
 type RepositoryFact struct {
-	ID         string   `json:"id"`
-	Name       string   `json:"name"`
-	RootPath   string   `json:"root_path"`
-	Role       string   `json:"role"`
-	Languages  []string `json:"languages,omitempty"`
-	BuildFiles []string `json:"build_files,omitempty"`
-	Frameworks []string `json:"frameworks,omitempty"`
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	RootPath   string        `json:"root_path"`
+	Role       string        `json:"role"`
+	Languages  []string      `json:"languages,omitempty"`
+	BuildFiles []string      `json:"build_files,omitempty"`
+	Frameworks []string      `json:"frameworks,omitempty"`
+	Services   []ServiceFact `json:"services,omitempty"`
 }
 
 type ServiceFact struct {

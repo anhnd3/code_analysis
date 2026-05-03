@@ -1,25 +1,57 @@
 package indexer
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
-	artifactfs "analysis-module/internal/adapters/artifactstore/filesystem"
-	"analysis-module/internal/domain/analysis"
-	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/indexer/detector"
-	scannerport "analysis-module/internal/ports/scanner"
-	"analysis-module/internal/services/snapshot_manage"
 	"analysis-module/internal/tests/fixtures"
 )
 
+// testArtifactStore is a minimal in-memory artifact store for tests.
+type testArtifactStore struct {
+	root string
+}
+
+func (s testArtifactStore) SaveJSON(workspaceID, snapshotID, fileName string, artifactType ArtifactType, payload any) (ArtifactRef, error) {
+	path := filepath.Join(s.root, "workspaces", workspaceID, "snapshots", snapshotID, fileName)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return ArtifactRef{}, err
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return ArtifactRef{}, err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return ArtifactRef{}, err
+	}
+	return ArtifactRef{Type: artifactType, WorkspaceID: workspaceID, SnapshotID: snapshotID, Path: path}, nil
+}
+
+func (s testArtifactStore) SaveText(workspaceID, snapshotID, fileName string, artifactType ArtifactType, body string) (ArtifactRef, error) {
+	path := filepath.Join(s.root, "workspaces", workspaceID, "snapshots", snapshotID, fileName)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return ArtifactRef{}, err
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return ArtifactRef{}, err
+	}
+	return ArtifactRef{Type: artifactType, WorkspaceID: workspaceID, SnapshotID: snapshotID, Path: path}, nil
+}
+
+func newTestArtifactStore(root string) testArtifactStore {
+	return testArtifactStore{root: root}
+}
+
 func TestWorkspaceScannerServiceFindsMultipleRepositories(t *testing.T) {
 	service := NewWorkspaceScannerService(
-		detector.NewRepoRootDetector(noopReporter{}),
-		detector.NewTechStackDetector(),
-		detector.NewServiceDetector(),
+		NewRepoRootDetector(noopReporter{}),
+		NewTechStackDetector(),
+		NewServiceDetector(),
 		noopReporter{},
 	)
-	result, err := service.Scan(scannerport.ScanWorkspaceRequest{
+	result, err := service.Scan(ScanWorkspaceRequest{
 		WorkspacePath: fixtures.WorkspacePath(t, "multi_repo_discovery"),
 	})
 	if err != nil {
@@ -32,12 +64,12 @@ func TestWorkspaceScannerServiceFindsMultipleRepositories(t *testing.T) {
 
 func TestWorkspaceScannerServiceDetectsPythonAndNodeSourceFiles(t *testing.T) {
 	service := NewWorkspaceScannerService(
-		detector.NewRepoRootDetector(noopReporter{}),
-		detector.NewTechStackDetector(),
-		detector.NewServiceDetector(),
+		NewRepoRootDetector(noopReporter{}),
+		NewTechStackDetector(),
+		NewServiceDetector(),
 		noopReporter{},
 	)
-	result, err := service.Scan(scannerport.ScanWorkspaceRequest{
+	result, err := service.Scan(ScanWorkspaceRequest{
 		WorkspacePath: fixtures.WorkspacePath(t, "mixed_language_app"),
 	})
 	if err != nil {
@@ -60,12 +92,12 @@ func TestWorkspaceScannerServiceDetectsPythonAndNodeSourceFiles(t *testing.T) {
 
 func TestWorkspaceScannerServiceRespectsIgnorePolicyAcrossRepoInventory(t *testing.T) {
 	service := NewWorkspaceScannerService(
-		detector.NewRepoRootDetector(noopReporter{}),
-		detector.NewTechStackDetector(),
-		detector.NewServiceDetector(),
+		NewRepoRootDetector(noopReporter{}),
+		NewTechStackDetector(),
+		NewServiceDetector(),
 		noopReporter{},
 	)
-	result, err := service.Scan(scannerport.ScanWorkspaceRequest{
+	result, err := service.Scan(ScanWorkspaceRequest{
 		WorkspacePath:  fixtures.WorkspacePath(t, "ignore_policy_app"),
 		IgnorePatterns: []string{"ignored"},
 	})
@@ -85,8 +117,8 @@ func TestWorkspaceScannerServiceRespectsIgnorePolicyAcrossRepoInventory(t *testi
 }
 
 func TestServiceDetectorFindsPythonAndNodeServices(t *testing.T) {
-	serviceDetector := detector.NewServiceDetector()
-	policy := analysis.NewIgnorePolicy(nil)
+	serviceDetector := NewServiceDetector()
+	policy := NewIgnorePolicy(nil)
 
 	pythonRepo := repoFromFixture(t, "python_service_app")
 	pythonServices, _, err := serviceDetector.Detect(pythonRepo, policy)
@@ -111,8 +143,8 @@ func TestDefaultWorkflowsScanAndIndexSingleGoService(t *testing.T) {
 	artifactRoot := t.TempDir()
 	workflows, err := NewDefaultWorkflows(WorkflowOptions{
 		ArtifactRoot:   artifactRoot,
-		ArtifactStore:  artifactfs.New(artifactRoot),
-		SnapshotManage: snapshot_manage.New(),
+		ArtifactStore:  newTestArtifactStore(artifactRoot),
+		SnapshotManage: NewSnapshotService(),
 		Reporter:       noopReporter{},
 	})
 	if err != nil {
@@ -146,11 +178,11 @@ func TestDefaultWorkflowsScanAndIndexSingleGoService(t *testing.T) {
 	}
 }
 
-func repoFromFixture(t *testing.T, name string) repository.Manifest {
+func repoFromFixture(t *testing.T, name string) Manifest {
 	t.Helper()
 	root := fixtures.WorkspacePath(t, name)
-	return repository.Manifest{
-		ID:       repository.ID("repo_" + name),
+	return Manifest{
+		ID:       RepoID("repo_" + name),
 		Name:     name,
 		RootPath: root,
 	}

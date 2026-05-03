@@ -1,34 +1,37 @@
 package indexer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"analysis-module/internal/domain/boundaryroot"
-	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/domain/symbol"
-	boundary "analysis-module/internal/indexer/boundary/go"
-	"analysis-module/internal/indexer/extractor/treesitter"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // BoundaryDetectionResult holds detected boundary roots and diagnostics.
 type BoundaryDetectionResult struct {
-	Roots       []boundaryroot.Root `json:"roots"`
-	Diagnostics []symbol.Diagnostic `json:"diagnostics"`
+	Roots       []BoundaryRoot `json:"roots"`
+	Diagnostics []Diagnostic   `json:"diagnostics"`
+}
+
+// ParsedGoFile represents a parsed Go source file for boundary detection.
+type ParsedGoFile struct {
+	RepositoryID string
+	Path         string
+	PackageName  string
+	Content      []byte
+	Root         *tree_sitter.Node
 }
 
 // BoundaryDetectorService detects API boundaries using a registry of detectors.
 type BoundaryDetectorService struct {
-	goRegistry *boundary.Registry
-	goParser   *treesitter.GoParser
+	registry *Registry
 }
 
 type parsedGoFile struct {
-	file        boundary.ParsedGoFile
+	file        ParsedGoFile
 	tree        *tree_sitter.Tree
 	isCandidate bool
 }
@@ -39,15 +42,14 @@ type parsedGoPackage struct {
 	hasTarget bool
 }
 
-func NewBoundaryDetectorService(goRegistry *boundary.Registry) BoundaryDetectorService {
+func NewBoundaryDetectorService(registry *Registry) BoundaryDetectorService {
 	return BoundaryDetectorService{
-		goRegistry: goRegistry,
-		goParser:   treesitter.NewGoParser(),
+		registry: registry,
 	}
 }
 
 // DetectAll returns only the detected boundary roots (no diagnostics).
-func (s BoundaryDetectorService) DetectAll(inventory repository.Inventory, symbols []symbol.Symbol) ([]boundaryroot.Root, error) {
+func (s BoundaryDetectorService) DetectAll(inventory Inventory, symbols []Symbol) ([]BoundaryRoot, error) {
 	result, err := s.DetectAllDetailed(inventory, symbols)
 	if err != nil {
 		return nil, err
@@ -56,11 +58,11 @@ func (s BoundaryDetectorService) DetectAll(inventory repository.Inventory, symbo
 }
 
 // DetectAllDetailed returns both detected roots and boundary diagnostics.
-func (s BoundaryDetectorService) DetectAllDetailed(inventory repository.Inventory, allSymbols []symbol.Symbol) (BoundaryDetectionResult, error) {
+func (s BoundaryDetectorService) DetectAllDetailed(inventory Inventory, allSymbols []Symbol) (BoundaryDetectionResult, error) {
 	out := BoundaryDetectionResult{}
 
 	for _, repo := range inventory.Repositories {
-		if !repoHasLanguage(repo, repository.LanguageGo) {
+		if !repoHasLanguage(repo, LanguageGo) {
 			continue
 		}
 
@@ -77,7 +79,7 @@ func (s BoundaryDetectorService) DetectAllDetailed(inventory repository.Inventor
 	return out, nil
 }
 
-func (s BoundaryDetectorService) detectGoRepo(repo repository.Manifest, allSymbols []symbol.Symbol) (BoundaryDetectionResult, error) {
+func (s BoundaryDetectorService) detectGoRepo(repo Manifest, allSymbols []Symbol) (BoundaryDetectionResult, error) {
 	packages, err := s.parseGoPackages(repo)
 	if err != nil {
 		return BoundaryDetectionResult{}, err
@@ -95,9 +97,9 @@ func (s BoundaryDetectorService) detectGoRepo(repo repository.Manifest, allSymbo
 
 	for _, key := range packageKeys {
 		pkg := packages[key]
-		files := make([]boundary.ParsedGoFile, 0, len(pkg.files))
-		packageSymbols := make([]symbol.Symbol, 0)
-		seenSymbols := map[string]symbol.Symbol{}
+		files := make([]ParsedGoFile, 0, len(pkg.files))
+		packageSymbols := make([]Symbol, 0)
+		seenSymbols := map[string]Symbol{}
 		for _, parsed := range pkg.files {
 			files = append(files, parsed.file)
 			for _, sym := range symbolsByFile[parsed.file.Path] {
@@ -113,7 +115,7 @@ func (s BoundaryDetectorService) detectGoRepo(repo repository.Manifest, allSymbo
 			}
 		}
 
-		result.Diagnostics = append(result.Diagnostics, s.goRegistry.PreparePackage(files, packageSymbols)...)
+		result.Diagnostics = append(result.Diagnostics, s.registry.PreparePackage(files, packageSymbols)...)
 	}
 
 	for _, key := range packageKeys {
@@ -131,15 +133,15 @@ func (s BoundaryDetectorService) detectGoRepo(repo repository.Manifest, allSymbo
 			}
 
 			fileSymbols := symbolsByFile[parsed.file.Path]
-			detected, diags := s.goRegistry.DetectAllDetailed(parsed.file, fileSymbols)
+			detected, diags := s.registry.DetectAllDetailed(parsed.file, fileSymbols)
 			result.Diagnostics = append(result.Diagnostics, diags...)
-			for _, entry := range detected {
-				root := entry.Root
+			for _, res := range detected {
+				root := res.Root
 				if root.RepositoryID == "" {
 					root.RepositoryID = string(repo.ID)
 				}
 				if root.ID == "" {
-					root.ID = boundaryroot.StableID(root)
+					root.ID = StableBoundaryID(root)
 				}
 				result.Roots = append(result.Roots, root)
 			}
@@ -151,7 +153,7 @@ func (s BoundaryDetectorService) detectGoRepo(repo repository.Manifest, allSymbo
 	return result, nil
 }
 
-func (s BoundaryDetectorService) parseGoPackages(repo repository.Manifest) (map[string]*parsedGoPackage, error) {
+func (s BoundaryDetectorService) parseGoPackages(repo Manifest) (map[string]*parsedGoPackage, error) {
 	packages := map[string]*parsedGoPackage{}
 
 	for _, fileRelPath := range repo.GoFiles {
@@ -161,12 +163,12 @@ func (s BoundaryDetectorService) parseGoPackages(repo repository.Manifest) (map[
 			continue
 		}
 
-		tree, err := s.goParser.Parse(content)
+		tree, err := parseGoTree(content)
 		if err != nil {
 			continue
 		}
 
-		parsed := boundary.ParsedGoFile{
+		parsed := ParsedGoFile{
 			RepositoryID: string(repo.ID),
 			Path:         fileRelPath,
 			PackageName:  packageName(tree.RootNode(), content),
@@ -191,7 +193,20 @@ func (s BoundaryDetectorService) parseGoPackages(repo repository.Manifest) (map[
 	return packages, nil
 }
 
-func repoHasLanguage(repo repository.Manifest, language repository.Language) bool {
+// parseGoTree parses Go source content into a tree-sitter tree.
+func parseGoTree(content []byte) (*tree_sitter.Tree, error) {
+	parser := NewGoParser()
+	tree, err := parser.Parse(content)
+	if err != nil {
+		return nil, err
+	}
+	if tree == nil {
+		return nil, fmt.Errorf("failed to parse Go source")
+	}
+	return tree, nil
+}
+
+func repoHasLanguage(repo Manifest, language Language) bool {
 	for _, candidate := range repo.TechStack.Languages {
 		if candidate == language {
 			return true
@@ -227,7 +242,7 @@ func packageName(root *tree_sitter.Node, content []byte) string {
 	return ""
 }
 
-func packageGroupKey(file boundary.ParsedGoFile) string {
+func packageGroupKey(file ParsedGoFile) string {
 	dir := filepath.ToSlash(filepath.Dir(file.Path))
 	if dir == "." {
 		dir = ""
@@ -235,8 +250,8 @@ func packageGroupKey(file boundary.ParsedGoFile) string {
 	return strings.Join([]string{file.RepositoryID, dir, file.PackageName}, "|")
 }
 
-func symbolsByRepoFile(repoID string, allSymbols []symbol.Symbol) map[string][]symbol.Symbol {
-	grouped := map[string][]symbol.Symbol{}
+func symbolsByRepoFile(repoID string, allSymbols []Symbol) map[string][]Symbol {
+	grouped := map[string][]Symbol{}
 	for _, sym := range allSymbols {
 		if sym.RepositoryID != repoID {
 			continue
@@ -257,7 +272,7 @@ func isCandidateFile(content []byte) bool {
 	return false
 }
 
-func sortBoundaryRoots(roots []boundaryroot.Root) {
+func sortBoundaryRoots(roots []BoundaryRoot) {
 	sort.Slice(roots, func(i, j int) bool {
 		a := roots[i]
 		b := roots[j]
@@ -280,7 +295,7 @@ func sortBoundaryRoots(roots []boundaryroot.Root) {
 	})
 }
 
-func diagnosticSortKey(diag symbol.Diagnostic) string {
+func diagnosticSortKey(diag Diagnostic) string {
 	return strings.Join([]string{
 		diag.FilePath,
 		diag.Category,
@@ -290,12 +305,12 @@ func diagnosticSortKey(diag symbol.Diagnostic) string {
 	}, "|")
 }
 
-func sortAndDedupeDiagnostics(diags []symbol.Diagnostic) []symbol.Diagnostic {
-	seen := map[string]symbol.Diagnostic{}
+func sortAndDedupeDiagnostics(diags []Diagnostic) []Diagnostic {
+	seen := map[string]Diagnostic{}
 	for _, diag := range diags {
 		seen[diagnosticSortKey(diag)] = diag
 	}
-	result := make([]symbol.Diagnostic, 0, len(seen))
+	result := make([]Diagnostic, 0, len(seen))
 	for _, diag := range seen {
 		result = append(result, diag)
 	}
