@@ -3,19 +3,15 @@ package indexer
 import (
 	"path/filepath"
 	"strconv"
-
-	"analysis-module/internal/domain/repository"
-	"analysis-module/internal/domain/symbol"
-	extractorport "analysis-module/internal/ports/extractor"
 )
 
 // SymbolExtractorService builds symbol extraction results from a repository inventory.
 type SymbolExtractorService struct {
-	extractors []extractorport.SymbolExtractor
+	extractors []SymbolExtractor
 	reporter   Reporter
 }
 
-func NewSymbolExtractorService(r Reporter, extractors ...extractorport.SymbolExtractor) SymbolExtractorService {
+func NewSymbolExtractorService(r Reporter, extractors ...SymbolExtractor) SymbolExtractorService {
 	if r == nil {
 		r = noopReporter{}
 	}
@@ -23,12 +19,12 @@ func NewSymbolExtractorService(r Reporter, extractors ...extractorport.SymbolExt
 }
 
 // Build extracts symbols from all files in the inventory.
-func (s SymbolExtractorService) Build(inventory repository.Inventory) (symbol.ExtractionResult, error) {
-	repoByID := map[repository.ID]repository.Manifest{}
+func (s SymbolExtractorService) Build(inventory Inventory) (ExtractionResult, error) {
+	repoByID := map[RepoID]Manifest{}
 	for _, repo := range inventory.Repositories {
 		repoByID[repo.ID] = repo
 	}
-	result := symbol.ExtractionResult{}
+	result := ExtractionResult{}
 	totalFiles := 0
 	for _, plan := range inventory.Plans {
 		totalFiles += len(plan.Files)
@@ -43,10 +39,10 @@ func (s SymbolExtractorService) Build(inventory repository.Inventory) (symbol.Ex
 			}
 			continue
 		}
-		repoResult := symbol.RepositoryExtraction{Repository: repo}
+		repoResult := RepositoryExtraction{Repository: repo}
 		for _, relPath := range plan.Files {
 			s.reporter.Status("repo=" + repo.Name + " lang=" + string(plan.Language) + " file=" + relPath)
-			fileRef := symbol.FileRef{
+			fileRef := FileRef{
 				RepositoryID:   string(repo.ID),
 				RepositoryRoot: repo.RootPath,
 				AbsolutePath:   filepath.Join(repo.RootPath, relPath),
@@ -56,7 +52,7 @@ func (s SymbolExtractorService) Build(inventory repository.Inventory) (symbol.Ex
 			extraction, err := extractor.ExtractFile(fileRef)
 			if err != nil {
 				s.reporter.FinishStage("extract failed")
-				return symbol.ExtractionResult{}, err
+				return ExtractionResult{}, err
 			}
 			repoResult.Files = append(repoResult.Files, extraction)
 			s.reporter.Advance(1)
@@ -67,7 +63,7 @@ func (s SymbolExtractorService) Build(inventory repository.Inventory) (symbol.Ex
 	return result, nil
 }
 
-func (s SymbolExtractorService) findExtractor(lang string) extractorport.SymbolExtractor {
+func (s SymbolExtractorService) findExtractor(lang string) SymbolExtractor {
 	for _, extractor := range s.extractors {
 		if extractor.Supports(lang) {
 			return extractor

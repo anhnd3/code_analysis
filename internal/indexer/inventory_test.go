@@ -2,22 +2,19 @@ package indexer
 
 import (
 	"testing"
-
-	"analysis-module/internal/domain/repository"
-	scannerport "analysis-module/internal/ports/scanner"
 )
 
 func TestInventoryBuilderBuildsBasic(t *testing.T) {
 	builder := NewInventoryBuilder()
 
-	scanResult := scannerport.ScanWorkspaceResult{
-		Repositories: []repository.Manifest{
+	scanResult := ScanWorkspaceResult{
+		Repositories: []Manifest{
 			{
 				ID:       "repo-1",
 				Name:     "test-repo",
 				RootPath: "/tmp/test",
-				TechStack: repository.TechStackProfile{
-					Languages: []repository.Language{repository.LanguageGo},
+				TechStack: TechStackProfile{
+					Languages: []Language{LanguageGo},
 				},
 				GoFiles: []string{"main.go"},
 			},
@@ -28,14 +25,14 @@ func TestInventoryBuilderBuildsBasic(t *testing.T) {
 	if len(inventory.Repositories) != 1 {
 		t.Fatalf("expected 1 repo, got %d", len(inventory.Repositories))
 	}
-	if inventory.Repositories[0].Role != repository.RoleService && inventory.Repositories[0].Role != repository.RoleSharedLib && inventory.Repositories[0].Role != repository.RoleUnknown {
+	if inventory.Repositories[0].Role != RoleService && inventory.Repositories[0].Role != RoleSharedLib && inventory.Repositories[0].Role != RoleUnknown {
 		t.Logf("role: %s", inventory.Repositories[0].Role)
 	}
 
 	if len(inventory.Plans) != 1 {
 		t.Fatalf("expected 1 extraction plan, got %d", len(inventory.Plans))
 	}
-	if inventory.Plans[0].Language != repository.LanguageGo {
+	if inventory.Plans[0].Language != LanguageGo {
 		t.Errorf("expected Go language in plan, got %s", inventory.Plans[0].Language)
 	}
 }
@@ -43,14 +40,14 @@ func TestInventoryBuilderBuildsBasic(t *testing.T) {
 func TestInventoryBuilderBuildsWithMultipleLanguages(t *testing.T) {
 	builder := NewInventoryBuilder()
 
-	scanResult := scannerport.ScanWorkspaceResult{
-		Repositories: []repository.Manifest{
+	scanResult := ScanWorkspaceResult{
+		Repositories: []Manifest{
 			{
 				ID:       "repo-1",
 				Name:     "multi-lang",
 				RootPath: "/tmp/multi",
-				TechStack: repository.TechStackProfile{
-					Languages: []repository.Language{repository.LanguageGo, repository.LanguagePython},
+				TechStack: TechStackProfile{
+					Languages: []Language{LanguageGo, LanguagePython},
 				},
 				GoFiles:     []string{"main.go"},
 				PythonFiles: []string{"app.py"},

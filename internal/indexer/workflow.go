@@ -1,14 +1,7 @@
 package indexer
 
 import (
-	"time"
-
-	"analysis-module/internal/domain/artifact"
-	"analysis-module/internal/domain/symbol"
 	"analysis-module/internal/facts"
-	factsqlite "analysis-module/internal/facts/sqlite"
-	artifactstoreport "analysis-module/internal/ports/artifactstore"
-	"analysis-module/internal/services/snapshot_manage"
 )
 
 // IndexRequest describes inputs for a full index operation.
@@ -28,7 +21,7 @@ type IndexResult struct {
 	FileCount          int               `json:"file_count"`
 	SymbolCount        int               `json:"symbol_count"`
 	CallCandidateCount int               `json:"call_candidate_count"`
-	ArtifactRefs       []artifact.Ref    `json:"artifact_refs"`
+	ArtifactRefs       []ArtifactRef     `json:"artifact_refs"`
 }
 
 // IndexWorkflow orchestrates scanning, symbol extraction, and boundary detection.
@@ -36,8 +29,8 @@ type IndexWorkflow struct {
 	scanWorkflow   ScanWorkflow
 	symbolExtract  SymbolExtractorService
 	boundaryDetect BoundaryDetectorService
-	snapshotManage snapshot_manage.Service
-	artifactStore  artifactstoreport.Store
+	snapshotManage SnapshotNamer
+	artifactStore  ArtifactStore
 	artifactRoot   string
 }
 
@@ -45,8 +38,8 @@ func NewIndexWorkflow(
 	scanWorkflow ScanWorkflow,
 	symbolExtract SymbolExtractorService,
 	boundaryDetect BoundaryDetectorService,
-	snapshotManage snapshot_manage.Service,
-	artifactStore artifactstoreport.Store,
+	snapshotManage SnapshotNamer,
+	artifactStore ArtifactStore,
 	artifactRoot string,
 ) IndexWorkflow {
 	return IndexWorkflow{
@@ -75,32 +68,34 @@ func (w IndexWorkflow) Run(req IndexRequest) (IndexResult, error) {
 		return IndexResult{}, err
 	}
 
-	var allSymbols []symbol.Symbol
+	var allSymbols []Symbol
 	for _, repoExt := range extraction.Repositories {
 		for _, fileExt := range repoExt.Files {
 			allSymbols = append(allSymbols, fileExt.Symbols...)
 		}
 	}
 
-	detectedRoots, err := w.boundaryDetect.DetectAll(analyzeResult.Inventory, allSymbols)
+	boundaryResult, err := w.boundaryDetect.DetectAllDetailed(analyzeResult.Inventory, allSymbols)
 	if err != nil {
-		detectedRoots = nil
+		boundaryResult.Diagnostics = append(boundaryResult.Diagnostics, Diagnostic{
+			Category: "boundary_detection_failed",
+			Message:  err.Error(),
+		})
 	}
 
 	workspaceID := string(analyzeResult.WorkspaceManifest.ID)
 	snapshotID := w.snapshotManage.NewSnapshotID(workspaceID)
 
-	index := facts.BuildIndex(facts.BuildInput{
-		WorkspaceID: workspaceID,
-		SnapshotID:  snapshotID,
-		Inventory:   analyzeResult.Inventory,
-		Extraction:  extraction,
-		Boundaries:  detectedRoots,
-		GeneratedAt: time.Now().UTC(),
-	})
+	index := BuildIndexFromExtraction(
+		analyzeResult.Inventory,
+		extraction,
+		boundaryResult,
+		workspaceID,
+		snapshotID,
+	)
 
-	sqlitePath := factsqlite.PathFor(w.artifactRoot, workspaceID, snapshotID)
-	sqliteStore, err := factsqlite.New(sqlitePath)
+	sqlitePath := facts.SQLitePathFor(w.artifactRoot, workspaceID, snapshotID)
+	sqliteStore, err := facts.NewSQLiteStore(sqlitePath)
 	if err != nil {
 		return IndexResult{}, err
 	}
@@ -116,8 +111,8 @@ func (w IndexWorkflow) Run(req IndexRequest) (IndexResult, error) {
 		return IndexResult{}, err
 	}
 
-	refs := append([]artifact.Ref{}, analyzeResult.ArtifactRefs...)
-	if ref, saveErr := w.artifactStore.SaveJSON(workspaceID, snapshotID, "facts_index.json", artifact.TypeFactsIndex, index); saveErr == nil {
+	refs := append([]ArtifactRef{}, analyzeResult.ArtifactRefs...)
+	if ref, saveErr := w.artifactStore.SaveJSON(workspaceID, snapshotID, "facts_index.json", TypeFactsIndex, index); saveErr == nil {
 		refs = append(refs, ref)
 	}
 
