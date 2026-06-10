@@ -43,9 +43,9 @@ main() {
     "$ROOT_DIR/scripts/run-review-report.sh" \
     "$ROOT_DIR/scripts/test_required_baseline.sh" \
     "$ROOT_DIR/scripts/check_no_legacy_refs.sh"; do
-    if rg -n $'\r' "$script" >/dev/null; then
+    if grep -c $'\r' "$script" >/dev/null; then
       echo "ERROR: CRLF detected in $script" >&2
-      rg -n $'\r' "$script" >&2
+      cat -A "$script" | head -20 >&2
       exit 1
     fi
   done

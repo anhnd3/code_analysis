@@ -173,17 +173,17 @@ check_documentation() {
 ###############################################
 # SECTION 5: Active-reference guard (TODO 5)
 ###############################################
-check_active_legacy_refs() {
-	echo
-	echo "--- Checking active code for stale flattened-package and CLI references ---"
+ check_active_legacy_refs() {
+ 	echo
+ 	echo "--- Checking active code for stale flattened-package and CLI references ---"
 
-	local legacy_patterns=(
-		'internal/facts/query'
-		'internal/facts/sqlite'
-		'internal/indexer/detector'
-		'internal/indexer/extractor'
-		'internal/indexer/boundary'
-	)
+ 	local legacy_patterns=(
+ 		'internal/facts/query/'
+ 		'internal/facts/sqlite/'
+ 		'internal/indexer/detector/'
+ 		'internal/indexer/extractor/'
+ 		'internal/indexer/boundary/'
+ 	)
 
 	local legacy_commands=(
 		'build-snapshot'

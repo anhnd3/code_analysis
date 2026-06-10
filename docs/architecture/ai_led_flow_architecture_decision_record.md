@@ -52,7 +52,7 @@ AST facts
 = evidence-backed Flow Pack
 ```
 
-The LLM is not the source of truth. The LLM is used as a planner, resolver assistant, and ambiguity reviewer. Every accepted edge must be backed by deterministic evidence.
+The LLM is not the source of truth. The LLM is used throughout real agent execution for semantic interpretation, planning, classification, summarization, resolver assistance, and ambiguity review. Every accepted edge must be backed by source-grounded evidence.
 
 Final rule:
 
@@ -61,6 +61,61 @@ No evidence, no accepted edge.
 ```
 
 If the system cannot verify an edge, it may keep the edge as ambiguous, but it must not silently turn a hypothesis into a confirmed flow.
+
+### 3.1 Locked Decision: Understand-Anything-style Hybrid LLM Strategy
+
+This ADR locks the LLM usage strategy so the project does not re-decide it in later phases.
+
+The architecture must follow the Understand-Anything hybrid model:
+
+```text
+deterministic/source-grounded structural extraction
++ LLM semantic interpretation in the same role pipeline
+= AI-led evidence-backed flow analysis
+```
+
+The previous sequencing idea of "deterministic phases first, LLM only later" is superseded. That ordering is not appropriate for this product because the project already chose an AI-led architecture, and semantic interpretation is required throughout the analysis journey.
+
+Every real agent phase must have two lanes:
+
+```text
+1. Evidence lane
+   Source-grounded facts: files, symbols, imports, calls, routes, configs,
+   proto methods, topics, line ranges, snippets, and artifact references.
+
+2. Semantic lane
+   LLM interpretation: intent, role, summary, likely business meaning,
+   flow hypothesis, ambiguity explanation, reviewer critique, and next
+   investigation suggestions.
+```
+
+The guardrail is not "avoid LLM until late." The guardrail is:
+
+```text
+LLM may contribute semantic meaning early.
+LLM may propose hypotheses early.
+LLM may help classify, summarize, rank, and plan early.
+LLM may not silently promote unsupported claims into accepted evidence.
+```
+
+All semantic outputs must carry an explicit evidence status:
+
+```text
+accepted   = source-grounded and verifier-approved
+candidate  = plausible LLM/semantic hypothesis, still needs evidence
+ambiguous  = competing interpretations or insufficient source proof
+rejected   = invalid, unsupported, or contradicted by evidence
+```
+
+This decision follows Understand-Anything's public architecture: deterministic parsing extracts structural facts, while LLM agents produce summaries, tags, architecture layers, business-domain mapping, guided tours, and semantic explanations.
+
+Reference:
+
+```text
+https://github.com/Lum1104/Understand-Anything
+```
+
+Local Agent SDLC adopts the same hybrid discipline, but with stricter accepted-edge gating because the product output is SDLC evidence for cross-service flow reasoning.
 
 ---
 
@@ -605,6 +660,10 @@ Use LLM for:
 4. Explaining why an edge may be likely.
 5. Identifying missing evidence.
 6. Summarizing uncertainty.
+7. Summarizing file, function, service, and module intent.
+8. Classifying architectural role when deterministic signals are incomplete.
+9. Mapping technical evidence to business-domain language.
+10. Reviewing candidate FlowPack quality and missing links.
 ```
 
 Do not use LLM for:
@@ -644,6 +703,8 @@ Example planner response:
 ```
 
 The deterministic verifier decides whether a candidate edge can become accepted.
+
+LLM participation starts from the first real agent phase. The system should not wait until after deterministic BFS to add semantic contribution. Instead, each role should combine source-grounded evidence with LLM interpretation, then store the result as accepted, candidate, ambiguous, or rejected.
 
 ---
 
@@ -830,6 +891,148 @@ MCP should not implement separate logic. It should wrap the same application ser
 
 ## 16. Implementation Roadmap
 
+This roadmap is updated by the locked hybrid LLM decision in Section 3.1.
+
+The implementation sequence is no longer "deterministic BFS first, LLM later." The controlling sequence is "build the contract and artifact foundation first, then add real agents as hybrid evidence-plus-semantic roles."
+
+### Phase 00 - Agent-mode foundation
+
+Add:
+
+```text
+internal/harness
+internal/agents
+internal/contextpack
+artifact writer
+role registry
+mock runner
+analysis-cli list-agent-roles
+```
+
+Deliver:
+
+```text
+Role contracts, prompt-to-pseudocode contracts, scratch artifact layout, and
+mock execution only. No real role execution yet, but all role contracts must be
+LLM-semantic-ready.
+```
+
+### Phase 01 - FlowPack model and hybrid trace-flow skeleton
+
+Add:
+
+```text
+internal/flowmodel/types.go
+internal/orchestrator/flowtrace/service.go
+internal/orchestrator/flowtrace/planner.go
+internal/orchestrator/flowtrace/evidence_tools.go
+internal/orchestrator/flowtrace/verifier.go
+```
+
+Deliver:
+
+```text
+trace-flow command accepts a root selector and produces a FlowPack skeleton.
+FlowPack supports evidence items, semantic annotations, hypotheses, ambiguity,
+diagnostics, and accepted/candidate/ambiguous/rejected statuses.
+```
+
+### Phase 02 - Hybrid scanner and file analyzer
+
+Make the first real role handlers hybrid:
+
+```text
+WorkspaceScannerAgent:
+  evidence lane: files, categories, languages, framework signals, service candidates
+  semantic lane: project/service descriptions and intent summaries
+
+FileStructureAnalyzerAgent:
+  evidence lane: symbols, functions, imports, calls, control skeletons, non-code structures
+  semantic lane: file summaries, tags, role hints, important behaviors
+```
+
+This mirrors Understand-Anything: structural extraction and LLM semantic analysis happen together, with structural facts kept reproducible.
+
+### Phase 03 - Hybrid trace-flow traversal
+
+Implement traversal with semantic planning:
+
+```text
+evidence lane:
+  root symbol/endpoint/topic resolution
+  current facts traversal
+  source reads
+  grep/search evidence
+  FlowPack node/edge materialization
+
+semantic lane:
+  next-step planning
+  candidate edge hypotheses
+  missing evidence suggestions
+  ambiguity explanations
+```
+
+The verifier decides whether candidate edges become accepted.
+
+### Phase 04 - Hybrid REST/gRPC/topic/config resolvers
+
+Implement in this order:
+
+```text
+1. REST server boundary
+2. REST client call
+3. gRPC server boundary
+4. gRPC client call
+5. Kafka/RabbitMQ producer
+6. Kafka/RabbitMQ consumer
+7. Interface implementation
+8. DI provider binding
+```
+
+Each resolver has both lanes:
+
+```text
+evidence lane: route strings, proto methods, generated clients, config keys, topics, handlers
+semantic lane: likely service ownership, external partner meaning, ambiguous target ranking
+```
+
+### Phase 05 - Function logic analyzer and reviewer
+
+Make function and review agents real:
+
+```text
+FunctionLogicAnalyzerAgent:
+  evidence lane: selected source ranges, calls, inputs, outputs, branches, effects
+  semantic lane: ordered logic blocks, intent, domain meaning, uncertainty
+
+FlowReviewerAgent:
+  evidence lane: schema, referential integrity, completeness, uniqueness, evidence coverage
+  semantic lane: quality critique, missing link explanation, generic summary detection
+```
+
+### Phase 06 - Exporters and final artifacts
+
+Render from FlowPack and validation reports:
+
+```text
+graph.json
+flow.mmd
+components.mmd
+flow.md
+evidence.md
+uncertainty.md
+domain_flow.json
+validation_report.json
+```
+
+### Phase 07 - MCP wrapper
+
+Expose CLI-equivalent services to other agents.
+
+### Superseded Historical A-G Notes
+
+The older Phase A-G notes below are retained only as historical context. They must not be used to delay LLM semantic participation until after deterministic BFS.
+
 ### Phase A — Flow model and orchestrator skeleton
 
 Add:
@@ -850,7 +1053,7 @@ trace-flow command accepts root symbol and produces FlowPack skeleton.
 
 ### Phase B — Deterministic BFS from current facts
 
-Implement first without LLM:
+Historical note, superseded by Section 3.1:
 
 ```text
 root symbol
@@ -936,13 +1139,14 @@ The first architecture phase is successful when:
 
 ```text
 1. trace-flow can start from a symbol.
-2. FlowPack is generated deterministically from current facts.
+2. FlowPack is generated from source-grounded evidence plus explicit semantic annotations.
 3. graph.json is generated.
 4. flow.mmd is generated.
 5. evidence.md is generated.
 6. Ambiguous edges are explicitly marked.
 7. No accepted edge exists without evidence.
-8. Existing baseline tests still pass.
+8. Candidate LLM hypotheses are preserved without becoming accepted edges.
+9. Existing baseline tests still pass.
 ```
 
 Required command gate:
@@ -965,7 +1169,7 @@ Final architectural direction:
 ```text
 Current facts-first scanner/extractor/store remains foundation.
 A new AI-led Flow Orchestrator is added above it.
-The orchestrator combines AST facts, SQLite queries, source reads, grep evidence, config/proto/topic evidence, and LLM planning.
+The orchestrator combines AST facts, SQLite queries, source reads, grep evidence, config/proto/topic evidence, and LLM semantic planning from the first real agent phases.
 Every output is normalized into FlowPack.
 Exporters render FlowPack into graph JSON, Mermaid sequence diagrams, Markdown, and evidence files.
 MCP is added only after CLI trace-flow is stable.
@@ -974,13 +1178,14 @@ MCP is added only after CLI trace-flow is stable.
 Final implementation sequence:
 
 ```text
-1. Define FlowPack model.
-2. Build deterministic trace-flow BFS from current facts.
-3. Add evidence collector.
-4. Add LLM planner.
-5. Add REST/gRPC/topic resolvers.
-6. Add Mermaid sequence and component exporters.
-7. Add MCP server.
+1. Finish Phase 00 agent-mode foundation.
+2. Define FlowPack model and hybrid trace-flow skeleton.
+3. Add hybrid scanner and file analyzer execution.
+4. Add hybrid trace-flow traversal with LLM planning.
+5. Add hybrid REST/gRPC/topic/config resolvers.
+6. Add function logic analyzer and flow reviewer.
+7. Add FlowPack, graph, Mermaid, Markdown, evidence, domain, and validation exporters.
+8. Add MCP wrapper.
 ```
 
-This gives the project a controlled AI-led architecture without making the system dependent on hallucinated LLM output.
+This gives the project a true AI-led architecture without making the system dependent on hallucinated LLM output. The system uses LLM semantic contribution early and throughout the pipeline, while accepted SDLC flow facts remain evidence-gated.
